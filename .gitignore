@@ -1,0 +1,170 @@
+# ============================================================================
+# SENSITIVE DATA & CREDENTIALS
+# ============================================================================
+.env
+.env.local
+.env.*.local
+config.json
+credentials.json
+secrets.json
+*.key
+*.pem
+*.p12
+*.pfx
+auth_token.txt
+.aws/
+.azure/
+.gcp/
+
+# ============================================================================
+# GENERATED DATA FILES (Runtime Output)
+# ============================================================================
+extracted_data/
+*.xlsx
+*.xls
+*.csv
+dashboard_data_*.json
+extraction_status.json
+errors/
+analysis.log
+monitoring.log
+watchdog.log
+*.log
+logs/
+
+# ============================================================================
+# PYTHON CACHE & COMPILED FILES
+# ============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ============================================================================
+# VIRTUAL ENVIRONMENTS
+# ============================================================================
+venv/
+ENV/
+env/
+.venv
+.virtualenv
+.env.venv
+
+# ============================================================================
+# IDE & EDITOR FILES
+# ============================================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.sublime-project
+.sublime-workspace
+*.sublime-project
+*.sublime-workspace
+.project
+.pydevproject
+.settings/
+*.code-workspace
+
+# ============================================================================
+# TEMPORARY & BACKUP FILES
+# ============================================================================
+*.tmp
+*.bak
+*.backup
+.old/
+deprecated/
+old_code/
+*~
+*.orig
+*.backup
+
+# ============================================================================
+# TEST & BUILD ARTIFACTS
+# ============================================================================
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# ============================================================================
+# OS FILES
+# ============================================================================
+Thumbs.db
+.DS_Store
+*.swp
+.AppleDouble
+.LSOverride
+.TemporaryItems
+.Trashes
+ehthumbs.db
+
+# ============================================================================
+# BROWSER AUTOMATION & DEBUGGING
+# ============================================================================
+screenshots/
+browser_logs/
+*.trace
+*.har
+
+# ============================================================================
+# DOCKER & DEPLOYMENT (if used)
+# ============================================================================
+.dockerignore
+docker-compose.override.yml
+.container-env
+
+# ============================================================================
+# SENSITIVE PROJECT FILES
+# ============================================================================
+.claude/
+memory/
+notes/
+private_notes/
+test_credentials/
+test_data/
+
+# ============================================================================
+# NODE/FRONTEND (if applicable)
+# ============================================================================
+node_modules/
+package-lock.json
+yarn.lock
+dist/
+.next/
+
+# ============================================================================
+# DATABASE & STATE FILES
+# ============================================================================
+*.db
+*.sqlite
+*.sqlite3
+*.ldb
+*.json.backup
+state.json
+cache/

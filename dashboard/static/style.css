@@ -1,0 +1,390 @@
+/* =========================================================
+   Mazara SCADA Monitor — Dark-mode stylesheet
+   ========================================================= */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #0d0f14;
+  --surface:   rgba(255, 255, 255, 0.05);
+  --border:    rgba(255, 255, 255, 0.10);
+  --text:      #e2e8f0;
+  --muted:     #94a3b8;
+  --accent:    #3b82f6;
+
+  --green:     #10b981;
+  --yellow:    #f59e0b;
+  --red:       #ef4444;
+  --grey:      #6b7280;
+
+  --critical:  #ef4444;
+  --high:      #f97316;
+  --warning:   #f59e0b;
+  --info:      #3b82f6;
+}
+
+html, body {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ─── Header ─────────────────────────────────────────────── */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 2rem;
+  border-bottom: 1px solid var(--border);
+  background: rgba(0,0,0,0.4);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+header h1 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+
+header .subtitle {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 0.15rem;
+}
+
+#last-updated {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-align: right;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.btn-rescan {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.btn-rescan:hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
+}
+
+.btn-rescan:active {
+  transform: scale(0.95);
+}
+
+.btn-rescan.loading {
+  opacity: 0.6;
+  pointer-events: none;
+  background: var(--surface);
+  color: var(--muted);
+  border-color: var(--border);
+}
+
+.btn-rescan.loading::after {
+  content: "...";
+  animation: dots 1s steps(5, end) infinite;
+}
+
+@keyframes dots {
+  0%, 20% { content: "."; }
+  40% { content: ".."; }
+  60% { content: "..."; }
+  80%, 100% { content: ""; }
+}
+
+/* ─── Main layout ─────────────────────────────────────────── */
+main {
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 1.5rem 2rem 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+section > h2 {
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 0.75rem;
+}
+
+/* ─── Cards (generic) ─────────────────────────────────────── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.card:hover { transform: translateY(-3px); box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+
+/* ─── Metrics grid (macro health) ────────────────────────── */
+#metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+}
+
+.metric-card {
+  text-align: center;
+  padding: 1.25rem 1rem;
+}
+
+.metric-card .metric-value {
+  font-size: 2.5rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--accent);
+}
+
+.metric-card .metric-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 0.4rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.metric-card.online  .metric-value { color: var(--green);  }
+.metric-card.tripped .metric-value { color: var(--red);    }
+.metric-card.comms   .metric-value { color: var(--yellow); }
+
+/* ─── File ingestion status ───────────────────────────────── */
+#ingestion-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+}
+
+.file-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.75rem 1rem;
+}
+
+.file-card .file-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.file-card .file-status {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.file-card.success .file-status { color: var(--green);  }
+.file-card.pending .file-status { color: var(--grey);    }
+.file-card.failed  .file-status { color: var(--red);     }
+.file-card.empty   .file-status { color: var(--yellow);  }
+.file-card.loading .file-status { color: var(--accent);  }
+
+.file-card .file-time {
+  font-size: 0.65rem;
+  color: var(--muted);
+}
+
+/* ─── Inverter health matrix ──────────────────────────────── */
+#inverter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 0.6rem;
+}
+
+.inverter-card {
+  border-radius: 0.6rem;
+  padding: 0.6rem 0.5rem 0.5rem;
+  border: 2px solid var(--border);
+  cursor: default;
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+
+.inverter-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.5); }
+
+.inverter-card .inv-name {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-align: center;
+  color: var(--text);
+  margin-bottom: 0.45rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.led-row {
+  display: flex;
+  justify-content: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.led {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.led.green  { background: var(--green);  box-shadow: 0 0 6px var(--green);  }
+.led.yellow { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+.led.red    { background: var(--red);    box-shadow: 0 0 6px var(--red);    }
+.led.grey   { background: var(--grey);   box-shadow: none; }
+
+/* Overall border colour */
+.inverter-card.status-green  { border-color: var(--green);  }
+.inverter-card.status-yellow { border-color: var(--yellow); }
+.inverter-card.status-red    { border-color: var(--red);    }
+.inverter-card.status-grey   { border-color: var(--grey);   }
+
+.led-labels {
+  display: flex;
+  justify-content: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  margin-top: 0.2rem;
+}
+
+.led-label {
+  font-size: 0.5rem;
+  color: var(--muted);
+  width: 10px;
+  text-align: center;
+}
+
+/* ─── Alerts ──────────────────────────────────────────────── */
+.alert-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.alert-item {
+  display: grid;
+  grid-template-columns: 120px 1fr auto;
+  gap: 0.5rem 1rem;
+  align-items: center;
+  padding: 0.6rem 0.9rem;
+  border-radius: 0.5rem;
+  background: var(--surface);
+  border-left: 4px solid var(--muted);
+  font-size: 0.78rem;
+}
+
+.alert-item.Critical { border-left-color: var(--critical); }
+.alert-item.High     { border-left-color: var(--high);     }
+.alert-item.Warning  { border-left-color: var(--warning);  }
+.alert-item.Info     { border-left-color: var(--info);     }
+
+.alert-timestamp { color: var(--muted); font-size: 0.7rem; }
+.alert-inverter  { font-weight: 600; }
+.alert-type      { color: var(--text); }
+.alert-details   { color: var(--muted); font-size: 0.7rem; }
+
+.severity-badge {
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.severity-badge.Critical { background: rgba(239,68,68,0.2);  color: var(--critical); }
+.severity-badge.High     { background: rgba(249,115,22,0.2); color: var(--high);     }
+.severity-badge.Warning  { background: rgba(245,158,11,0.2); color: var(--warning);  }
+.severity-badge.Info     { background: rgba(59,130,246,0.2); color: var(--info);     }
+
+/* ─── Historical trail table ──────────────────────────────── */
+.alarm-table-wrapper {
+  overflow-x: auto;
+  border-radius: 0.6rem;
+  border: 1px solid var(--border);
+}
+
+.alarm-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+
+.alarm-table th {
+  background: rgba(255,255,255,0.06);
+  padding: 0.55rem 0.9rem;
+  text-align: left;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.alarm-table td {
+  padding: 0.5rem 0.9rem;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  color: var(--text);
+}
+
+.alarm-table tr:last-child td { border-bottom: none; }
+
+.alarm-table tr:nth-child(even) td { background: rgba(255,255,255,0.02); }
+
+/* ─── Loading spinner ─────────────────────────────────────── */
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255,255,255,0.2);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ─── Empty states ────────────────────────────────────────── */
+.empty-state {
+  text-align: center;
+  padding: 2rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+/* ─── Responsive tweaks ───────────────────────────────────── */
+@media (max-width: 640px) {
+  main { padding: 1rem; }
+  header { padding: 0.75rem 1rem; }
+  #inverter-grid { grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); }
+}

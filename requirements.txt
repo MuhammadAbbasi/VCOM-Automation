@@ -1,0 +1,9 @@
+pandas
+numpy
+openpyxl
+watchdog
+playwright
+fastapi
+uvicorn
+jinja2
+python-multipart
