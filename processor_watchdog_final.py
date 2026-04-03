@@ -21,6 +21,7 @@ import pandas as pd
 import numpy as np
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
+from mppt_dc_analyzer import analyze_dc_current
 
 # ---------------------------------------------------------------------------
 # Paths & Logging
@@ -59,8 +60,24 @@ PR_THRESHOLD = 85.0
 TEMP_CRITICAL = 45.0
 TEMP_WARNING = 40.0
 AC_HEALTHY_MIN = 5000  # AC > 5kW = healthy during daylight
-DAYLIGHT_START = 7.0
 DAYLIGHT_END = 19.0
+STABILIZATION_MINUTES = 30  # Wait 30m after production start before PR alarms
+
+def get_production_start_time(ac_df: pd.DataFrame) -> float:
+    """Find the first Ora where >10 inverters are producing >0W."""
+    if ac_df is None or "Ora" not in ac_df.columns:
+        return 7.0 # Fallback
+    
+    ac_cols = [c for c in ac_df.columns if "Potenza AC" in c]
+    df_clean = ac_df.replace(["x", " x "], np.nan).apply(pd.to_numeric, errors='coerce')
+    
+    for idx, row in df_clean.iterrows():
+        # Count how many inverters have production > 100W (more stable than >0)
+        producing = sum(1 for c in ac_cols if row.get(c, 0) > 100)
+        if producing > 10:
+            return float(row.get("Ora", 7.0))
+            
+    return 7.0
 
 
 # ---------------------------------------------------------------------------
@@ -87,7 +104,10 @@ def load_metric(date_str: str, metric_prefix: str) -> pd.DataFrame:
     # Try CSV first
     if csv_path.exists():
         try:
-            return pd.read_csv(str(csv_path))
+            # Safely attempt to read with separator sniffing
+            df = pd.read_csv(str(csv_path), sep=None, engine='python')
+            logger.info(f"Loaded {csv_path.name} (sep={df.index.name if hasattr(df.index, 'name') else 'auto'})")
+            return df
         except Exception:
             pass
 
@@ -104,9 +124,14 @@ def load_metric(date_str: str, metric_prefix: str) -> pd.DataFrame:
 
 
 def normalize_pr(val):
-    """Convert PR to 0-100% scale."""
+    """Convert PR to 0-100% scale, handles Italian strings like '95,5'."""
     if pd.isna(val):
         return None
+    if isinstance(val, str):
+        try:
+            val = float(val.replace(".", "").replace(",", "."))
+        except:
+            return None
     return val if val > 1.5 else val * 100
 
 
@@ -115,7 +140,7 @@ def normalize_pr(val):
 # ---------------------------------------------------------------------------
 
 def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFrame,
-                         dc_df: pd.DataFrame, pr_df: pd.DataFrame) -> dict:
+                         dc_df: pd.DataFrame, pr_df: pd.DataFrame, daylight_start: float = 7.0) -> dict:
     """
     Compute health flags from the latest available NON-NAN values in each metric file.
     """
@@ -125,32 +150,48 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
     pr_latest = {}
     if pr_df is not None:
         pr_df_clean = pr_df.copy()
-        pr_df_clean["PR"] = pr_df_clean["PR"].apply(normalize_pr)
-        for inv_id in INVERTER_IDS:
-            rows = pr_df_clean[pr_df_clean["Inverter"] == f"INV {inv_id}"]
-            if len(rows) > 0:
-                pr_latest[inv_id] = rows.iloc[-1]["PR"]
+        pr_col = "PR" if "PR" in pr_df_clean.columns else "PR inverter [%]" if "PR inverter [%]" in pr_df_clean.columns else None
+        inv_col = "Inverter" if "Inverter" in pr_df_clean.columns else "PR inverter" if "PR inverter" in pr_df_clean.columns else None
+
+        if pr_col and inv_col:
+            pr_df_clean[pr_col] = pr_df_clean[pr_col].apply(normalize_pr)
+            for inv_id in INVERTER_IDS:
+                rows = pr_df_clean[pr_df_clean[inv_col] == f"INV {inv_id}"]
+                if len(rows) > 0:
+                    pr_latest[inv_id] = rows.iloc[-1][pr_col]
 
     # Find latest AC row with valid data (not all NaN)
     ac_row = None
+    # Find latest AC row with valid data (not all NaN)
+    ac_row = None
     ora = 0
+    latest_ac_missing = set()
+    
     if ac_df is not None and len(ac_df) > 0:
-        # Find last row that has at least some non-NaN AC values
+        # Find last row that has at least some valid non-'x' AC values
         for idx in range(len(ac_df) - 1, -1, -1):
             row = ac_df.iloc[idx]
             ac_cols = [c for c in ac_df.columns if "Potenza AC" in c]
-            ac_values = [row.get(c) for c in ac_cols]
-            non_nan_count = sum(1 for v in ac_values if v is not None and not pd.isna(v))
-            if non_nan_count > 30:  # At least 30 inverters have valid data
+            valid_count = sum(1 for c in ac_cols if pd.notna(row.get(c)) and str(row.get(c)).strip().lower() not in ['x', ''])
+            if valid_count > 10:  # At least 10 inverters are online/reporting
                 ac_row = row
                 ora = row.get("Ora", 0)
-                logger.info(f"Found latest valid AC row at index {idx} (Ora={ora}, {non_nan_count} valid values)")
+                try: ora = float(ora)
+                except: ora = 0.0
+                logger.info(f"Found latest valid AC row at index {idx} (Ora={ora}, {valid_count} valid values)")
                 break
 
         if ac_row is None:
-            # Fallback to last row even if NaN
             ac_row = ac_df.iloc[-1]
-            ora = ac_row.get("Ora", 0)
+            try: ora = float(ac_row.get("Ora", 0))
+            except: ora = 0.0
+
+        # Now figure out which specific inverters are offline in this row
+        for c in ac_df.columns:
+            if "Potenza AC" in c:
+                val = ac_row.get(c)
+                if pd.isna(val) or str(val).strip().lower() in ['x', '']:
+                    latest_ac_missing.add(c)
 
     # Get latest temp and DC rows with valid data
     temp_row = None
@@ -224,7 +265,7 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
         if dc_values:
             avg_dc = np.mean(dc_values)
             # Contextualize to time of day: early morning/evening < afternoon
-            if DAYLIGHT_START <= ora <= 12:  # Morning ramp-up
+            if daylight_start <= ora <= 12:  # Morning ramp-up
                 dc_threshold_green = 10  # Morning: expect higher current
                 dc_threshold_yellow = 2
             elif 12 < ora <= DAYLIGHT_END:  # Afternoon decline
@@ -247,9 +288,12 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
 
         # AC Power LED
         ac_col = f"Potenza AC (INV {inv_id}) [W]"
-        ac_val = None
-        if ac_row is not None and ac_col in ac_row.index:
-            ac_val = ac_row[ac_col]
+        val_raw = ac_row.get(ac_col) if ac_row is not None else None
+        
+        try:
+            ac_val = float(val_raw)
+        except (ValueError, TypeError):
+            ac_val = None
 
         if ac_val is None or pd.isna(ac_val):
             health["ac_power"] = "grey"
@@ -261,10 +305,16 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
             health["ac_power"] = "red"
         else:
             # 0 W - depends on time of day
-            if DAYLIGHT_START <= ora <= DAYLIGHT_END:
+            if daylight_start <= ora <= DAYLIGHT_END:
                 health["ac_power"] = "red"  # Should be generating
             else:
                 health["ac_power"] = "grey"  # Off-hours is OK
+
+        ac_col = f"Potenza AC (INV {inv_id}) [W]"
+        if ac_col in latest_ac_missing:
+            health["comms_lost_flag"] = True
+        else:
+            health["comms_lost_flag"] = False
 
         # Overall = worst of 4 LEDs
         scores = []
@@ -274,11 +324,19 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
             if score >= 0:
                 scores.append(score)
 
-        if not scores:
+        if health.get("comms_lost_flag"):
+            health["overall_status"] = "grey"
+            health["ac_power"] = "grey"
+        elif not scores:
             health["overall_status"] = "grey"
         else:
             worst = max(scores)
             health["overall_status"] = ["green", "yellow", "red"][worst]
+
+        # Also store raw values and metadata
+        health["raw_pr"] = pr_val
+        health["data_time"] = format_ora(ora)
+        health["is_stabilized"] = (ora >= (daylight_start + (STABILIZATION_MINUTES / 60.0)))
 
         inverter_health[inv_label] = health
 
@@ -286,10 +344,104 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
 
 
 # ---------------------------------------------------------------------------
+# Downtime Tracker
+# ---------------------------------------------------------------------------
+
+def format_ora(val):
+    """Convert float like 9.25 to '09:25'"""
+    if pd.isna(val): return "Unknown"
+    try:
+        h = int(val)
+        m = int(round((val % 1) * 100))
+        return f"{h:02d}:{m:02d}"
+    except:
+        return "Unknown"
+
+def compute_downtime(ac_df: pd.DataFrame, irrad_df: pd.DataFrame, daylight_start: float = 7.0) -> dict:
+    """Calculate downtime events based on 0.0 W strings during daylight hours."""
+    downtime_tracker = {}
+    if ac_df is None or len(ac_df) == 0:
+        return downtime_tracker
+
+    # Filter for daylight hours
+    if "Ora" not in ac_df.columns:
+        return downtime_tracker
+        
+    mask = (ac_df["Ora"] >= daylight_start) & (ac_df["Ora"] <= DAYLIGHT_END)
+    df_day = ac_df[mask].copy()
+    if len(df_day) == 0:
+        return downtime_tracker
+
+    df_day = df_day.replace(["x", " x "], np.nan)
+    
+    # Get POA array if available
+    poa_array = None
+    if irrad_df is not None and not irrad_df.empty:
+        poa_cols = [c for c in irrad_df.columns if "POA" in c]
+        if poa_cols:
+            poa_array = irrad_df[poa_cols[0]].replace(["x", " x "], np.nan)
+            poa_array = pd.to_numeric(poa_array, errors="coerce")
+
+    for inv_id in INVERTER_IDS:
+        inv_label = f"INV {inv_id}"
+        ac_col = f"Potenza AC ({inv_label}) [W]"
+        if ac_col not in df_day.columns:
+            continue
+            
+        data = pd.to_numeric(df_day[ac_col], errors='coerce')
+        is_zero = (data == 0.0)
+        
+        zero_indices = is_zero[is_zero].index
+        if len(zero_indices) > 0:
+            # Group contiguous zeros to find the latest block
+            blocks = (is_zero != is_zero.shift()).cumsum()
+            zero_blocks = blocks[is_zero]
+            last_block_id = zero_blocks.iloc[-1]
+            last_block_indices = zero_blocks[zero_blocks == last_block_id].index
+            
+            idx_start = last_block_indices[0]
+            idx_end = last_block_indices[-1]
+            
+            time_stopped = format_ora(df_day.loc[idx_start].get("Ora"))
+            
+            # Check if it's still off
+            valid_data_idx = data.dropna().index
+            if len(valid_data_idx) > 0 and idx_end == valid_data_idx[-1]:
+                started_again = "still off"
+            else:
+                after_end = data.loc[idx_end:].dropna()
+                if len(after_end) > 1:
+                    rec_idx = after_end.index[1]
+                    started_again = format_ora(df_day.loc[rec_idx].get("Ora"))
+                else:
+                    started_again = "still off"
+                    
+            # Last available data timestamp
+            last_data_idx = valid_data_idx[-1] if len(valid_data_idx) > 0 else df_day.index[-1]
+            last_ts = format_ora(df_day.loc[last_data_idx].get("Ora"))
+            
+            last_poa = "—"
+            if poa_array is not None and len(poa_array.dropna()) > 0:
+                last_poa_val = poa_array.dropna().iloc[-1]
+                last_poa = f"{last_poa_val:.1f}"
+
+            total_time_off = len(zero_indices)
+
+            downtime_tracker[inv_label] = {
+                "inverter": inv_label,
+                "last_data_fetched": last_ts,
+                "last_poa": last_poa,
+                "time_stopped": time_stopped,
+                "started_again": started_again,
+                "total_time_off": int(total_time_off)
+            }
+            
+    return downtime_tracker
+
 # Macro Health
 # ---------------------------------------------------------------------------
 
-def compute_macro_health(inverter_health: dict) -> dict:
+def compute_macro_health(inverter_health: dict, daylight_start: float = 7.0) -> dict:
     """Compute plant-wide health summary."""
     total = len(inverter_health)
     online = sum(1 for h in inverter_health.values() if h["ac_power"] in ["green", "yellow"])
@@ -301,6 +453,7 @@ def compute_macro_health(inverter_health: dict) -> dict:
         "online": online,
         "tripped": tripped,
         "comms_lost": comms_lost,
+        "plant_start_time": format_ora(daylight_start),
         "last_sync": datetime.now().isoformat(timespec="seconds"),
     }
 
@@ -327,25 +480,151 @@ def analyze_site(date_str: str) -> None:
             logger.warning(f"Potenza_AC not found for {date_str}")
             return
 
+        # Compute dynamic production start
+        daylight_start = get_production_start_time(ac_df)
+        logger.info(f"Dynamic Daylight Start detected at: {format_ora(daylight_start)}")
+
         # Compute health from latest values
         logger.info("Computing health flags...")
-        inverter_health = compute_latest_health(date_str, ac_df, temp_df, dc_df, pr_df)
-        macro_health = compute_macro_health(inverter_health)
+        inverter_health = compute_latest_health(date_str, ac_df, temp_df, dc_df, pr_df, daylight_start=daylight_start)
+        macro_health = compute_macro_health(inverter_health, daylight_start=daylight_start)
+        
+        # Latest sync from extraction status if available
+        status_path = DATA_DIR / "extraction_status.json"
+        if status_path.exists():
+            try:
+                with open(status_path, "r", encoding="utf-8") as f:
+                    estatus = json.load(f)
+                    if date_str in estatus:
+                        # Find the latest timestamp across all metrics for that day
+                        ts_list = [v["timestamp"] for v in estatus[date_str].values() if "timestamp" in v]
+                        if ts_list:
+                            macro_health["last_data_fetch"] = max(ts_list)
+            except:
+                pass
 
-        # Build JSON snapshot
+        logger.info("Evaluating MPPT DC Data...")
+        md_report_path = DATA_DIR / f"mppt_analysis_report_{date_str}.md"
+        analyze_dc_current(dc_df, md_report_path, date_str)
+        # -----------------------------------
+        
+        # Compute Downtime array
+        logger.info("Evaluating downtime...")
+        downtime_tracker = compute_downtime(ac_df, irrad_df, daylight_start=daylight_start)
+
+        # Build JSON snapshot and process anomalies
         timestamp = datetime.now().isoformat(timespec="seconds")
+        json_path = DATA_DIR / f"dashboard_data_{date_str}.json"
+        
+        # Load previous state
+        existing_data = {}
+        if json_path.exists():
+            try:
+                with open(json_path, "r", encoding="utf-8") as f:
+                    existing_data = json.load(f)
+            except:
+                pass
+                
+        historical_trail = []
+        active_anomalies_prev = []
+        
+        if existing_data:
+            last_ts = sorted(existing_data.keys())[-1]
+            last_snap = existing_data[last_ts]
+            historical_trail = last_snap.get("historical_trail", [])
+            active_anomalies_prev = last_snap.get("active_anomalies", [])
+            
+        current_active = []
+        
+        # We need a quick lookup of previous alarms
+        prev_alarm_map = {a.get("id"): a for a in active_anomalies_prev}
+        
+        for inv_id in INVERTER_IDS:
+            inv_label = f"INV {inv_id}"
+            h = inverter_health.get(inv_label, {})
+            
+            # --- 1. COMMS LOST Alarm ---
+            is_comms_lost = h.get("comms_lost_flag", False)
+            comms_alarm_id = f"{inv_id}_COMMS_LOST"
+            
+            was_comms_lost = comms_alarm_id in prev_alarm_map
+            
+            if is_comms_lost:
+                if not was_comms_lost:
+                    # New alarm
+                    current_active.append({
+                        "id": comms_alarm_id,
+                        "inverter": inv_label,
+                        "type": "COMMS LOST",
+                        "severity": "grey",
+                        "trip_time": timestamp,
+                        "message": "Missing data for this component."
+                    })
+                else:
+                    # Carry over existing
+                    current_active.append(prev_alarm_map[comms_alarm_id])
+            else:
+                # Recovered?
+                if was_comms_lost:
+                    prev_alarm = prev_alarm_map[comms_alarm_id]
+                    prev_alarm["recovery_time"] = timestamp
+                    historical_trail.append(prev_alarm)
+
+            # --- 2. PR Alarm ---
+            pr_val = h.get("raw_pr")
+            pr_alarm_id = f"{inv_id}_LOW_PR"
+            data_time_str = h.get("data_time", "Unknown")
+            is_stabilized = h.get("is_stabilized", True)
+            
+            was_low_pr = pr_alarm_id in prev_alarm_map
+            
+            # Trigger alarm only if PR < 85 and system is stabilized (30m after production start)
+            if pr_val is not None and pr_val < PR_THRESHOLD and is_stabilized:
+                if not was_low_pr:
+                    current_active.append({
+                        "id": pr_alarm_id,
+                        "inverter": inv_label,
+                        "type": "LOW PR",
+                        "severity": "red",
+                        "trip_time": data_time_str, # Use ACTUAL time from data
+                        "message": f"Performance Ratio dropped to {pr_val:.1f}%"
+                    })
+                else:
+                    # Carry over
+                    prev_alarm = prev_alarm_map[pr_alarm_id]
+                    prev_alarm["message"] = f"Performance Ratio is {pr_val:.1f}%"
+                    current_active.append(prev_alarm)
+            else:
+                # Recovered
+                if was_low_pr:
+                    prev_alarm = prev_alarm_map[pr_alarm_id]
+                    prev_alarm["recovery_time"] = timestamp
+                    historical_trail.append(prev_alarm)
+
+        # Preserve any other active anomalies that we didn't handle in this loop
+        handled_ids = set([a["id"] for a in current_active] + [a["id"] for a in historical_trail if "recovery_time" in a])
+        for a in active_anomalies_prev:
+            if a.get("id") not in handled_ids:
+                current_active.append(a)
+                
         snapshot = {
-            timestamp: {
-                "macro_health": macro_health,
-                "inverter_health": inverter_health,
-                "active_anomalies": [],  # Placeholder for future anomaly detection
-            }
+            "macro_health": macro_health,
+            "inverter_health": inverter_health,
+            "active_anomalies": current_active,
+            "historical_trail": historical_trail,
+            "downtime_tracker": downtime_tracker
         }
 
+        # Save merged data (keep last 50 timestamps)
+        existing_data[timestamp] = snapshot
+        timestamps = sorted(existing_data.keys())
+        if len(timestamps) > 50:
+            for old_ts in timestamps[:-50]:
+                del existing_data[old_ts]
+        
         # Write JSON
-        json_path = DATA_DIR / f"dashboard_data_{date_str}.json"
         with open(json_path, "w", encoding="utf-8") as f:
-            json.dump(snapshot, f, indent=2)
+            json.dump(existing_data, f, indent=2)
         logger.info(f"Wrote JSON: {json_path}")
 
         # Log summary

@@ -27,7 +27,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 # Import analysis logic
-from processor_watchdog import analyze_site
+from processor_watchdog_final import analyze_site
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -109,7 +109,7 @@ async def rescan():
 if __name__ == "__main__":
     uvicorn.run(
         app,
-        host="localhost",
+        host="0.0.0.0",
         port=8080,
         log_level="info",
     )

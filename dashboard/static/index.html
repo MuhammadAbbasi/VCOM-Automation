@@ -15,6 +15,10 @@
   <div>
     <h1>Mazara Solar Plant — SCADA Monitor</h1>
     <div class="subtitle">System ID 2144635 &nbsp;·&nbsp; Mazara del Vallo, Sicily &nbsp;·&nbsp; 36 Inverters · 808 Strings</div>
+    <div class="plant-meta" style="margin-top:0.5rem; font-size:0.8rem; color:var(--text); opacity:0.8;">
+      <span id="meta-start-time">Plant Start: --:--</span> &nbsp;·&nbsp; 
+      <span id="meta-last-fetch">Latest Data: --:--</span>
+    </div>
   </div>
   <div class="header-actions">
     <div id="last-updated" style="color:var(--muted);font-size:0.75rem;">Connecting…</div>
@@ -142,7 +146,58 @@
     </div>
   </section>
 
+  <!-- ══════════════════════════════════════════════════════════
+       6. Downtime Tracker
+  ═══════════════════════════════════════════════════════════ -->
+  <section>
+    <h2>Downtime Tracker <span id="downtime-subtitle" style="font-size:0.65rem;font-weight:400;color:var(--muted);">(Daylight Hours)</span></h2>
+    <div class="alarm-table-wrapper">
+      <table class="alarm-table">
+        <thead>
+          <tr>
+            <th>Inverter</th>
+            <th>Date and time last data fetched</th>
+            <th>Last POA available</th>
+            <th>Time it stopped</th>
+            <th>Still off or started again</th>
+            <th>Total time off (minutes)</th>
+          </tr>
+        </thead>
+        <tbody id="downtime-tbody">
+          <tr><td colspan="6" class="empty-state">No downtime reported</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
 </main>
+
+<!-- ══════════════════════════════════════════════════════════
+     6. Site Legend
+═══════════════════════════════════════════════════════════ -->
+<section style="margin: 2rem 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+  <h2>Site Legend</h2>
+  <div style="display:flex; gap: 2rem; flex-wrap: wrap; margin-top: 1rem;">
+    <div style="flex:1; min-width: 200px;">
+      <h3 style="font-size: 0.9rem; color: var(--muted); margin-bottom: 0.5rem; text-transform: uppercase;">Severity Colors</h3>
+      <ul style="list-style: none; padding: 0; line-height: 1.8; font-size: 0.9rem; color:var(--text);">
+        <li><span class="led green" style="display:inline-block; width:10px; height:10px; margin-right:8px;"></span> <strong>Green:</strong> Optimal Nominal Performance</li>
+        <li><span class="led yellow" style="display:inline-block; width:10px; height:10px; margin-right:8px;"></span> <strong>Yellow:</strong> Warning / Sub-optimal (e.g. PR &lt; 80%)</li>
+        <li><span class="led red" style="display:inline-block; width:10px; height:10px; margin-right:8px;"></span> <strong>Red:</strong> Critical Trip / No Power</li>
+        <li><span class="led grey" style="display:inline-block; width:10px; height:10px; margin-right:8px;"></span> <strong>Grey:</strong> COMMS LOST / Offline</li>
+      </ul>
+    </div>
+    
+    <div style="flex:2; min-width: 300px;">
+      <h3 style="font-size: 0.9rem; color: var(--muted); margin-bottom: 0.5rem; text-transform: uppercase;">Domain Layout (36 Inverters)</h3>
+      <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; font-size: 0.85rem; color: var(--muted);">
+        <div><strong style="color:var(--text)">TX1 (12x)</strong><br/>INV TX1-01 to TX1-12</div>
+        <div><strong style="color:var(--text)">TX2 (12x)</strong><br/>INV TX2-01 to TX2-12</div>
+        <div><strong style="color:var(--text)">TX3 (12x)</strong><br/>INV TX3-01 to TX3-12</div>
+      </div>
+    </div>
+  </div>
+</section>
 
 <script src="/static/app.js"></script>
 </body>

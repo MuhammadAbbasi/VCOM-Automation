@@ -47,6 +47,19 @@ function updateMacro(data) {
   el("val-online").textContent  = safeNum(m.online, "—");
   el("val-tripped").textContent = safeNum(m.tripped, "—");
   el("val-comms").textContent   = safeNum(m.comms_lost, "—");
+  
+  // Header Metadata
+  const start = m.plant_start_time || "--:--";
+  const fetch = m.last_data_fetch ? m.last_data_fetch.substring(11, 16) : "--:--";
+  
+  el("meta-start-time").textContent = `Plant Start: ${start}`;
+  el("meta-last-fetch").textContent = `Latest Data: ${fetch}`;
+  
+  // Downtime Subtitle
+  const sub = el("downtime-subtitle");
+  if (sub) {
+    sub.textContent = `(Daylight Hours Starting from Production @ ${start})`;
+  }
 }
 
 // ─── 2. File ingestion status ─────────────────────────────────────────────
@@ -129,11 +142,11 @@ function updateAlerts(data) {
 
   container.innerHTML = alerts.map(a => `
     <div class="alert-item ${a.severity || "Info"}">
-      <span class="alert-timestamp">${a.timestamp || "—"}</span>
+      <span class="alert-timestamp">${a.trip_time || "—"}</span>
       <span>
         <span class="alert-inverter">${a.inverter || "—"}</span>
         <span class="alert-type"> — ${a.type || "Unknown"}</span>
-        <span class="alert-details">&nbsp;(${a.details || ""})</span>
+        <span class="alert-details">&nbsp;(${a.message || ""})</span>
       </span>
       <span class="severity-badge ${a.severity || "Info"}">${a.severity || "Info"}</span>
     </div>
@@ -151,16 +164,43 @@ function updateHistory(data) {
     return;
   }
 
-  // Newest first
-  const sorted = [...trail].sort((a, b) => (b.timestamp || "").localeCompare(a.timestamp || ""));
+  // Newest first (using recovery_time first, fallback to trip_time)
+  const sorted = [...trail].sort((a, b) => (b.recovery_time || b.trip_time || "").localeCompare(a.recovery_time || a.trip_time || ""));
 
   tbody.innerHTML = sorted.map(a => `
     <tr>
-      <td>${a.timestamp || "—"}</td>
+      <td style="font-size:0.8rem">Recovered:<br/>${a.recovery_time || "—"}</td>
       <td>${a.inverter  || "—"}</td>
       <td>${a.type      || "—"}</td>
       <td><span class="severity-badge ${a.severity || "Info"}">${a.severity || "Info"}</span></td>
-      <td>${a.details   || ""}</td>
+      <td>${a.message   || ""}</td>
+    </tr>
+  `).join("");
+}
+
+// ─── 6. Downtime Tracker ────────────────────────────────────────────────────
+
+function updateDowntime(data) {
+  const downtime = data.downtime_tracker || {};
+  const tbody = el("downtime-tbody");
+
+  const keys = Object.keys(downtime);
+  if (keys.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No downtime reported today</td></tr>';
+    return;
+  }
+
+  // Sort by total time off descending
+  const sorted = keys.map(k => downtime[k]).sort((a, b) => b.total_time_off - a.total_time_off);
+
+  tbody.innerHTML = sorted.map(d => `
+    <tr>
+      <td>${d.inverter || "—"}</td>
+      <td>${d.last_data_fetched || "—"}</td>
+      <td>${d.last_poa || "—"}</td>
+      <td>${d.time_stopped || "—"}</td>
+      <td>${d.started_again || "—"}</td>
+      <td><strong>${d.total_time_off || "0"}</strong></td>
     </tr>
   `).join("");
 }
@@ -180,6 +220,7 @@ async function updateDashboard() {
     updateInverterGrid(data);
     updateAlerts(data);
     updateHistory(data);
+    updateDowntime(data);
 
     el("last-updated").textContent = `Last updated: ${now()}`;
   } catch (err) {
