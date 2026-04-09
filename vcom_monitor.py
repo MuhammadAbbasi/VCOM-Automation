@@ -172,8 +172,13 @@ def run_extraction_cycle(page, cycle_count: int) -> None:
             update_extraction_status(prefix, "empty")
         else:
             print(f"[OK] {label}: Extracted {len(df)} rows.", flush=True)
-            export_metric(df, prefix)
-            update_extraction_status(prefix, "success")
+            try:
+                export_metric(df, prefix)
+                update_extraction_status(prefix, "success")
+            except Exception as export_err:
+                logger.error(f"[{label}] Export failed (will retry next cycle): {export_err}")
+                print(f"[!] {label}: EXPORT FAILED — {type(export_err).__name__}", flush=True)
+                update_extraction_status(prefix, "failed")
 
     print(f"\n{'#' * 80}", flush=True)
     print(f"### [CYCLE #{cycle_count}] COMPLETED SUCCESSFULLY @ {datetime.now().strftime('%H:%M:%S')}", flush=True)

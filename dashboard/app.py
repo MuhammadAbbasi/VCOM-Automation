@@ -22,6 +22,7 @@ if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))
 
 import uvicorn
+import socket
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -104,12 +105,73 @@ async def rescan():
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+def get_local_ip():
+    """Try to get the primary LAN IP of this machine."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+
+def setup_ngrok(token: str, port: int, user: str, psw: str):
+    """Start an ngrok tunnel if a token is provided."""
+    try:
+        from pyngrok import ngrok, conf
+        conf.get_default().auth_token = token
+        
+        # Configure the tunnel with Basic Auth for security
+        auth = f"{user}:{psw}" if user and psw else None
+        public_url = ngrok.connect(port, auth=auth).public_url
+        return public_url
+    except ImportError:
+        return None
+    except Exception as e:
+        print(f"[!] Ngrok Error: {e}")
+        return None
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
+    from processor_watchdog_final import load_config
+    cfg = load_config()
+    
+    port = 8080
+    local_ip = get_local_ip()
+    
+    print("\n" + "="*60)
+    print("    MAZARA DASHBOARD STARTING")
+    print("="*60)
+    print(f"[*] Local:   http://localhost:{port}")
+    print(f"[*] Network: http://{local_ip}:{port}")
+    
+    # Try to start Ngrok
+    ngrok_token = cfg.get("NGROK_AUTH_TOKEN")
+    if ngrok_token and ngrok_token != "YOUR_TOKEN_HERE":
+        print("[*] Starting Ngrok Tunnel...")
+        ng_user = cfg.get("DASHBOARD_USER", "admin")
+        ng_pass = cfg.get("DASHBOARD_PASS", "mazara2025")
+        
+        public_url = setup_ngrok(ngrok_token, port, ng_user, ng_pass)
+        if public_url:
+            print(f"[*] Remote Access (Public): {public_url}")
+            print(f"[*] Security Policy: Basic Auth ({ng_user}:{ng_pass})")
+        else:
+            print("[!] Ngrok failed: Is 'pyngrok' installed? Run: pip install pyngrok")
+    else:
+        print("[!] No NGROK_AUTH_TOKEN found in config.json. Remote access via Ngrok is disabled.")
+    
+    print("="*60 + "\n")
+
     uvicorn.run(
         app,
         host="0.0.0.0",
-        port=8080,
-        log_level="info",
+        port=port,
+        log_level="warning",
     )

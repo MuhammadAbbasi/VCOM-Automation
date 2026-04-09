@@ -28,8 +28,16 @@ from mppt_dc_analyzer import analyze_dc_current
 # ---------------------------------------------------------------------------
 
 ROOT = Path(__file__).resolve().parent
+CONFIG_PATH = ROOT / "config.json"
 DATA_DIR = ROOT / "extracted_data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+def load_config() -> dict:
+    """Load configuration from config.json."""
+    if not CONFIG_PATH.exists():
+        return {}
+    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 LOG_PATH = ROOT / "watchdog.log"
 logging.basicConfig(
@@ -41,6 +49,20 @@ logging.basicConfig(
     ],
 )
 logger = logging.getLogger("watchdog_final")
+
+
+class NumpyEncoder(json.JSONEncoder):
+    """JSON encoder that handles numpy int64/float64 and NaN values."""
+    def default(self, obj):
+        if isinstance(obj, (np.integer,)):
+            return int(obj)
+        if isinstance(obj, (np.floating,)):
+            if np.isnan(obj):
+                return None
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super().default(obj)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -97,25 +119,40 @@ def excel_to_csv(excel_path: Path, csv_path: Path) -> bool:
 
 
 def load_metric(date_str: str, metric_prefix: str) -> pd.DataFrame:
-    """Load metric from CSV or Excel."""
+    """Load metric from CSV or Excel.
+    
+    Always re-converts the Excel to CSV when the .xlsx is newer than the .csv,
+    so the analysis uses the latest appended data, not a stale first-export.
+    """
     csv_path = DATA_DIR / f"{metric_prefix}_{date_str}.csv"
     excel_path = DATA_DIR / f"{metric_prefix}_{date_str}.xlsx"
 
-    # Try CSV first
+    # Re-convert from Excel if it exists and is newer than the CSV
+    if excel_path.exists():
+        need_convert = True
+        if csv_path.exists():
+            try:
+                xlsx_mtime = excel_path.stat().st_mtime
+                csv_mtime = csv_path.stat().st_mtime
+                need_convert = (xlsx_mtime > csv_mtime)
+            except Exception:
+                need_convert = True
+
+        if need_convert:
+            try:
+                if excel_to_csv(excel_path, csv_path):
+                    df = pd.read_csv(str(csv_path))
+                    logger.info(f"Loaded {csv_path.name} (sep=None)")
+                    return df
+            except Exception as e:
+                logger.warning(f"Failed to convert/load {excel_path.name}: {e}")
+
+    # Fall back to existing CSV
     if csv_path.exists():
         try:
-            # Safely attempt to read with separator sniffing
             df = pd.read_csv(str(csv_path), sep=None, engine='python')
-            logger.info(f"Loaded {csv_path.name} (sep={df.index.name if hasattr(df.index, 'name') else 'auto'})")
+            logger.info(f"Loaded {csv_path.name} (sep=None)")
             return df
-        except Exception:
-            pass
-
-    # Try Excel
-    if excel_path.exists():
-        try:
-            if excel_to_csv(excel_path, csv_path):
-                return pd.read_csv(str(csv_path))
         except Exception:
             pass
 
@@ -160,31 +197,44 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
                 if len(rows) > 0:
                     pr_latest[inv_id] = rows.iloc[-1][pr_col]
 
-    # Find latest AC row with valid data (not all NaN)
-    ac_row = None
-    # Find latest AC row with valid data (not all NaN)
+    # Find the latest AC row with valid data.
+    # The file has many appended batches (each with Ora 0.00-23.55).
+    # We deduplicate by Ora (keep the LAST value for each slot), then
+    # find the highest Ora that has real data.
     ac_row = None
     ora = 0
     latest_ac_missing = set()
     
     if ac_df is not None and len(ac_df) > 0:
-        # Find last row that has at least some valid non-'x' AC values
-        for idx in range(len(ac_df) - 1, -1, -1):
-            row = ac_df.iloc[idx]
-            ac_cols = [c for c in ac_df.columns if "Potenza AC" in c]
-            valid_count = sum(1 for c in ac_cols if pd.notna(row.get(c)) and str(row.get(c)).strip().lower() not in ['x', ''])
-            if valid_count > 10:  # At least 10 inverters are online/reporting
+        ac_cols = [c for c in ac_df.columns if "Potenza AC" in c]
+        
+        # Deduplicate: keep only the last occurrence of each Ora value
+        if "Ora" in ac_df.columns:
+            ac_dedup = ac_df.drop_duplicates(subset=["Ora"], keep="last").copy()
+            ac_dedup["Ora_num"] = pd.to_numeric(ac_dedup["Ora"], errors="coerce")
+            ac_dedup = ac_dedup.sort_values("Ora_num", ascending=False)
+        else:
+            ac_dedup = ac_df.copy()
+        
+        # Search from highest Ora downward for a row with valid values
+        for _, row in ac_dedup.iterrows():
+            valid_count = sum(
+                1 for c in ac_cols
+                if pd.notna(row.get(c)) and str(row.get(c)).strip().lower() not in ['x', '']
+            )
+            if valid_count > 10:
                 ac_row = row
                 ora = row.get("Ora", 0)
                 try: ora = float(ora)
                 except: ora = 0.0
-                logger.info(f"Found latest valid AC row at index {idx} (Ora={ora}, {valid_count} valid values)")
+                logger.info(f"Found latest valid AC data at Ora={ora} ({valid_count} valid inverters)")
                 break
 
         if ac_row is None:
             ac_row = ac_df.iloc[-1]
             try: ora = float(ac_row.get("Ora", 0))
             except: ora = 0.0
+            logger.warning(f"No valid AC row found, using last row (Ora={ora})")
 
         # Now figure out which specific inverters are offline in this row
         for c in ac_df.columns:
@@ -193,12 +243,18 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
                 if pd.isna(val) or str(val).strip().lower() in ['x', '']:
                     latest_ac_missing.add(c)
 
-    # Get latest temp and DC rows with valid data
+    # Get latest temp row (deduplicated by Ora)
     temp_row = None
     if temp_df is not None and len(temp_df) > 0:
-        for idx in range(len(temp_df) - 1, -1, -1):
-            row = temp_df.iloc[idx]
-            temp_cols = [c for c in temp_df.columns if "Temperatura" in c]
+        temp_cols = [c for c in temp_df.columns if "Temperatura" in c]
+        if "Ora" in temp_df.columns:
+            temp_dedup = temp_df.drop_duplicates(subset=["Ora"], keep="last").copy()
+            temp_dedup["Ora_num"] = pd.to_numeric(temp_dedup["Ora"], errors="coerce")
+            temp_dedup = temp_dedup.sort_values("Ora_num", ascending=False)
+        else:
+            temp_dedup = temp_df.copy()
+        
+        for _, row in temp_dedup.iterrows():
             temp_values = [row.get(c) for c in temp_cols]
             non_nan_count = sum(1 for v in temp_values if v is not None and not pd.isna(v))
             if non_nan_count > 30:
@@ -207,14 +263,21 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
         if temp_row is None and len(temp_df) > 0:
             temp_row = temp_df.iloc[-1]
 
+    # Get latest DC row (deduplicated by Ora)
     dc_row = None
     if dc_df is not None and len(dc_df) > 0:
-        for idx in range(len(dc_df) - 1, -1, -1):
-            row = dc_df.iloc[idx]
-            dc_cols = [c for c in dc_df.columns if "Corrente DC" in c]
+        dc_cols = [c for c in dc_df.columns if "Corrente DC" in c]
+        if "Ora" in dc_df.columns:
+            dc_dedup = dc_df.drop_duplicates(subset=["Ora"], keep="last").copy()
+            dc_dedup["Ora_num"] = pd.to_numeric(dc_dedup["Ora"], errors="coerce")
+            dc_dedup = dc_dedup.sort_values("Ora_num", ascending=False)
+        else:
+            dc_dedup = dc_df.copy()
+        
+        for _, row in dc_dedup.iterrows():
             dc_values = [row.get(c) for c in dc_cols]
             non_nan_count = sum(1 for v in dc_values if v is not None and not pd.isna(v))
-            if non_nan_count > 400:  # At least 400 MPPT channels have valid data
+            if non_nan_count > 400:
                 dc_row = row
                 break
         if dc_row is None and len(dc_df) > 0:
@@ -366,9 +429,13 @@ def compute_downtime(ac_df: pd.DataFrame, irrad_df: pd.DataFrame, daylight_start
     # Filter for daylight hours
     if "Ora" not in ac_df.columns:
         return downtime_tracker
+
+    # Deduplicate by Ora (keep last batch's values)
+    ac_dedup = ac_df.drop_duplicates(subset=["Ora"], keep="last").copy()
+    ac_dedup["Ora"] = pd.to_numeric(ac_dedup["Ora"], errors="coerce")
         
-    mask = (ac_df["Ora"] >= daylight_start) & (ac_df["Ora"] <= DAYLIGHT_END)
-    df_day = ac_df[mask].copy()
+    mask = (ac_dedup["Ora"] >= daylight_start) & (ac_dedup["Ora"] <= DAYLIGHT_END)
+    df_day = ac_dedup[mask].copy()
     if len(df_day) == 0:
         return downtime_tracker
 
@@ -624,7 +691,7 @@ def analyze_site(date_str: str) -> None:
         
         # Write JSON
         with open(json_path, "w", encoding="utf-8") as f:
-            json.dump(existing_data, f, indent=2)
+            json.dump(existing_data, f, indent=2, cls=NumpyEncoder)
         logger.info(f"Wrote JSON: {json_path}")
 
         # Log summary

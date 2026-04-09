@@ -37,7 +37,14 @@ _processes: dict[str, subprocess.Popen] = {}
 # WATCHDOG + EXTRACTION → piped into this terminal with prefixes
 CREATE_NEW_CONSOLE = 0x00000010
 
+DASHBOARD_CMD = [sys.executable, "-u", str(ROOT / "dashboard" / "app.py")]
+
 SERVICES = [
+    {
+        "name": "DASHBOARD",
+        "cmd": DASHBOARD_CMD,
+        "new_console": True,
+    },
     {
         "name": "WATCHDOG",
         "cmd": [sys.executable, "-u", str(ROOT / "processor_watchdog_final.py")],
@@ -82,27 +89,40 @@ def launch_dashboard() -> subprocess.Popen:
 
 
 def launch_service(svc: dict) -> subprocess.Popen:
-    """Launch WATCHDOG or EXTRACTION, streaming output into this terminal."""
+    """Launch a service. Dashboard gets a new console window; others pipe here."""
     name = svc["name"]
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
     
-    proc = subprocess.Popen(
-        svc["cmd"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        stdin=subprocess.DEVNULL,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        bufsize=1,
-        cwd=str(ROOT),
-        env=env,
-    )
-    _processes[name] = proc
-    t = threading.Thread(target=stream_output, args=(proc, name), daemon=True)
-    t.start()
-    print(f"[ORCHESTRATOR] Started {name} (pid={proc.pid})", flush=True)
+    if svc.get("new_console"):
+        # Dashboard → separate console window
+        proc = subprocess.Popen(
+            svc["cmd"],
+            cwd=str(ROOT),
+            env=env,
+            creationflags=CREATE_NEW_CONSOLE,
+        )
+        _processes[name] = proc
+        print(f"[ORCHESTRATOR] Started {name} in new window (pid={proc.pid})", flush=True)
+    else:
+        # WATCHDOG / EXTRACTION → piped into this terminal
+        proc = subprocess.Popen(
+            svc["cmd"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            bufsize=1,
+            cwd=str(ROOT),
+            env=env,
+        )
+        _processes[name] = proc
+        t = threading.Thread(target=stream_output, args=(proc, name), daemon=True)
+        t.start()
+        print(f"[ORCHESTRATOR] Started {name} (pid={proc.pid})", flush=True)
+    
     return proc
 
 
@@ -167,9 +187,9 @@ def main() -> None:
     print("   [ORCHESTRATOR] Mazara SCADA Monitor System Control", flush=True)
     print("=" * 60, flush=True)
     print(f"[*] Root Directory: {ROOT}", flush=True)
+    print("[*] Launching DASHBOARD (http://localhost:8080)...", flush=True)
     print("[*] Launching WATCHDOG (Forensic Analysis)...", flush=True)
     print("[*] Launching EXTRACTION (VCOM Browser Automation)...", flush=True)
-    print("[!] DASHBOARD must be run separately: 'python dashboard/app.py'", flush=True)
     print("-" * 60, flush=True)
     print("Streaming logs below:", flush=True)
     print("-" * 60, flush=True)

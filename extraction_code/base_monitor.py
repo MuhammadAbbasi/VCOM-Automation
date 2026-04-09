@@ -9,9 +9,11 @@ import json
 import logging
 import os
 import re
+import shutil
 import time
 from datetime import datetime
 from pathlib import Path
+from zipfile import BadZipFile
 
 import pandas as pd
 
@@ -65,14 +67,47 @@ def parse_italian_number(s: str):
 # ---------------------------------------------------------------------------
 
 def append_df_to_excel(filename: str, df: pd.DataFrame, sheet_name: str = "Sheet1") -> None:
-    """Append df to an existing Excel file, or create it if it doesn't exist."""
+    """Append df to an existing Excel file, or create it if it doesn't exist.
+    
+    If the existing file is corrupted (Bad CRC / malformed XML — common on
+    network shares), the corrupt file is backed up and a fresh one is created
+    so that the extraction cycle can continue without crashing.
+    """
     if not os.path.exists(filename):
         df.to_excel(filename, index=False, sheet_name=sheet_name)
-    else:
+        return
+
+    try:
         with pd.ExcelWriter(filename, engine="openpyxl", mode="a", if_sheet_exists="overlay") as writer:
             write_header = sheet_name not in writer.sheets
             startrow = writer.sheets[sheet_name].max_row if not write_header else 0
             df.to_excel(writer, sheet_name=sheet_name, startrow=startrow, index=False, header=write_header)
+
+    except (BadZipFile, Exception) as exc:
+        # Catch corrupted-file errors: BadZipFile, XML ParseError, etc.
+        exc_name = type(exc).__name__
+        if isinstance(exc, BadZipFile) or "ParseError" in exc_name or "not well-formed" in str(exc):
+            logger.warning(
+                f"Corrupted Excel detected ({exc_name}): {filename} — "
+                f"backing up and creating fresh file."
+            )
+            # Back up the corrupted file
+            backup = filename + f".corrupt_{datetime.now().strftime('%H%M%S')}.bak"
+            try:
+                shutil.copy2(filename, backup)
+                logger.info(f"Backed up corrupt file to {backup}")
+            except Exception as copy_err:
+                logger.warning(f"Could not back up corrupt file: {copy_err}")
+
+            # Remove the corrupted file and write fresh
+            try:
+                os.remove(filename)
+            except Exception:
+                pass
+            df.to_excel(filename, index=False, sheet_name=sheet_name)
+            logger.info(f"Created fresh Excel: {filename}")
+        else:
+            raise  # Re-raise unexpected errors
 
 
 def export_metric(df: pd.DataFrame, prefix: str) -> None:
@@ -236,41 +271,63 @@ def refresh_chart(page) -> None:
 def click_dati_tab(page, extra_wait: float = 0) -> None:
     """Switch to the 'Dati' (data table) tab using a simple text search.
     
-    Reverted to text-based search due to varying class names in VCOM.
+    Retries up to 3 times to handle DOM-detachment errors that occur when
+    the VCOM page re-renders while we're interacting with it.
     """
     logger.info("Locating 'Dati' tab button...")
     print("[*] Transitioning to 'Dati' (Data) view...", flush=True)
     
-    try:
-        # VCOM evaluation pages can be long
-        page.evaluate("window.scrollTo(0, 450)")
-        
-        # General but specific locator: looking for "Dati" that is likely a tab link
-        tab = page.get_by_text("Dati", exact=True).last
-        
-        tab.scroll_into_view_if_needed()
-        tab.wait_for(state="visible", timeout=20_000)
-        
-        # Check if already active
-        parent_cls = tab.evaluate("el => el.parentElement ? el.parentElement.className : ''")
-        if "active" in parent_cls or "selected" in parent_cls or "ui-tabs-active" in parent_cls:
-            logger.info("'Dati' tab is already active.")
-            print("[*] 'Dati' already active.", flush=True)
-        else:
-            tab.click()
-            logger.info("Clicked 'Dati' tab.")
-            print("[OK] 'Dati' tab clicked.", flush=True)
+    max_attempts = 3
+    last_err = None
+    
+    for attempt in range(1, max_attempts + 1):
+        try:
+            # VCOM evaluation pages can be long
+            page.evaluate("window.scrollTo(0, 450)")
+            time.sleep(0.5)  # brief settle after scroll
+            
+            # Re-query the locator each attempt to avoid stale references
+            tab = page.get_by_text("Dati", exact=True).last
+            
+            # Use wait_for first (doesn't require attached), then scroll
+            tab.wait_for(state="visible", timeout=20_000)
+            
+            try:
+                tab.scroll_into_view_if_needed()
+            except Exception:
+                # If scroll fails (detached DOM), wait and re-query
+                time.sleep(1)
+                tab = page.get_by_text("Dati", exact=True).last
+                tab.wait_for(state="visible", timeout=10_000)
+            
+            # Check if already active
+            parent_cls = tab.evaluate("el => el.parentElement ? el.parentElement.className : ''")
+            if "active" in parent_cls or "selected" in parent_cls or "ui-tabs-active" in parent_cls:
+                logger.info("'Dati' tab is already active.")
+                print("[*] 'Dati' already active.", flush=True)
+            else:
+                tab.click()
+                logger.info("Clicked 'Dati' tab.")
+                print("[OK] 'Dati' tab clicked.", flush=True)
+            
+            # Wait for table rendering if requested
+            if extra_wait > 0:
+                logger.info(f"Waiting extra {extra_wait}s for table render...")
+                time.sleep(extra_wait)
+            
+            return  # success
 
-    except Exception as e:
-        logger.error(f"Failed to click 'Dati' tab button: {e}")
-        print(f"[!] FAILED to find 'Dati' tab button: {type(e).__name__}", flush=True)
-        ERRORS_DIR.mkdir(parents=True, exist_ok=True)
-        page.screenshot(path=str(ERRORS_DIR / "error_clicking_dati_final.png"))
-        raise
-
-    if extra_wait > 0:
-        logger.info(f"Waiting extra {extra_wait}s for table render...")
-        time.sleep(extra_wait)
+        except Exception as e:
+            last_err = e
+            if attempt < max_attempts:
+                logger.warning(f"click_dati_tab attempt {attempt} failed ({type(e).__name__}), retrying...")
+                time.sleep(2)
+            else:
+                logger.error(f"Failed to click 'Dati' tab button after {max_attempts} attempts: {e}")
+                print(f"[!] FAILED to find 'Dati' tab button: {type(e).__name__}", flush=True)
+                ERRORS_DIR.mkdir(parents=True, exist_ok=True)
+                page.screenshot(path=str(ERRORS_DIR / "error_clicking_dati_final.png"))
+                raise
 
 
 def extract_infotab_table_js(page, metric_name: str, row_timeout: int = 20_000) -> pd.DataFrame:
