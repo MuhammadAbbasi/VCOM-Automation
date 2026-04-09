@@ -49,29 +49,19 @@ http://localhost:8080
 
 ### 1. **Extraction Pipeline** (`vcom_monitor.py`)
 Logs into VCOM every 10 minutes and scrapes 6 metrics:
-- **PR** (Performance Ratio) — inverter efficiency
-- **Potenza AC** — AC power output per inverter
-- **Corrente DC** — DC string current (12 strings × 36 inverters)
-- **Temperatura** — inverter temperature
-- **Resistenza Isolamento** — insulation resistance
-- **Irraggiamento** — irradiance from 14 environmental sensors
+- **PR** (Performance Ratio), **Potenza AC**, **Corrente DC**, **Temperatura**, **Resistenza Isolamento**, **Irraggiamento**.
 
-**Output:** Daily Excel files in `extracted_data/`
+**Universal Login:** Automatically handles both legacy VCOM login and modern Keycloak (Benvenuto) flows with Cookiebot dismissal.
 
 ### 2. **Forensic Analysis** (`processor_watchdog_final.py`)
-Watches for new extraction files and analyzes health:
-- Scans for 6 anomaly types (Low PR, High Temp, DC String Failure, Power Deviation, Comms Loss, Inverter Trip)
-- Computes 4 health LEDs per inverter: PR / Temperature / DC Current / AC Power
-- Generates real-time JSON snapshots for the dashboard
-- **Memory-efficient:** Uses on-demand lookups instead of massive DataFrame merges
+- Scans for 6 anomaly types.
+- **Downtime Filter:** Events < 9 minutes are automatically ignored to reduce noise.
+- **Dynamic Daylight:** Detects plant start time from production data.
 
-### 3. **Live Dashboard** (`dashboard/app.py`)
-Dark-mode web UI on port 8080:
-- **Metrics Grid** — Total/Online/Tripped/Comms Lost counts
-- **Data Status** — Which extraction files are ready
-- **36-Inverter Health Matrix** — 4 LED dots per inverter
-- **Active Alerts** — Color-coded anomalies (critical/high/warning/info)
-- **Alarm Trail** — Historical events (newest first)
+### 3. **Live Dashboard** (`dashboard/static/`)
+- **Health Matrix:** 36-inverters × 4 LEDs.
+- **Downtime Tracker:** Production interruptions >= 9 minutes.
+- **Logic Guide:** New bottom section detailing all thresholds.
 
 **Polling:** AJAX every 10 seconds for real-time updates
 
@@ -170,26 +160,17 @@ This prevents false alerts for normal late-afternoon power decline.
 
 ## 📊 Dashboard Colors & Meanings
 
-### LED Status
+### LED Status (PR, Temp, DC, AC)
 - 🟢 **Green** — Healthy (all metrics within thresholds)
-- 🟡 **Yellow** — Warning (minor degradation, normal for late afternoon)
-- 🔴 **Red** — Critical (failure condition, requires action)
-- ⚫ **Grey** — No data available (offline or out-of-hours)
+- 🟡 **Yellow** — Warning / Sub-optimal (e.g., thermal warning or slight DC deviation)
+- 🔴 **Red** — Critical条件 (e.g., inverter tripped or severe low PR)
+- ⚫ **Grey** — Comms Lost or outside daylight hours
 
-### Inverter Health Matrix
-Each inverter shows 4 dots:
-1. **PR** — Performance ratio (0–100%)
-2. **Temp** — Temperature (°C)
-3. **DC Current** — String current (A/MPPT, time-dependent)
-4. **AC Power** — Output power (W)
-
-**Overall Status** — Worst of the 4 metrics
-
-### Alert Severity Badges
-- 🔴 **Critical** — Action required (Low PR during peak, Inverter Trip, DC String Failure)
-- 🟠 **High** — Watch closely (Communications loss during daylight)
-- 🟡 **Warning** — Informational (High temperature, normal afternoon decline)
-- 🔵 **Info** — Tracking (Normal off-hours transition)
+### Thresholds
+- **PR:** 🟢&ge;85% | 🟡&ge;75% | 🔴<75% (*active after 30m stabilization*)
+- **Temperature:** 🟢&le;40°C | 🟡&le;45°C | 🔴>45°C
+- **AC Power:** 🟢>5kW | 🟡>1kW | 🔴&le;1kW (*during daylight*)
+- **Downtime:** Shown if cumulative loss **&ge; 9 minutes**.
 
 ---
 
@@ -199,12 +180,11 @@ The watchdog applies 6 rules in priority order:
 
 | Rule | Condition | Severity |
 |------|-----------|----------|
-| **Low PR** | PR < 85% during 09:00–17:00 | 🔴 Critical |
-| **High Temp** | Temperature > 40°C | 🟡 Warning |
-| **DC String Failure** | String current < 0.2A while AC > 500W | 🔴 Critical |
-| **Power Yield Deviation** | AC deviates >3% from site median (when median >5kW) | 🔴 Critical |
-| **Comms Loss** | AC is NaN during 07:00–19:00 | 🟠 High |
-| **Inverter Trip** | AC = 0W while site median >2kW during daylight | 🔴 Critical |
+| **Low PR** | PR < 85% after 30m stabilization period | 🔴 Critical |
+| **High Temp** | Temperature > 45°C | 🔴 Critical |
+| **DC String Loss** | String loss detected via MPPT comparison | 🔴 Critical |
+| **Comms Loss** | Data missing (x) for entire component | 🟡 Warning |
+| **Inverter Trip** | AC &le; 1kW while site mean > 2kW | 🔴 Critical |
 
 Consecutive alerts on the same inverter/rule within 1 hour are deduplicated.
 
@@ -370,5 +350,5 @@ This project is provided as-is. Adapt and use freely, but ensure compliance with
 
 ---
 
-**Last Updated:** 2026-04-02
-**System Status:** ✅ Fully operational with real Mazara plant data
+**Last Updated:** 2026-04-09
+**System Status:** ✅ Fully updated for Keycloak SSO and Refined Forensic Analysis

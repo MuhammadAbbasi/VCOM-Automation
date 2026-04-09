@@ -172,19 +172,71 @@
 
 </main>
 
+  <!-- ══════════════════════════════════════════════════════════
+       7. Analysis Logic & Thresholds
+  ═══════════════════════════════════════════════════════════ -->
+  <section style="margin-top: 3rem;">
+    <h2>Analysis Logic & Thresholds</h2>
+    <div class="card" style="padding: 1.5rem; background: rgba(59, 130, 246, 0.03); border-color: rgba(59, 130, 246, 0.2);">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem;">
+        
+        <div>
+          <h3 style="font-size: 0.9rem; color: var(--accent); margin-bottom: 0.75rem;">PR (Performance Ratio)</h3>
+          <ul style="list-style: none; font-size: 0.8rem; line-height: 1.6; color: var(--muted);">
+            <li><span class="led green" style="display:inline-block; width:8px; height:8px;"></span> <strong>PR &ge; 85%</strong> — Optimal performance</li>
+            <li><span class="led yellow" style="display:inline-block; width:8px; height:8px;"></span> <strong>85% &gt; PR &ge; 75%</strong> — Performance warning</li>
+            <li><span class="led red" style="display:inline-block; width:8px; height:8px;"></span> <strong>PR &lt; 75%</strong> — Significant underperformance</li>
+            <li style="margin-top: 0.5rem; font-style: italic;">* Logic active 30m after production start (Stabilization)</li>
+          </ul>
+        </div>
+
+        <div>
+          <h3 style="font-size: 0.9rem; color: var(--accent); margin-bottom: 0.75rem;">Inverter Temperature</h3>
+          <ul style="list-style: none; font-size: 0.8rem; line-height: 1.6; color: var(--muted);">
+            <li><span class="led green" style="display:inline-block; width:8px; height:8px;"></span> <strong>Temp &le; 40°C</strong> — Healthy operating range</li>
+            <li><span class="led yellow" style="display:inline-block; width:8px; height:8px;"></span> <strong>40°C &lt; Temp &le; 45°C</strong> — Thermal warning</li>
+            <li><span class="led red" style="display:inline-block; width:8px; height:8px;"></span> <strong>Temp &gt; 45°C</strong> — Critical overheating</li>
+          </ul>
+        </div>
+
+        <div>
+          <h3 style="font-size: 0.9rem; color: var(--accent); margin-bottom: 0.75rem;">DC Current (Avg of 12 MPPTs)</h3>
+          <ul style="list-style: none; font-size: 0.8rem; line-height: 1.6; color: var(--muted);">
+            <li><strong>Morning (Start to 12:00):</strong> Green &ge; 10A | Yellow &ge; 2A</li>
+            <li><strong>Afternoon (12:00 to 19:00):</strong> Green &ge; 5A | Yellow &ge; 0.5A</li>
+            <li><span class="led red" style="display:inline-block; width:8px; height:8px;"></span> <strong>Current &lt; Yellow Thr</strong> — Potential string/junction loss</li>
+          </ul>
+        </div>
+
+        <div>
+          <h3 style="font-size: 0.9rem; color: var(--accent); margin-bottom: 0.75rem;">AC Power & Production</h3>
+          <ul style="list-style: none; font-size: 0.8rem; line-height: 1.6; color: var(--muted);">
+            <li><span class="led green" style="display:inline-block; width:8px; height:8px;"></span> <strong>AC &gt; 5000 W</strong> — Nominal generation</li>
+            <li><span class="led yellow" style="display:inline-block; width:8px; height:8px;"></span> <strong>1000 W &lt; AC &le; 5000 W</strong> — Low production</li>
+            <li><span class="led red" style="display:inline-block; width:8px; height:8px;"></span> <strong>AC &le; 1000 W</strong> — Inverter Tripped (Daylight only)</li>
+            <li style="margin-top: 0.5rem; font-style: italic;">* Downtime threshold: Cumulative off-time &ge; 9 mins</li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+</main>
+
 <!-- ══════════════════════════════════════════════════════════
-     6. Site Legend
+     8. Site Legend
 ═══════════════════════════════════════════════════════════ -->
 <section style="margin: 2rem 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border);">
   <h2>Site Legend</h2>
   <div style="display:flex; gap: 2rem; flex-wrap: wrap; margin-top: 1rem;">
     <div style="flex:1; min-width: 200px;">
-      <h3 style="font-size: 0.9rem; color: var(--muted); margin-bottom: 0.5rem; text-transform: uppercase;">Severity Colors</h3>
+      <h3 style="font-size: 0.9rem; color: var(--muted); margin-bottom: 0.5rem; text-transform: uppercase;">Inverter Header Labels</h3>
       <ul style="list-style: none; padding: 0; line-height: 1.8; font-size: 0.9rem; color:var(--text);">
-        <li><span class="led green" style="display:inline-block; width:10px; height:10px; margin-right:8px;"></span> <strong>Green:</strong> Optimal Nominal Performance</li>
-        <li><span class="led yellow" style="display:inline-block; width:10px; height:10px; margin-right:8px;"></span> <strong>Yellow:</strong> Warning / Sub-optimal (e.g. PR &lt; 80%)</li>
-        <li><span class="led red" style="display:inline-block; width:10px; height:10px; margin-right:8px;"></span> <strong>Red:</strong> Critical Trip / No Power</li>
-        <li><span class="led grey" style="display:inline-block; width:10px; height:10px; margin-right:8px;"></span> <strong>Grey:</strong> COMMS LOST / Offline</li>
+        <li><span class="led green" style="display:inline-block; width:10px; height:10px; margin-right:8px;"></span> <strong>Green:</strong> All LEDs nominal</li>
+        <li><span class="led yellow" style="display:inline-block; width:10px; height:10px; margin-right:8px;"></span> <strong>Yellow:</strong> At least one Warning</li>
+        <li><span class="led red" style="display:inline-block; width:10px; height:10px; margin-right:8px;"></span> <strong>Red:</strong> At least one Critical Trip</li>
+        <li><span class="led grey" style="display:inline-block; width:10px; height:10px; margin-right:8px;"></span> <strong>Grey:</strong> Total COMMS LOST</li>
       </ul>
     </div>
     

@@ -135,35 +135,91 @@ def login(page) -> None:
     """
     Authenticate to VCOM and navigate to the Valutazione (Evaluation) section.
 
-    Steps (mirrored from the working Automation implementation):
+    Steps (updated for the new Keycloak login flow):
       1. Go to SYSTEM_URL
-      2. Fill username + password, click Login button
-      3. Dismiss cookie banner
-      4. Wait for 'Valutazione' link → click it
-      5. Wait for 'Inverter' to confirm we're on the evaluation page
+      2. Fill username (input#username)
+      3. Click 'Continua' if needed or proceed to password
+      4. Fill password (input#password)
+      5. Click 'Accedi' (input#kc-login)
+      6. Dismiss cookie banner
+      7. Wait for 'Valutazione' link → click it
     """
     cfg = load_config()
     logger.info("Logging into VCOM meteocontrol...")
     page.goto(cfg["SYSTEM_URL"], timeout=60_000)
 
-    # Fill login form
-    page.wait_for_selector('input[type="text"]', timeout=30_000)
-    page.fill('input[type="text"]', cfg["USERNAME"])
-    page.fill('input[type="password"]', cfg["PASSWORD"])
-    page.locator('button:has-text("Login"), button[type="submit"]').first.click()
-
-    # Dismiss cookie banner if it appears
+    # Dismiss cookie banner early if it's blocking the view
     try:
-        if page.locator('button:has-text("Usa solo i cookie necessari")').is_visible(timeout=5_000):
-            page.locator('button:has-text("Usa solo i cookie necessari")').click()
+        page.locator('button:has-text("Usa solo i cookie necessari"), button:has-text("Accetta tutti i cookie")').click(timeout=5_000)
     except Exception:
         pass
 
-    # After login VCOM lands on the Control Center main page.
+    try:
+        # Check for legacy vs modern login
+        page.wait_for_load_state("networkidle", timeout=30_000)
+        
+        # 1. Detect and Handle Legacy Login (Username & Password together)
+        legacy_pass = page.locator('input[type="password"]:visible')
+        if legacy_pass.count() > 0:
+            logger.info("Detected legacy login page. Filling credentials...")
+            page.locator('input[type="text"]:visible').first.fill(cfg["USERNAME"])
+            page.locator('input[type="password"]:visible').first.fill(cfg["PASSWORD"])
+            page.locator('button:has-text("Login"), button[type="submit"]').first.click()
+        
+        # 2. Detect and Handle Keycloak (Multi-step) flow
+        # This might be the initial page or a redirect after the legacy check
+        for _ in range(2): # Double check for transitions
+            if page.locator('input#username:visible').count() > 0:
+                logger.info("Handling Keycloak Username screen...")
+                page.locator('input#username').fill(cfg["USERNAME"])
+                page.press('input#username', "Enter")
+                time.sleep(3)
+            
+            if page.locator('input#password:visible').count() > 0:
+                logger.info("Handling Keycloak Password screen...")
+                page.locator('input#password').fill(cfg["PASSWORD"])
+                page.press('input#password', "Enter")
+                break
+            
+            time.sleep(2)
+        
+        time.sleep(5)  # Global wait for redirect/auth
+
+    except Exception as e:
+        logger.error(f"Login form interaction failed: {e}")
+        try:
+            if not page.is_closed():
+                ERRORS_DIR.mkdir(parents=True, exist_ok=True)
+                page.screenshot(path=str(ERRORS_DIR / "login_form_error.png"))
+        except Exception:
+            pass
+        raise
+
+    # Final cookie check after landing
+    try:
+        if not page.is_closed():
+            # Sometimes a cookie bot overlay persists
+            page.evaluate("""() => {
+                try {
+                    const btn = Array.from(document.querySelectorAll('button')).find(b => b.innerText.includes('Usa solo') || b.innerText.includes('Accetta'));
+                    if (btn) btn.click();
+                } catch(e) {}
+            }""")
+    except Exception:
+        pass
+
+    # After login VCOM lands on the dashboard.
     # Click the "Valutazione" tab to reach the evaluation/analysis section.
     logger.info("Navigating to Valutazione section...")
-    page.wait_for_selector('text="Valutazione"', timeout=60_000)
-    page.locator('text="Valutazione"').first.click()
+    valutazione_selector = 'a[title="Valutazione"]'
+    try:
+        page.wait_for_selector(valutazione_selector, timeout=60_000)
+        page.locator(valutazione_selector).first.click()
+    except Exception as e:
+        logger.error(f"Failed to find Valutazione link: {e}")
+        if not page.is_closed():
+            page.screenshot(path=str(ERRORS_DIR / "navigation_error.png"))
+        raise
 
     # Confirm we're on the right page
     try:
@@ -171,8 +227,8 @@ def login(page) -> None:
         logger.info("Successfully reached the Evaluation dashboard.")
     except Exception as e:
         logger.error(f"Could not confirm evaluation dashboard: {e}")
-        ERRORS_DIR.mkdir(parents=True, exist_ok=True)
-        page.screenshot(path=str(ERRORS_DIR / "login_error.png"))
+        if not page.is_closed():
+            page.screenshot(path=str(ERRORS_DIR / "login_success_navigation_error.png"))
 
 
 # ---------------------------------------------------------------------------

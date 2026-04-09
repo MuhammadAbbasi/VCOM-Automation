@@ -494,14 +494,15 @@ def compute_downtime(ac_df: pd.DataFrame, irrad_df: pd.DataFrame, daylight_start
 
             total_time_off = len(zero_indices)
 
-            downtime_tracker[inv_label] = {
-                "inverter": inv_label,
-                "last_data_fetched": last_ts,
-                "last_poa": last_poa,
-                "time_stopped": time_stopped,
-                "started_again": started_again,
-                "total_time_off": int(total_time_off)
-            }
+            if total_time_off >= 9:
+                downtime_tracker[inv_label] = {
+                    "inverter": inv_label,
+                    "last_data_fetched": last_ts,
+                    "last_poa": last_poa,
+                    "time_stopped": time_stopped,
+                    "started_again": started_again,
+                    "total_time_off": int(total_time_off)
+                }
             
     return downtime_tracker
 

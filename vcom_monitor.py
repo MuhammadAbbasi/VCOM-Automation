@@ -74,9 +74,10 @@ MAX_RETRIES = 2
 
 def ensure_on_evaluation_page(page) -> None:
     """Check session is alive; click 'Valutazione' if visible, else re-login."""
+    valutazione_selector = 'a[title="Valutazione"]'
     try:
-        if page.locator('text="Valutazione"').is_visible(timeout=5_000):
-            page.locator('text="Valutazione"').first.click()
+        if page.locator(valutazione_selector).is_visible(timeout=5_000):
+            page.locator(valutazione_selector).first.click()
             time.sleep(2)
         else:
             logger.warning("Session may have expired — re-logging in...")
