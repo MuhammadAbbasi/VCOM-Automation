@@ -32,6 +32,52 @@ CONFIG_PATH = ROOT / "config.json"
 DATA_DIR = ROOT / "extracted_data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
+# --- User Settings ---
+USER_SETTINGS_PATH = ROOT / "user_settings.json"
+
+DEFAULT_SETTINGS = {
+    "thresholds": {
+        "pr": {
+            "green": 85.0,
+            "yellow": 75.0
+        },
+        "temp": {
+            "yellow": 40.0,
+            "red": 45.0
+        },
+        "dc": {
+            "morning_green": 10.0,
+            "morning_yellow": 2.0,
+            "afternoon_green": 5.0,
+            "afternoon_yellow": 0.5
+        },
+        "ac": {
+            "green": 5000.0,
+            "yellow": 1000.0
+        },
+        "min_downtime_minutes": 9
+    },
+    "colors": {
+        "green": "#10b981",
+        "yellow": "#f59e0b",
+        "red": "#ef4444",
+        "grey": "#6b7280"
+    }
+}
+
+def load_user_settings() -> dict:
+    if not USER_SETTINGS_PATH.exists():
+        with open(USER_SETTINGS_PATH, "w", encoding="utf-8") as f:
+            json.dump(DEFAULT_SETTINGS, f, indent=4)
+        return DEFAULT_SETTINGS
+    try:
+        with open(USER_SETTINGS_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error(f"Failed to load user settings: {e}. using defaults.")
+        return DEFAULT_SETTINGS
+
+
 def load_config() -> dict:
     """Load configuration from config.json."""
     if not CONFIG_PATH.exists():
@@ -77,11 +123,6 @@ INVERTER_IDS = [
     "TX3-07", "TX3-08", "TX3-09", "TX3-10", "TX3-11", "TX3-12",
 ]
 
-# Thresholds
-PR_THRESHOLD = 85.0
-TEMP_CRITICAL = 45.0
-TEMP_WARNING = 40.0
-AC_HEALTHY_MIN = 5000  # AC > 5kW = healthy during daylight
 DAYLIGHT_END = 19.0
 STABILIZATION_MINUTES = 30  # Wait 30m after production start before PR alarms
 
@@ -177,10 +218,14 @@ def normalize_pr(val):
 # ---------------------------------------------------------------------------
 
 def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFrame,
-                         dc_df: pd.DataFrame, pr_df: pd.DataFrame, daylight_start: float = 7.0) -> dict:
+                         dc_df: pd.DataFrame, pr_df: pd.DataFrame, irrad_df: pd.DataFrame, daylight_start: float = 7.0, settings: dict = None) -> dict:
     """
     Compute health flags from the latest available NON-NAN values in each metric file.
     """
+    if settings is None:
+        settings = DEFAULT_SETTINGS
+    thresholds = settings.get("thresholds", DEFAULT_SETTINGS["thresholds"])
+
     inverter_health = {}
 
     # Get latest PR values
@@ -283,6 +328,38 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
         if dc_row is None and len(dc_df) > 0:
             dc_row = dc_df.iloc[-1]
 
+    # -------------------------------------------------------------------
+    # NEW AC LOGIC (Dynamic POA + Plant Average)
+    # -------------------------------------------------------------------
+    avg_ac_power = 0
+    poa_val = 0
+    ac_valid_vals = []
+    
+    if ac_row is not None:
+        for c in ac_df.columns:
+            if "Potenza AC" in c:
+                val = ac_row.get(c)
+                if pd.notna(val) and str(val).strip().lower() not in ['x', '']:
+                    try:
+                        ac_valid_vals.append(float(val))
+                    except:
+                        pass
+        if ac_valid_vals:
+            avg_ac_power = sum(ac_valid_vals) / len(ac_valid_vals)
+            
+    if irrad_df is not None and not irrad_df.empty:
+        poa_cols = [c for c in irrad_df.columns if "POA" in c]
+        if poa_cols and ac_row is not None:
+            ac_ora = ac_row.get("Ora", 0)
+            try:
+                irrad_copy = irrad_df.copy()
+                irrad_copy["Ora_num"] = pd.to_numeric(irrad_copy["Ora"], errors="coerce")
+                diff = (irrad_copy["Ora_num"] - ac_ora).abs()
+                best_idx = diff.idxmin()
+                poa_val = float(irrad_copy.loc[best_idx, poa_cols[0]])
+            except:
+                poa_val = 0
+
     # Compute health for each inverter
     for inv_id in INVERTER_IDS:
         inv_label = f"INV {inv_id}"
@@ -292,10 +369,11 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
         pr_val = pr_latest.get(inv_id)
         if pr_val is None:
             health["pr"] = "grey"
-        elif pr_val >= PR_THRESHOLD:
+        elif pr_val >= thresholds["pr"].get("green", 85.0):
             health["pr"] = "green"
+        elif pr_val >= thresholds["pr"].get("yellow", 75.0):
+            health["pr"] = "yellow"
         else:
-            # Strictly use 'red' for anything below threshold to match user requirement
             health["pr"] = "red"
 
         # Temperature LED
@@ -306,9 +384,9 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
 
         if temp_val is None or pd.isna(temp_val):
             health["temp"] = "grey"
-        elif temp_val > TEMP_CRITICAL:
+        elif temp_val > thresholds["temp"].get("red", 45.0):
             health["temp"] = "red"
-        elif temp_val > TEMP_WARNING:
+        elif temp_val > thresholds["temp"].get("yellow", 40.0):
             health["temp"] = "yellow"
         else:
             health["temp"] = "green"
@@ -328,11 +406,11 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
             avg_dc = float(np.mean(dc_values))
             # Contextualize to time of day: early morning/evening < afternoon
             if daylight_start <= ora <= 12:  # Morning ramp-up
-                dc_threshold_green = 10  # Morning: expect higher current
-                dc_threshold_yellow = 2
+                dc_threshold_green = thresholds["dc"].get("morning_green", 10.0)
+                dc_threshold_yellow = thresholds["dc"].get("morning_yellow", 2.0)
             elif 12 < ora <= DAYLIGHT_END:  # Afternoon decline
-                dc_threshold_green = 5  # Afternoon: lower thresholds
-                dc_threshold_yellow = 0.5
+                dc_threshold_green = thresholds["dc"].get("afternoon_green", 5.0)
+                dc_threshold_yellow = thresholds["dc"].get("afternoon_yellow", 0.5)
             else:  # Off-hours
                 dc_threshold_green = 0.1
                 dc_threshold_yellow = 0
@@ -359,18 +437,19 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
 
         if ac_val is None or pd.isna(ac_val):
             health["ac_power"] = "grey"
-        elif ac_val > AC_HEALTHY_MIN:
-            health["ac_power"] = "green"
-        elif ac_val > 1000:
-            health["ac_power"] = "yellow"
-        elif ac_val > 0:
-            health["ac_power"] = "red"
         else:
-            # 0 W - depends on time of day
-            if daylight_start <= ora <= DAYLIGHT_END:
-                health["ac_power"] = "red"  # Should be generating
+            if poa_val < 50 and avg_ac_power < 1000:
+                health["ac_power"] = "green" if (daylight_start <= ora <= DAYLIGHT_END) else "grey"
             else:
-                health["ac_power"] = "grey"  # Off-hours is OK
+                if ac_val >= avg_ac_power * 0.95:
+                    health["ac_power"] = "green"
+                elif ac_val > 0:
+                    health["ac_power"] = "red"
+                else:
+                    if daylight_start <= ora <= DAYLIGHT_END:
+                        health["ac_power"] = "red"  # Should be generating
+                    else:
+                        health["ac_power"] = "grey"  # Off-hours is OK
 
         ac_col = f"Potenza AC (INV {inv_id}) [W]"
         if ac_col in latest_ac_missing:
@@ -419,8 +498,13 @@ def format_ora(val):
     except:
         return "Unknown"
 
-def compute_downtime(ac_df: pd.DataFrame, irrad_df: pd.DataFrame, daylight_start: float = 7.0) -> dict:
+def compute_downtime(ac_df: pd.DataFrame, irrad_df: pd.DataFrame, daylight_start: float = 7.0, settings: dict = None) -> dict:
     """Calculate downtime events based on 0.0 W strings during daylight hours."""
+    if settings is None:
+        settings = DEFAULT_SETTINGS
+    
+    min_downtime_minutes = settings.get("thresholds", DEFAULT_SETTINGS["thresholds"]).get("min_downtime_minutes", 9)
+
     downtime_tracker = {}
     if ac_df is None or len(ac_df) == 0:
         return downtime_tracker
@@ -516,7 +600,7 @@ def compute_downtime(ac_df: pd.DataFrame, irrad_df: pd.DataFrame, daylight_start
             total_time_off_calc = end_min - stop_min
             if total_time_off_calc < 0: total_time_off_calc = 0 # Safety
 
-            if total_time_off_calc >= 9:
+            if total_time_off_calc >= min_downtime_minutes:
                 downtime_tracker[inv_label] = {
                     "inverter": inv_label,
                     "last_data_fetched": last_ts,
@@ -574,9 +658,11 @@ def analyze_site(date_str: str) -> None:
         daylight_start = get_production_start_time(ac_df)
         logger.info(f"Dynamic Daylight Start detected at: {format_ora(daylight_start)}")
 
+        settings = load_user_settings()
+
         # Compute health from latest values
         logger.info("Computing health flags...")
-        inverter_health = compute_latest_health(date_str, ac_df, temp_df, dc_df, pr_df, daylight_start=daylight_start)
+        inverter_health = compute_latest_health(date_str, ac_df, temp_df, dc_df, pr_df, irrad_df=irrad_df, daylight_start=daylight_start, settings=settings)
         macro_health = compute_macro_health(inverter_health, daylight_start=daylight_start)
         
         # Latest sync from extraction status if available
@@ -595,12 +681,13 @@ def analyze_site(date_str: str) -> None:
 
         logger.info("Evaluating MPPT DC Data...")
         md_report_path = DATA_DIR / f"mppt_analysis_report_{date_str}.md"
-        analyze_dc_current(dc_df, md_report_path, date_str)
+        dc_faults = analyze_dc_current(dc_df, md_report_path, date_str)
+        if dc_faults is None: dc_faults = []
         # -----------------------------------
         
         # Compute Downtime array
         logger.info("Evaluating downtime...")
-        downtime_tracker = compute_downtime(ac_df, irrad_df, daylight_start=daylight_start)
+        downtime_tracker = compute_downtime(ac_df, irrad_df, daylight_start=daylight_start, settings=settings)
 
         # Build JSON snapshot and process anomalies
         timestamp = datetime.now().isoformat(timespec="seconds")
@@ -668,8 +755,9 @@ def analyze_site(date_str: str) -> None:
             
             was_low_pr = pr_alarm_id in prev_alarm_map
             
-            # Trigger alarm only if PR < 85 and system is stabilized (30m after production start)
-            if pr_val is not None and pr_val < PR_THRESHOLD and is_stabilized:
+            # Trigger alarm only if PR < Yellow threshold and system is stabilized (30m after production start)
+            pr_yellow_thresh = settings.get("thresholds", DEFAULT_SETTINGS["thresholds"])["pr"].get("yellow", 75.0)
+            if pr_val is not None and pr_val < pr_yellow_thresh and is_stabilized:
                 if not was_low_pr:
                     current_active.append({
                         "id": pr_alarm_id,
@@ -690,6 +778,53 @@ def analyze_site(date_str: str) -> None:
                     prev_alarm = prev_alarm_map[pr_alarm_id]
                     prev_alarm["recovery_time"] = timestamp
                     historical_trail.append(prev_alarm)
+                    
+            # --- 3. AC Power Alarm ---
+            ac_alarm_id = f"{inv_id}_LOW_AC"
+            was_low_ac = ac_alarm_id in prev_alarm_map
+            
+            if h.get("ac_power") == "red":
+                if not was_low_ac:
+                    current_active.append({
+                        "id": ac_alarm_id,
+                        "inverter": inv_label,
+                        "type": "LOW AC POWER",
+                        "severity": "red",
+                        "trip_time": timestamp,
+                        "message": "Power fell >5% below plant average during optimal conditions."
+                    })
+                else:
+                    current_active.append(prev_alarm_map[ac_alarm_id])
+            else:
+                if was_low_ac:
+                    prev_alarm = prev_alarm_map[ac_alarm_id]
+                    prev_alarm["recovery_time"] = timestamp
+                    historical_trail.append(prev_alarm)
+                    
+        # --- 4. DC MPPT Faults ---
+        active_dc_fault_ids = set()
+        for f in dc_faults:
+            alarm_id = f"DC_{f['Inverter']}_MPPT_{f['MPPT']}"
+            active_dc_fault_ids.add(alarm_id)
+            is_new = alarm_id not in prev_alarm_map
+            
+            if is_new:
+                current_active.append({
+                    "id": alarm_id,
+                    "inverter": f"INV {f['Inverter']}",
+                    "type": f['Type'],
+                    "severity": "red" if f['Severity'] == "CRITICAL" else "yellow",
+                    "trip_time": timestamp,
+                    "message": f"MPPT {f['MPPT']} Measured: {f['Measured']}A (Expected: {f['Expected']}A) for {f['Duration']*15}m."
+                })
+            else:
+                current_active.append(prev_alarm_map[alarm_id])
+                
+        # Recover resolved DC faults
+        for past_alarm_id, past_alarm in prev_alarm_map.items():
+            if past_alarm_id.startswith("DC_") and past_alarm_id not in active_dc_fault_ids:
+                past_alarm["recovery_time"] = timestamp
+                historical_trail.append(past_alarm)
 
         # Preserve any other active anomalies that we didn't handle in this loop
         handled_ids = set([a["id"] for a in current_active] + [a["id"] for a in historical_trail if "recovery_time" in a])

@@ -9,7 +9,10 @@
  *   5. Historical alarm trail (newest-first, max 100 rows)
  */
 
-const POLL_INTERVAL_MS = 10_000;
+let socket;
+let reconnectInterval = 2000;
+let currentConfig = null;
+let historicalData = [];
 
 // Ordered list of inverter names matching the analyser
 const INVERTER_NAMES = [
@@ -156,16 +159,49 @@ function updateAlerts(data) {
 // ─── 5. Historical alarm trail ────────────────────────────────────────────
 
 function updateHistory(data) {
-  const trail = (data.historical_trail || []).slice(0, 100);
-  const tbody = el("history-tbody");
+  historicalData = data.historical_trail || [];
+  
+  // Extract unique categories and populate dropdown if it exists
+  const filterEl = el("history-filter");
+  if (filterEl) {
+    const currentVal = filterEl.value;
+    const uniqueCats = new Set(historicalData.map(a => a.type));
+    
+    // Check if new categories appeared or we need to rebuild
+    const existingOptions = Array.from(filterEl.options).map(o => o.value);
+    let changed = false;
+    for (const c of uniqueCats) {
+      if (!existingOptions.includes(c)) changed = true;
+    }
+    
+    if (changed || existingOptions.length - 1 !== uniqueCats.size) {
+      const opts = ['<option value="ALL">All Categories</option>'];
+      [...uniqueCats].sort().forEach(c => {
+        opts.push(`<option value="${c}" ${c === currentVal ? 'selected' : ''}>${c}</option>`);
+      });
+      filterEl.innerHTML = opts.join("");
+    }
+  }
 
-  if (trail.length === 0) {
+  renderHistoryTable();
+}
+
+function renderHistoryTable() {
+  const tbody = el("history-tbody");
+  if (!tbody || !historicalData) return;
+
+  const filterEl = el("history-filter");
+  const filterVal = filterEl ? filterEl.value : "ALL";
+
+  const filteredArr = filterVal === "ALL" ? historicalData : historicalData.filter(a => a.type === filterVal);
+  
+  if (filteredArr.length === 0) {
     tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No historical alarms for today</td></tr>';
     return;
   }
 
   // Newest first (using recovery_time first, fallback to trip_time)
-  const sorted = [...trail].sort((a, b) => (b.recovery_time || b.trip_time || "").localeCompare(a.recovery_time || a.trip_time || ""));
+  const sorted = [...filteredArr].sort((a, b) => (b.recovery_time || b.trip_time || "").localeCompare(a.recovery_time || a.trip_time || "")).slice(0, 100);
 
   tbody.innerHTML = sorted.map(a => `
     <tr>
@@ -205,26 +241,148 @@ function updateDowntime(data) {
   `).join("");
 }
 
-// ─── Main update ──────────────────────────────────────────────────────────
+// ─── WebSocket and Config ───────────────────────────────────────────────────
 
-async function updateDashboard() {
+function connectWebSocket() {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${protocol}//${window.location.host}/ws`;
+  
+  socket = new WebSocket(wsUrl);
+  
+  socket.onopen = () => {
+    el("last-updated").textContent = `Connected: ${now()}`;
+    reconnectInterval = 2000;
+  };
+  
+  socket.onmessage = (event) => {
+    try {
+      const msg = JSON.parse(event.data);
+      if (msg.type === "data_update") {
+        const data = msg.data;
+        if (!data || Object.keys(data).length === 0) return;
+        updateMacro(data);
+        updateIngestion(data);
+        updateInverterGrid(data);
+        updateAlerts(data);
+        updateHistory(data);
+        updateDowntime(data);
+        el("last-updated").textContent = `Last updated: ${now()}`;
+      } else if (msg.type === "config_update") {
+        applyConfig(msg.data);
+      }
+    } catch (err) {
+      console.warn("WS message parse error:", err);
+    }
+  };
+  
+  socket.onclose = () => {
+    el("last-updated").textContent = `Disconnected. Reconnecting...`;
+    setTimeout(connectWebSocket, reconnectInterval);
+    reconnectInterval = Math.min(reconnectInterval * 1.5, 30000);
+  };
+}
+
+function applyConfig(config) {
+  currentConfig = config;
+  if (!config) return;
+
+  // Apply colors to CSS variables
+  if (config.colors) {
+    const root = document.documentElement;
+    if (config.colors.green) root.style.setProperty('--green', config.colors.green);
+    if (config.colors.yellow) root.style.setProperty('--yellow', config.colors.yellow);
+    if (config.colors.red) root.style.setProperty('--red', config.colors.red);
+    if (config.colors.grey) root.style.setProperty('--grey', config.colors.grey);
+  }
+
+  // Populate Settings form
+  if (config.thresholds) {
+    const t = config.thresholds;
+    if (t.pr) {
+      if (el("cfg-pr-green")) el("cfg-pr-green").value = t.pr.green;
+      if (el("cfg-pr-yellow")) el("cfg-pr-yellow").value = t.pr.yellow;
+    }
+    if (t.temp) {
+      if (el("cfg-temp-yellow")) el("cfg-temp-yellow").value = t.temp.yellow;
+      if (el("cfg-temp-red")) el("cfg-temp-red").value = t.temp.red;
+    }
+    if (t.ac) {
+      if (el("cfg-ac-green")) el("cfg-ac-green").value = t.ac.green;
+      if (el("cfg-ac-yellow")) el("cfg-ac-yellow").value = t.ac.yellow;
+    }
+    if (t.dc) {
+      if (el("cfg-dcm-green")) el("cfg-dcm-green").value = t.dc.morning_green;
+      if (el("cfg-dcm-yellow")) el("cfg-dcm-yellow").value = t.dc.morning_yellow;
+      if (el("cfg-dca-green")) el("cfg-dca-green").value = t.dc.afternoon_green;
+      if (el("cfg-dca-yellow")) el("cfg-dca-yellow").value = t.dc.afternoon_yellow;
+    }
+    if (el("cfg-min-downtime") && t.min_downtime_minutes !== undefined) {
+      el("cfg-min-downtime").value = t.min_downtime_minutes;
+    }
+  }
+  if (config.colors) {
+    const c = config.colors;
+    if (el("cfg-color-green")) el("cfg-color-green").value = c.green;
+    if (el("cfg-color-yellow")) el("cfg-color-yellow").value = c.yellow;
+    if (el("cfg-color-red")) el("cfg-color-red").value = c.red;
+    if (el("cfg-color-grey")) el("cfg-color-grey").value = c.grey;
+  }
+}
+
+async function handleSaveSettings() {
+  const btn = el("save-settings-btn");
+  if (btn.classList.contains("loading")) return;
+  
+  btn.classList.add("loading");
+  btn.textContent = "SAVING...";
+
+  const newConfig = {
+    thresholds: {
+      pr: {
+        green: parseFloat(el("cfg-pr-green").value) || 85.0,
+        yellow: parseFloat(el("cfg-pr-yellow").value) || 75.0
+      },
+      temp: {
+        yellow: parseFloat(el("cfg-temp-yellow").value) || 40.0,
+        red: parseFloat(el("cfg-temp-red").value) || 45.0
+      },
+      ac: {
+        green: parseFloat(el("cfg-ac-green").value) || 5000,
+        yellow: parseFloat(el("cfg-ac-yellow").value) || 1000
+      },
+      dc: {
+        morning_green: parseFloat(el("cfg-dcm-green").value) || 10.0,
+        morning_yellow: parseFloat(el("cfg-dcm-yellow").value) || 2.0,
+        afternoon_green: parseFloat(el("cfg-dca-green").value) || 5.0,
+        afternoon_yellow: parseFloat(el("cfg-dca-yellow").value) || 0.5
+      },
+      min_downtime_minutes: parseFloat(el("cfg-min-downtime").value) !== undefined && !isNaN(parseFloat(el("cfg-min-downtime").value)) ? parseFloat(el("cfg-min-downtime").value) : 9
+    },
+    colors: {
+      green: el("cfg-color-green").value || "#10b981",
+      yellow: el("cfg-color-yellow").value || "#f59e0b",
+      red: el("cfg-color-red").value || "#ef4444",
+      grey: el("cfg-color-grey").value || "#6b7280"
+    }
+  };
+
   try {
-    const resp = await fetch("/api/status");
-    if (!resp.ok) return;
-    const data = await resp.json();
-
-    if (!data || Object.keys(data).length === 0) return;
-
-    updateMacro(data);
-    updateIngestion(data);
-    updateInverterGrid(data);
-    updateAlerts(data);
-    updateHistory(data);
-    updateDowntime(data);
-
-    el("last-updated").textContent = `Last updated: ${now()}`;
+    const resp = await fetch("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(newConfig)
+    });
+    
+    if (resp.ok) {
+      el("settings-modal").classList.add("modal-hidden");
+    } else {
+      alert("Failed to save settings.");
+    }
   } catch (err) {
-    console.warn("Poll failed:", err);
+    alert("Error saving settings: " + err);
+  } finally {
+    btn.classList.remove("loading");
+    btn.textContent = "SAVE & APPLY";
   }
 }
 
@@ -257,11 +415,35 @@ async function handleRescan() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  updateDashboard();
-  setInterval(updateDashboard, POLL_INTERVAL_MS);
+  connectWebSocket();
 
   const rescanBtn = el("rescan-btn");
-  if (rescanBtn) {
-    rescanBtn.addEventListener("click", handleRescan);
+  if (rescanBtn) rescanBtn.addEventListener("click", handleRescan);
+
+  const settingsBtn = el("settings-btn");
+  const closeSettingsBtn = el("close-settings");
+  const saveSettingsBtn = el("save-settings-btn");
+  const settingsModal = el("settings-modal");
+
+  if (settingsBtn && settingsModal) {
+    settingsBtn.addEventListener("click", () => {
+      settingsModal.classList.remove("modal-hidden");
+    });
+  }
+  
+  if (closeSettingsBtn && settingsModal) {
+    closeSettingsBtn.addEventListener("click", () => {
+      settingsModal.classList.add("modal-hidden");
+    });
+  }
+
+  if (saveSettingsBtn) {
+    saveSettingsBtn.addEventListener("click", handleSaveSettings);
+  }
+
+  // History Filter
+  const filterEl = el("history-filter");
+  if (filterEl) {
+    filterEl.addEventListener("change", renderHistoryTable);
   }
 });

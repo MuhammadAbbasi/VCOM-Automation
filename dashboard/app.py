@@ -23,7 +23,8 @@ if str(ROOT) not in sys.path:
 
 import uvicorn
 import socket
-from fastapi import FastAPI
+import asyncio
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -46,32 +47,111 @@ STATIC_DIR.mkdir(parents=True, exist_ok=True)
 app = FastAPI(title="Mazara SCADA Monitor", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
+# WebSocket Manager
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: list[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: dict):
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(message)
+            except Exception:
+                pass
+
+manager = ConnectionManager()
+
+# Background Task for Data Push
+async def data_broadcaster():
+    last_mtime = 0
+    last_data = {}
+    while True:
+        try:
+            today = datetime.now().strftime("%Y-%m-%d")
+            json_path = DATA_DIR / f"dashboard_data_{today}.json"
+            
+            if json_path.exists():
+                mtime = json_path.stat().st_mtime
+                if mtime > last_mtime:
+                    last_mtime = mtime
+                    with open(json_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    if data:
+                        latest_key = sorted(data.keys())[-1]
+                        latest_data = data[latest_key]
+                        # Send updated data to all clients
+                        await manager.broadcast({"type": "data_update", "data": latest_data})
+        except Exception as e:
+            pass
+        await asyncio.sleep(2)
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(data_broadcaster())
+
 
 @app.get("/")
 async def index():
     return FileResponse(str(STATIC_DIR / "index.html"))
 
 
-@app.get("/api/status")
-async def status():
-    today = datetime.now().strftime("%Y-%m-%d")
-    json_path = DATA_DIR / f"dashboard_data_{today}.json"
-
-    if not json_path.exists():
-        return JSONResponse({})
-
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
     try:
-        with open(json_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception:
-        return JSONResponse({})
+        # Send initial data immediately
+        today = datetime.now().strftime("%Y-%m-%d")
+        json_path = DATA_DIR / f"dashboard_data_{today}.json"
+        if json_path.exists():
+            with open(json_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if data:
+                latest_key = sorted(data.keys())[-1]
+                await websocket.send_json({"type": "data_update", "data": data[latest_key]})
+                
+        # Send initial settings
+        from processor_watchdog_final import load_user_settings
+        settings = load_user_settings()
+        await websocket.send_json({"type": "config_update", "data": settings})
+        
+        while True:
+            # wait for messages from client (if needed)
+            message = await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
 
-    if not data:
-        return JSONResponse({})
 
-    # Return the most recent snapshot
-    latest_key = sorted(data.keys())[-1]
-    return JSONResponse(data[latest_key])
+@app.get("/api/settings")
+async def get_settings():
+    from processor_watchdog_final import load_user_settings
+    return JSONResponse(load_user_settings())
+
+
+@app.post("/api/settings")
+async def update_settings(request: Request):
+    try:
+        new_settings = await request.json()
+        settings_path = ROOT / "user_settings.json"
+        with open(settings_path, "w", encoding="utf-8") as f:
+            json.dump(new_settings, f, indent=4)
+            
+        # Broadcast new config to all clients
+        await manager.broadcast({"type": "config_update", "data": new_settings})
+        
+        # Trigger an immediate rescan using the new settings
+        today = datetime.now().strftime("%Y-%m-%d")
+        analyze_site(today)
+        return JSONResponse({"status": "success"})
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
 
 
 @app.post("/api/forensic/rescan")

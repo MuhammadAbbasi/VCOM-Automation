@@ -60,10 +60,10 @@ Logs into VCOM every 10 minutes and scrapes 6 metrics:
 
 ### 3. **Live Dashboard** (`dashboard/static/`)
 - **Health Matrix:** 36-inverters × 4 LEDs.
-- **Downtime Tracker:** Production interruptions >= 9 minutes.
-- **Logic Guide:** New bottom section detailing all thresholds.
+- **Downtime Tracker:** Tracks production interruptions based on user-configured duration limits.
+- **Dynamic Configuration:** Front-end "⚙️ SETTINGS" modal saves configurations to `user_settings.json` across reboots.
 
-**Polling:** AJAX every 10 seconds for real-time updates
+**Data Push:** FastAPI **WebSockets** stream real-time JSON updates continuously without page reloads.
 
 ---
 
@@ -109,9 +109,9 @@ processor_watchdog_final.py (file watcher + analyzer)
   ↓
 dashboard_data_YYYY-MM-DD.json (JSON snapshots)
   ↓
-dashboard/app.py (FastAPI)
+dashboard/app.py (FastAPI background task broadasts JSON via WebSocket)
   ↓
-http://localhost:8080 (dark-mode UI)
+http://localhost:8080 (Reactive dark-mode UI with dynamic settings)
 ```
 
 ---
@@ -166,27 +166,27 @@ This prevents false alerts for normal late-afternoon power decline.
 - 🔴 **Red** — Critical条件 (e.g., inverter tripped or severe low PR)
 - ⚫ **Grey** — Comms Lost or outside daylight hours
 
-### Thresholds
-- **PR:** 🟢&ge;85% | 🟡&ge;75% | 🔴<75% (*active after 30m stabilization*)
-- **Temperature:** 🟢&le;40°C | 🟡&le;45°C | 🔴>45°C
-- **AC Power:** 🟢>5kW | 🟡>1kW | 🔴&le;1kW (*during daylight*)
-- **Downtime:** Shown if cumulative loss **&ge; 9 minutes**.
+### Thresholds (Customizable via Dashboard Settings UI)
+- **PR:** 🟢&ge;x% | 🟡&ge;y% | 🔴<y% (*active after 30m stabilization, handled dynamically*)
+- **Temperature:** 🟢&le;x°C | 🟡&le;y°C | 🔴>y°C
+- **AC Power:** Evaluated relatively: 🟢>95% Plant Avg | 🔴<95% Plant Avg. Exceptions granted for low-POA conditions (<50 W/m²).
+- **DC Current:** Deep string deviations detected dynamically by checking internal MPPTs and domain-levels.
 
 ---
 
 ## 📈 Forensic Rules
 
-The watchdog applies 6 rules in priority order:
+The watchdog applies deep diagnostic rules in priority order:
 
 | Rule | Condition | Severity |
 |------|-----------|----------|
-| **Low PR** | PR < 85% after 30m stabilization period | 🔴 Critical |
-| **High Temp** | Temperature > 45°C | 🔴 Critical |
-| **DC String Loss** | String loss detected via MPPT comparison | 🔴 Critical |
+| **Low PR** | PR < thresholds after 30m stabilization period | 🔴 Critical |
+| **High Temp** | Temperature > configured limit | 🔴 Critical |
+| **DC String Loss** | String fault/open circuit/underperformance detected via dynamic MPPT comparison | 🔴/🟡 Fault/Warning |
 | **Comms Loss** | Data missing (x) for entire component | 🟡 Warning |
-| **Inverter Trip** | AC &le; 1kW while site mean > 2kW | 🔴 Critical |
+| **Inverter Trip / AC Power Loss** | AC output deviates >5% below the plant average during nominal POA | 🔴 Critical |
 
-Consecutive alerts on the same inverter/rule within 1 hour are deduplicated.
+Historical alarms feature a category drop-down filter, and consecutive alerts on the same inverter/rule are deduplicated dynamically.
 
 ---
 
@@ -270,8 +270,8 @@ tail -f watchdog.log
 - **Method:** Potenza_AC master + on-demand metric lookups
 
 ### Dashboard
-- **Polling Interval:** 10 seconds (AJAX)
-- **Response Time:** <100ms (JSON read + render)
+- **Communication Channel:** Persistent FastAPI WebSocket
+- **Response Time:** Real-time push logic immediately on payload build
 - **Supported Browsers:** Chrome, Firefox, Safari, Edge (dark mode compatible)
 
 ---
@@ -350,5 +350,5 @@ This project is provided as-is. Adapt and use freely, but ensure compliance with
 
 ---
 
-**Last Updated:** 2026-04-09
-**System Status:** ✅ Fully updated for Keycloak SSO and Refined Forensic Analysis
+**Last Updated:** 2026-04-10
+**System Status:** ✅ Fully functional WebSocket integration with customizable frontend thresholds and relative AC/DC analysis algorithms.

@@ -175,4 +175,5 @@ def analyze_dc_current(dc_df: pd.DataFrame, output_md_path: Path, date_str: str)
     output_path = Path(output_md_path)
     output_path.write_text("\n".join(md), encoding="utf-8")
     logger.info(f"Wrote DC Analysis Report to {output_path}")
+    return faults
 

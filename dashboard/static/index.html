@@ -22,6 +22,7 @@
   </div>
   <div class="header-actions">
     <div id="last-updated" style="color:var(--muted);font-size:0.75rem;">Connecting…</div>
+    <button id="settings-btn" class="btn-rescan" style="margin-right: 0.5rem;">⚙️ SETTINGS</button>
     <button id="rescan-btn" class="btn-rescan">FORENSIC RE-SCAN</button>
   </div>
 </header>
@@ -127,8 +128,17 @@
        5. Historical Alarm Trail
   ═══════════════════════════════════════════════════════════ -->
   <section>
-    <h2>Historical Alarm Trail <span style="font-size:0.65rem;font-weight:400;color:var(--muted);">(newest first · today · max 100)</span></h2>
-    <div class="alarm-table-wrapper">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+      <h2>Historical Alarm Trail <span style="font-size:0.65rem;font-weight:400;color:var(--muted);">(newest first · today · max 100)</span></h2>
+      <div style="display:flex; align-items:center; gap:0.5rem; font-size:0.85rem;">
+        <label for="history-filter" style="color:var(--muted);">Filter:</label>
+        <select id="history-filter" style="background:var(--surface); border:1px solid var(--border); color:var(--text); padding:0.3rem 0.5rem; border-radius:0.25rem;">
+          <option value="ALL">All Categories</option>
+          <!-- Populated dynamically -->
+        </select>
+      </div>
+    </div>
+    <div class="alarm-table-wrapper" style="margin-top:0.75rem;">
       <table class="alarm-table">
         <thead>
           <tr>
@@ -211,10 +221,12 @@
         <div>
           <h3 style="font-size: 0.9rem; color: var(--accent); margin-bottom: 0.75rem;">AC Power & Production</h3>
           <ul style="list-style: none; font-size: 0.8rem; line-height: 1.6; color: var(--muted);">
-            <li><span class="led green" style="display:inline-block; width:8px; height:8px;"></span> <strong>AC &gt; 5000 W</strong> — Nominal generation</li>
-            <li><span class="led yellow" style="display:inline-block; width:8px; height:8px;"></span> <strong>1000 W &lt; AC &le; 5000 W</strong> — Low production</li>
-            <li><span class="led red" style="display:inline-block; width:8px; height:8px;"></span> <strong>AC &le; 1000 W</strong> — Inverter Tripped (Daylight only)</li>
-            <li style="margin-top: 0.5rem; font-style: italic;">* Downtime threshold: Cumulative off-time &ge; 9 mins</li>
+            <li><span class="led green" style="display:inline-block; width:8px; height:8px;"></span> <strong>AC &ge; 0.95 &times; Plant Avg</strong> — Nominal generation</li>
+            <li><span class="led red" style="display:inline-block; width:8px; height:8px;"></span> <strong>0 &lt; AC &lt; 0.95 &times; Plant Avg</strong> — Underperforming</li>
+            <li><span class="led red" style="display:inline-block; width:8px; height:8px;"></span> <strong>AC = 0 W</strong> — Inverter Tripped (Daylight only)</li>
+            <li style="margin-top: 0.5rem; font-style: italic;">* Inverters are evaluated relative to exactly what the rest of the plant produces at that exact moment.</li>
+            <li style="font-style: italic;">* If POA &lt; 50 W/m² and Plant Avg &lt; 1000 W, deviations are ignored.</li>
+            <li style="margin-top: 0.5rem; font-style: italic;">* Downtime threshold: Cumulative off-time &ge; configured minimum</li>
           </ul>
         </div>
 
@@ -250,6 +262,64 @@
     </div>
   </div>
 </section>
+
+<!-- Settings Modal -->
+<div id="settings-modal" class="modal-hidden">
+  <div class="modal-content">
+    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:1rem; margin-bottom:1rem;">
+      <h2 style="margin:0; font-size:1.1rem;">Dashboard Configuration</h2>
+      <button id="close-settings" style="background:transparent; border:none; color:var(--text); font-size:1.5rem; cursor:pointer;">&times;</button>
+    </div>
+    
+    <div class="settings-grid">
+      <!-- Thresholds -->
+      <div class="settings-column">
+        <h3 style="color:var(--accent); margin-bottom: 1rem;">Thresholds</h3>
+        
+        <div class="settings-row">
+          <label>PR Green (&ge;) %<input type="number" id="cfg-pr-green" step="0.1"></label>
+          <label>PR Yellow (&ge;) %<input type="number" id="cfg-pr-yellow" step="0.1"></label>
+        </div>
+        
+        <div class="settings-row">
+          <label>Temp Yellow (&gt;) °C<input type="number" id="cfg-temp-yellow" step="0.1"></label>
+          <label>Temp Red (&gt;) °C<input type="number" id="cfg-temp-red" step="0.1"></label>
+        </div>
+        
+
+        <h4 style="margin-top:1rem; margin-bottom:0.5rem; color:var(--muted); font-size:0.8rem;">Downtime Tracker</h4>
+        <div class="settings-row">
+          <label>Min Downtime Off-time (mins)<input type="number" id="cfg-min-downtime" step="1"></label>
+        </div>
+        
+        <h4 style="margin-top:1rem; margin-bottom:0.5rem; color:var(--muted); font-size:0.8rem;">DC Current (Morning)</h4>
+        <div class="settings-row">
+          <label>Green (&ge;) A<input type="number" id="cfg-dcm-green" step="0.1"></label>
+          <label>Yellow (&ge;) A<input type="number" id="cfg-dcm-yellow" step="0.1"></label>
+        </div>
+
+        <h4 style="margin-top:1rem; margin-bottom:0.5rem; color:var(--muted); font-size:0.8rem;">DC Current (Afternoon)</h4>
+        <div class="settings-row">
+          <label>Green (&ge;) A<input type="number" id="cfg-dca-green" step="0.1"></label>
+          <label>Yellow (&ge;) A<input type="number" id="cfg-dca-yellow" step="0.1"></label>
+        </div>
+      </div>
+
+      <!-- Colors -->
+      <div class="settings-column">
+        <h3 style="color:var(--accent); margin-bottom: 1rem;">LED Colors</h3>
+        <label class="color-label">Green Status<input type="color" id="cfg-color-green"></label>
+        <label class="color-label">Yellow Status<input type="color" id="cfg-color-yellow"></label>
+        <label class="color-label">Red Status<input type="color" id="cfg-color-red"></label>
+        <label class="color-label">Grey (Off) Status<input type="color" id="cfg-color-grey"></label>
+      </div>
+    </div>
+
+    <div style="margin-top: 2rem; text-align: right; border-top: 1px solid var(--border); padding-top: 1rem;">
+      <button id="save-settings-btn" class="btn-rescan">SAVE & APPLY</button>
+    </div>
+  </div>
+</div>
 
 <script src="/static/app.js"></script>
 </body>
