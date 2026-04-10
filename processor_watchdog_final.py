@@ -294,9 +294,8 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
             health["pr"] = "grey"
         elif pr_val >= PR_THRESHOLD:
             health["pr"] = "green"
-        elif pr_val >= (PR_THRESHOLD - 10):
-            health["pr"] = "yellow"
         else:
+            # Strictly use 'red' for anything below threshold to match user requirement
             health["pr"] = "red"
 
         # Temperature LED
@@ -326,7 +325,7 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
                         dc_values.append(val)
 
         if dc_values:
-            avg_dc = np.mean(dc_values)
+            avg_dc = float(np.mean(dc_values))
             # Contextualize to time of day: early morning/evening < afternoon
             if daylight_start <= ora <= 12:  # Morning ramp-up
                 dc_threshold_green = 10  # Morning: expect higher current
@@ -397,9 +396,9 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
             health["overall_status"] = ["green", "yellow", "red"][worst]
 
         # Also store raw values and metadata
-        health["raw_pr"] = pr_val
+        health["raw_pr"] = float(pr_val) if pr_val is not None else None
         health["data_time"] = format_ora(ora)
-        health["is_stabilized"] = (ora >= (daylight_start + (STABILIZATION_MINUTES / 60.0)))
+        health["is_stabilized"] = bool(ora >= (daylight_start + (STABILIZATION_MINUTES / 60.0)))
 
         inverter_health[inv_label] = health
 
@@ -492,16 +491,39 @@ def compute_downtime(ac_df: pd.DataFrame, irrad_df: pd.DataFrame, daylight_start
                 last_poa_val = poa_array.dropna().iloc[-1]
                 last_poa = f"{last_poa_val:.1f}"
 
-            total_time_off = len(zero_indices)
+            def ora_to_minutes(o):
+                """Convert decimal hour (e.g., 8.1666) or HH.MM style float to total minutes."""
+                if pd.isna(o): return 0
+                try:
+                    f = float(o)
+                    # Handle both decimal hour (8.5 = 8:30) and HH.MM (8.30 = 8:30)
+                    # The VCOM Ora column is typically decimal hours
+                    hours = int(f)
+                    minutes = int(round((f - hours) * 60))
+                    return hours * 60 + minutes
+                except: return 0
 
-            if total_time_off >= 9:
+            stop_min = ora_to_minutes(df_day.loc[idx_start].get("Ora"))
+            
+            # If it's recovered, use recovery time, else use last available data time
+            if started_again == "still off":
+                end_min = ora_to_minutes(df_day.loc[last_data_idx].get("Ora"))
+            else:
+                # We used format_ora(df_day.loc[rec_idx].get("Ora")) to get started_again string
+                end_min = ora_to_minutes(df_day.loc[rec_idx].get("Ora"))
+            
+            # Duration in minutes
+            total_time_off_calc = end_min - stop_min
+            if total_time_off_calc < 0: total_time_off_calc = 0 # Safety
+
+            if total_time_off_calc >= 9:
                 downtime_tracker[inv_label] = {
                     "inverter": inv_label,
                     "last_data_fetched": last_ts,
                     "last_poa": last_poa,
                     "time_stopped": time_stopped,
                     "started_again": started_again,
-                    "total_time_off": int(total_time_off)
+                    "total_time_off": int(total_time_off_calc)
                 }
             
     return downtime_tracker
