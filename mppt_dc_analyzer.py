@@ -29,12 +29,14 @@ MPPT_CONFIG = {
     "TX3-11": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1], "TX3-12": [2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1]
 }
 
-def get_streak_lengths(mask):
-    """Return max contiguous True items in the mask series."""
-    s = mask.astype(int)
-    if s.empty: return 0
-    streaks = s.groupby((s != s.shift()).cumsum()).sum()
-    return streaks.max() if not streaks.empty else 0
+def get_current_streak(mask):
+    """Return the currently active contiguous True streak length at the end of valid data."""
+    s = mask.dropna().astype(int)
+    if s.empty or s.iloc[-1] == 0: 
+        return 0
+    blocks = (s != s.shift()).cumsum()
+    last_block = blocks.iloc[-1]
+    return int((blocks == last_block).sum())
 
 def analyze_dc_current(dc_df: pd.DataFrame, output_md_path: Path, date_str: str):
     """Parses Corrente_DC dataset, calculates thresholds, and generates MD report."""
@@ -101,30 +103,34 @@ def analyze_dc_current(dc_df: pd.DataFrame, output_md_path: Path, date_str: str)
             nominal = 18.0 if string_count == 2 else 9.0
             expected_current = nominal * (fleet_2str_median / 18.0)
 
+            # Fill NA so intermittent packet drops don't break the streak
+            series_filled = series.ffill()
+
             # RULE: OPEN CIRCUIT (Critical)
-            cond_openC = (series < 0.1 * expected_current) & (expected_current > 1.0)
-            openC_streak = get_streak_lengths(cond_openC)
+            cond_openC = (series_filled < 0.1 * expected_current.ffill()) & (expected_current.ffill() > 1.0)
+            openC_streak = get_current_streak(cond_openC)
 
             # RULE: SINGLE STRING LOSS (Warning, only 2-string configs)
             ss_loss_streak = 0
             if string_count == 2 and not inv_2str_median.isna().all():
-                cond_ssLoss = (series >= 0.4 * inv_2str_median) & (series <= 0.6 * inv_2str_median) & (inv_2str_median > 2.0)
-                ss_loss_streak = get_streak_lengths(cond_ssLoss)
+                cond_ssLoss = (series_filled >= 0.4 * inv_2str_median.ffill()) & (series_filled <= 0.6 * inv_2str_median.ffill()) & (inv_2str_median.ffill() > 2.0)
+                ss_loss_streak = get_current_streak(cond_ssLoss)
 
             # RULE: UNDERPERFORMANCE ABSOLUTE (Warning)
             up_streak = 0
-            same_inv_peer_median = inv_2str_median if string_count == 2 else inv_1str_median
+            same_inv_peer_median = inv_2str_median if string_count == 2 else (inv_2str_median / 2.0)
             if not same_inv_peer_median.isna().all():
-                cond_up = (series < 0.7 * same_inv_peer_median) & (series > 0.0) & (same_inv_peer_median > 2.0)
-                up_streak = get_streak_lengths(cond_up)
+                cond_up = (series_filled < 0.75 * same_inv_peer_median.ffill()) & (series_filled > 0.0) & (same_inv_peer_median.ffill() > 1.0)
+                up_streak = get_current_streak(cond_up)
 
             # RULE: CROSS-INVERTER DEVIATION (Warning)
             cross_streak = 0
+            # To compare cross-domain safely, just check 2-string inverters matching this MPPT's string_count
             domain_peer_cols = [f"Corrente DC MPPT {mppt_num} (INV {oi}) [A]" for oi, ocfg in MPPT_CONFIG.items() if oi[:3] == domain and ocfg[mppt_idx] == string_count and f"Corrente DC MPPT {mppt_num} (INV {oi}) [A]" in df.columns]
             if domain_peer_cols:
                 domain_median = df[domain_peer_cols].median(axis=1)
-                cond_cross = (series < 0.65 * domain_median) & (series > 0.0) & (domain_median > 2.0)
-                cross_streak = get_streak_lengths(cond_cross)
+                cond_cross = (series_filled < 0.65 * domain_median.ffill()) & (series_filled > 0.0) & (domain_median.ffill() > 2.0)
+                cross_streak = get_current_streak(cond_cross)
 
             # Add Normal Info
             if string_count == 1:
@@ -132,18 +138,17 @@ def analyze_dc_current(dc_df: pd.DataFrame, output_md_path: Path, date_str: str)
                 if "Confirmed normal 1-string MPPT currents observed" not in inv_summary[inv]["Notes"]:
                     inv_summary[inv]["Notes"].append("Confirmed normal 1-string MPPT currents observed")
 
-            # Finalize priority tracking
-            if openC_streak >= 3:
-                faults.append({"Inverter": inv, "MPPT": mppt_num, "Strings": string_count, "Type": "OPEN CIRCUIT", "Severity": "CRITICAL", "Measured": f"{series.median():.1f}", "Expected": f"{expected_current.median():.1f}", "Duration": int(openC_streak), "Deviation": "<10%", "Action": "Check connection"})
+            if openC_streak >= 2:
+                faults.append({"Inverter": inv, "MPPT": mppt_num, "Strings": string_count, "Type": "OPEN CIRCUIT", "Severity": "CRITICAL", "Measured": f"{series.dropna().tail(3).median():.1f}", "Expected": f"{expected_current.dropna().tail(3).median():.1f}", "Duration": int(openC_streak), "Deviation": "<10%", "Action": "Check connection"})
                 inv_summary[inv]["Critical"] += 1
-            elif string_count == 2 and ss_loss_streak >= 15:
-                faults.append({"Inverter": inv, "MPPT": mppt_num, "Strings": string_count, "Type": "SINGLE STRING LOSS", "Severity": "WARNING", "Measured": f"{series.median():.1f}", "Expected": f"{expected_current.median():.1f}", "Duration": int(ss_loss_streak), "Deviation": "~50%", "Action": "Check fuse"})
+            elif string_count == 2 and ss_loss_streak >= 4:
+                faults.append({"Inverter": inv, "MPPT": mppt_num, "Strings": string_count, "Type": "SINGLE STRING LOSS", "Severity": "WARNING", "Measured": f"{series.dropna().tail(3).median():.1f}", "Expected": f"{expected_current.dropna().tail(3).median():.1f}", "Duration": int(ss_loss_streak), "Deviation": "~50%", "Action": "Check fuse"})
                 inv_summary[inv]["Warnings"] += 1
-            elif cross_streak >= 30:
-                faults.append({"Inverter": inv, "MPPT": mppt_num, "Strings": string_count, "Type": "CROSS-INVERTER DEVIATION", "Severity": "WARNING", "Measured": f"{series.median():.1f}", "Expected": f"{expected_current.median():.1f}", "Duration": int(cross_streak), "Deviation": "<65%", "Action": "Check domain shading"})
+            elif cross_streak >= 6:
+                faults.append({"Inverter": inv, "MPPT": mppt_num, "Strings": string_count, "Type": "CROSS-INVERTER DEVIATION", "Severity": "WARNING", "Measured": f"{series.dropna().tail(3).median():.1f}", "Expected": f"{expected_current.dropna().tail(3).median():.1f}", "Duration": int(cross_streak), "Deviation": "<65%", "Action": "Check domain shading"})
                 inv_summary[inv]["Warnings"] += 1
-            elif up_streak >= 30:
-                faults.append({"Inverter": inv, "MPPT": mppt_num, "Strings": string_count, "Type": "UNDERPERFORMANCE - ABSOLUTE", "Severity": "WARNING", "Measured": f"{series.median():.1f}", "Expected": f"{expected_current.median():.1f}", "Duration": int(up_streak), "Deviation": "<70%", "Action": "Check shading/soiling"})
+            elif up_streak >= 4:
+                faults.append({"Inverter": inv, "MPPT": mppt_num, "Strings": string_count, "Type": "UNDERPERFORMANCE - ABSOLUTE", "Severity": "WARNING", "Measured": f"{series.dropna().tail(3).median():.1f}", "Expected": f"{expected_current.dropna().tail(3).median():.1f}", "Duration": int(up_streak), "Deviation": "<75%", "Action": "Check shading/soiling"})
                 inv_summary[inv]["Warnings"] += 1
 
     # Formatting structured Markdown report
