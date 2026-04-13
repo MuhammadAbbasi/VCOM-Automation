@@ -320,6 +320,9 @@ function applyConfig(config) {
       el("cfg-min-downtime").value = t.min_downtime_minutes;
     }
   }
+  if (config.collection_interval !== undefined && el("cfg-collection-interval")) {
+    el("cfg-collection-interval").value = config.collection_interval;
+  }
   if (config.colors) {
     const c = config.colors;
     if (el("cfg-color-green")) el("cfg-color-green").value = c.green;
@@ -330,6 +333,19 @@ function applyConfig(config) {
 }
 
 async function handleSaveSettings() {
+  const settingsMapping = {
+    "cfg-pr-green": ["thresholds", "pr", "green"],
+    "cfg-pr-yellow": ["thresholds", "pr", "yellow"],
+    "cfg-temp-yellow": ["thresholds", "temp", "yellow"],
+    "cfg-temp-red": ["thresholds", "temp", "red"],
+    "cfg-color-green": ["colors", "green"],
+    "cfg-color-yellow": ["colors", "yellow"],
+    "cfg-color-red": ["colors", "red"],
+    "cfg-color-grey": ["colors", "grey"],
+    "cfg-min-downtime": ["thresholds", "min_downtime_minutes"],
+    "cfg-collection-interval": ["collection_interval"]
+  };
+  
   const btn = el("save-settings-btn");
   if (btn.classList.contains("loading")) return;
   

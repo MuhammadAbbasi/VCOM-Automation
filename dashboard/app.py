@@ -203,6 +203,17 @@ def setup_ngrok(token: str, port: int, user: str, psw: str):
     """Start an ngrok tunnel if a token is provided."""
     try:
         from pyngrok import ngrok, conf
+        import subprocess, platform
+        
+        # Kill any lingering ngrok processes to prevent ERR_NGROK_334
+        try:
+            if platform.system() == "Windows":
+                subprocess.run(["taskkill", "/F", "/IM", "ngrok.exe"], capture_output=True)
+            else:
+                subprocess.run(["pkill", "-9", "ngrok"], capture_output=True)
+        except Exception:
+            pass
+            
         conf.get_default().auth_token = token
         
         # Configure the tunnel with Basic Auth for security

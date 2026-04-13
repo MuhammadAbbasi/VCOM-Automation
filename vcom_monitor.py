@@ -64,7 +64,7 @@ METRICS = [
     ("Irraggiamento",         extract_irraggiamento,  "Irraggiamento"),
 ]
 
-INTERVAL_MINUTES = 10
+# Will dynamically fetch from user settings, defaults to 15
 MAX_RETRIES = 2
 
 
@@ -194,7 +194,7 @@ def run_extraction_cycle(page, cycle_count: int) -> None:
 def main() -> None:
     print("[EXTRACTION] Script started.", flush=True)
     ERRORS_DIR.mkdir(parents=True, exist_ok=True)
-    logger.info(f"VCOM monitor starting — interval={INTERVAL_MINUTES} min")
+    logger.info("VCOM monitor starting...")
 
     print("[EXTRACTION] Initializing Playwright...", flush=True)
     with sync_playwright() as p:
@@ -219,8 +219,14 @@ def main() -> None:
                     except Exception:
                         pass
 
-                logger.info(f"Sleeping {INTERVAL_MINUTES} minutes until next cycle...")
-                time.sleep(INTERVAL_MINUTES * 60)
+                try:
+                    from processor_watchdog_final import load_user_settings
+                    current_interval = load_user_settings().get("collection_interval", 15)
+                except Exception:
+                    current_interval = 15
+
+                logger.info(f"Sleeping {current_interval} minutes until next cycle...")
+                time.sleep(current_interval * 60)
                 cycle_count += 1
 
         except KeyboardInterrupt:

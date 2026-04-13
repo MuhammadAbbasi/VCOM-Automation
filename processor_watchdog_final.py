@@ -36,6 +36,7 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 USER_SETTINGS_PATH = ROOT / "user_settings.json"
 
 DEFAULT_SETTINGS = {
+    "collection_interval": 15,
     "thresholds": {
         "pr": {
             "green": 85.0,
@@ -149,15 +150,20 @@ def get_production_start_time(ac_df: pd.DataFrame) -> float:
 
 def excel_to_csv(excel_path: Path, csv_path: Path) -> bool:
     """Convert Excel to CSV, return True if successful."""
-    try:
-        df = pd.read_excel(str(excel_path))
-        df.to_csv(str(csv_path), index=False)
-        logger.info(f"Converted {excel_path.name} -> {csv_path.name}")
-        return True
-    except Exception as e:
-        logger.error(f"Failed to convert {excel_path.name}: {e}")
-        return False
-
+    for attempt in range(4):
+        try:
+            df = pd.read_excel(str(excel_path))
+            df.to_csv(str(csv_path), index=False)
+            logger.info(f"Converted {excel_path.name} -> {csv_path.name}")
+            return True
+        except Exception as e:
+            if attempt < 3:
+                logger.warning(f"File locked/incomplete (attempt {attempt+1}), waiting 3s to retry {excel_path.name}: {e}")
+                import time
+                time.sleep(3)
+            else:
+                logger.error(f"Failed to convert {excel_path.name} after retries: {e}")
+                return False
 
 def load_metric(date_str: str, metric_prefix: str) -> pd.DataFrame:
     """Load metric from CSV or Excel.
@@ -184,6 +190,8 @@ def load_metric(date_str: str, metric_prefix: str) -> pd.DataFrame:
                 if excel_to_csv(excel_path, csv_path):
                     df = pd.read_csv(str(csv_path))
                     logger.info(f"Loaded {csv_path.name} (sep=None)")
+                    if "Ora" in df.columns:
+                        df = df.drop_duplicates(subset=["Ora"], keep="last").reset_index(drop=True)
                     return df
             except Exception as e:
                 logger.warning(f"Failed to convert/load {excel_path.name}: {e}")
@@ -193,6 +201,8 @@ def load_metric(date_str: str, metric_prefix: str) -> pd.DataFrame:
         try:
             df = pd.read_csv(str(csv_path), sep=None, engine='python')
             logger.info(f"Loaded {csv_path.name} (sep=None)")
+            if "Ora" in df.columns:
+                df = df.drop_duplicates(subset=["Ora"], keep="last").reset_index(drop=True)
             return df
         except Exception:
             pass
@@ -441,13 +451,13 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
             if poa_val < 50 and avg_ac_power < 1000:
                 health["ac_power"] = "green" if (daylight_start <= ora <= DAYLIGHT_END) else "grey"
             else:
-                if ac_val >= avg_ac_power * 0.95:
+                if ac_val >= avg_ac_power * 0.85:
                     health["ac_power"] = "green"
-                elif ac_val > 0:
-                    health["ac_power"] = "red"
+                elif ac_val >= avg_ac_power * 0.05:
+                    health["ac_power"] = "yellow"
                 else:
                     if daylight_start <= ora <= DAYLIGHT_END:
-                        health["ac_power"] = "red"  # Should be generating
+                        health["ac_power"] = "red"  # Effectively tripped (< 5% average)
                     else:
                         health["ac_power"] = "grey"  # Off-hours is OK
 
@@ -501,7 +511,11 @@ def format_ora(val):
 def compute_downtime(ac_df: pd.DataFrame, irrad_df: pd.DataFrame, daylight_start: float = 7.0, settings: dict = None) -> dict:
     """Calculate downtime events based on 0.0 W strings during daylight hours."""
     if settings is None:
-        settings = DEFAULT_SETTINGS
+        settings = {
+            "min_downtime_minutes": 9,
+            "collection_interval": 15,
+            "thresholds": DEFAULT_SETTINGS["thresholds"]
+        }
     
     min_downtime_minutes = settings.get("thresholds", DEFAULT_SETTINGS["thresholds"]).get("min_downtime_minutes", 9)
 
@@ -783,15 +797,16 @@ def analyze_site(date_str: str) -> None:
             ac_alarm_id = f"{inv_id}_LOW_AC"
             was_low_ac = ac_alarm_id in prev_alarm_map
             
-            if h.get("ac_power") == "red":
+            ac_status = h.get("ac_power")
+            if ac_status in ["red", "yellow"]:
                 if not was_low_ac:
                     current_active.append({
                         "id": ac_alarm_id,
                         "inverter": inv_label,
-                        "type": "LOW AC POWER",
-                        "severity": "red",
+                        "type": "LOW AC POWER" if ac_status == "yellow" else "INVERTER TRIPPED",
+                        "severity": ac_status,
                         "trip_time": timestamp,
-                        "message": "Power fell >5% below plant average during optimal conditions."
+                        "message": "Power is critically below plant average." if ac_status == "yellow" else "Failed to produce >5% of plant average."
                     })
                 else:
                     current_active.append(prev_alarm_map[ac_alarm_id])
