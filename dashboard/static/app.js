@@ -90,8 +90,22 @@ function updateIngestion(data) {
 
 // ─── 3. Inverter health matrix ────────────────────────────────────────────
 
-function ledHtml(color, title) {
-  return `<span class="led ${color}" title="${title}"></span>`;
+function ledHtml(color, label, value) {
+  let displayVal = "";
+  if (value !== undefined && value !== null) {
+    if (typeof value === "number") {
+      if (label === "PR") displayVal = `: ${value.toFixed(1)}%`;
+      else if (label === "Temp") displayVal = `: ${value.toFixed(1)}°C`;
+      else if (label === "DC") displayVal = `: ${value.toFixed(1)}A`;
+      else if (label === "AC") {
+          displayVal = (value >= 1000) ? `: ${(value/1000).toFixed(1)}kW` : `: ${Math.round(value)}W`;
+      }
+      else displayVal = `: ${value}`;
+    } else {
+      displayVal = `: ${value}`;
+    }
+  }
+  return `<span class="led ${color}" title="${label}${displayVal}"></span>`;
 }
 
 function updateInverterGrid(data) {
@@ -112,20 +126,30 @@ function updateInverterGrid(data) {
 
     const card = document.createElement("div");
     card.className = `inverter-card status-${overall}`;
-    card.title = `${name}\nPR: ${pr} | Temp: ${temp} | DC: ${dc} | AC: ${ac}`;
+    card.title = `${name}`;
+    
+    // Preparation for tooltips
+    const prT   = ledHtml(pr,   "PR",   flags.pr_v);
+    const tempT = ledHtml(temp, "Temp", flags.temp_v);
+    const dcT   = ledHtml(dc,   "DC",   flags.dc_v);
+    const acT   = ledHtml(ac,   "AC",   flags.ac_v);
+    
+    // Extract titles for labels
+    const getTitle = (html) => {
+        const match = html.match(/title="([^"]+)"/);
+        return match ? match[1] : "";
+    };
+    
     card.innerHTML = `
       <div class="inv-name">${shortName}</div>
       <div class="led-row">
-        ${ledHtml(pr,   "PR")}
-        ${ledHtml(temp, "Temp")}
-        ${ledHtml(dc,   "DC")}
-        ${ledHtml(ac,   "AC")}
+        ${prT} ${tempT} ${dcT} ${acT}
       </div>
       <div class="led-labels">
-        <span class="led-label">PR</span>
-        <span class="led-label">T</span>
-        <span class="led-label">DC</span>
-        <span class="led-label">AC</span>
+        <span class="led-label" title="${getTitle(prT)}">PR</span>
+        <span class="led-label" title="${getTitle(tempT)}">T</span>
+        <span class="led-label" title="${getTitle(dcT)}">DC</span>
+        <span class="led-label" title="${getTitle(acT)}">AC</span>
       </div>
     `;
     grid.appendChild(card);
@@ -323,6 +347,16 @@ function applyConfig(config) {
   if (config.collection_interval !== undefined && el("cfg-collection-interval")) {
     el("cfg-collection-interval").value = config.collection_interval;
   }
+  
+  // Telegram status
+  if (config.telegram) {
+    const tg = config.telegram;
+    if (el("cfg-tg-enabled")) el("cfg-tg-enabled").checked = !!tg.enabled;
+    if (el("cfg-tg-token")) el("cfg-tg-token").value = tg.bot_token || "";
+    if (el("cfg-tg-chat")) el("cfg-tg-chat").value = tg.chat_id || "";
+    if (el("cfg-tg-personal")) el("cfg-tg-personal").value = tg.personal_id || "";
+  }
+
   if (config.colors) {
     const c = config.colors;
     if (el("cfg-color-green")) el("cfg-color-green").value = c.green;
@@ -379,6 +413,13 @@ async function handleSaveSettings() {
       yellow: el("cfg-color-yellow").value || "#f59e0b",
       red: el("cfg-color-red").value || "#ef4444",
       grey: el("cfg-color-grey").value || "#6b7280"
+    },
+    collection_interval: parseFloat(el("cfg-collection-interval").value) || 15,
+    telegram: {
+      enabled: el("cfg-tg-enabled").checked,
+      bot_token: el("cfg-tg-token").value,
+      chat_id: el("cfg-tg-chat").value,
+      personal_id: el("cfg-tg-personal").value
     }
   };
 
@@ -402,6 +443,30 @@ async function handleSaveSettings() {
   }
 }
 
+async function handleTestTelegram() {
+  const btn = el("test-tg-btn");
+  if (!btn || btn.classList.contains("loading")) return;
+
+  btn.classList.add("loading");
+  const oldText = btn.textContent;
+  btn.textContent = "SENDING...";
+
+  try {
+    const resp = await fetch("/api/telegram/test", { method: "POST" });
+    const result = await resp.json();
+    if (result.status === "success") {
+      alert("Test message sent! Check your Telegram group.");
+    } else {
+      alert("Error: " + result.message);
+    }
+  } catch (err) {
+    alert("Connection failed: " + err);
+  } finally {
+    btn.classList.remove("loading");
+    btn.textContent = oldText;
+  }
+}
+
 // ─── Bootstrap ────────────────────────────────────────────────────────────
 async function handleRescan() {
   const btn = el("rescan-btn");
@@ -417,8 +482,7 @@ async function handleRescan() {
     const result = await resp.json();
     
     if (result.status === "success") {
-      alert("Rescan complete! Redrawing dashboard...");
-      await updateDashboard();
+      alert("Rescan triggered! The dashboard will update automatically in a few moments.");
     } else {
       alert("Rescan failed: " + result.message);
     }

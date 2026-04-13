@@ -38,6 +38,7 @@ DASHBOARD_DIR = Path(__file__).resolve().parent
 STATIC_DIR = DASHBOARD_DIR / "static"
 ROOT = DASHBOARD_DIR.parent
 DATA_DIR = ROOT / "extracted_data"
+USER_SETTINGS_PATH = ROOT / "user_settings.json"
 
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -136,11 +137,10 @@ async def get_settings():
 
 
 @app.post("/api/settings")
-async def update_settings(request: Request):
+async def update_settings(request: Request, background_tasks: BackgroundTasks):
     try:
         new_settings = await request.json()
-        settings_path = ROOT / "user_settings.json"
-        with open(settings_path, "w", encoding="utf-8") as f:
+        with open(USER_SETTINGS_PATH, "w", encoding="utf-8") as f:
             json.dump(new_settings, f, indent=4)
             
         # Broadcast new config to all clients
@@ -148,7 +148,7 @@ async def update_settings(request: Request):
         
         # Trigger an immediate rescan using the new settings
         today = datetime.now().strftime("%Y-%m-%d")
-        analyze_site(today)
+        background_tasks.add_task(analyze_site, today)
         return JSONResponse({"status": "success"})
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
@@ -180,6 +180,25 @@ async def rescan():
         analyze_site(today)
         
         return JSONResponse({"status": "success", "message": f"Rescan completed for {today}. Errors cleared."})
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+
+
+@app.post("/api/telegram/test")
+async def test_telegram():
+    """Send a test message with the detailed system upgrade summary."""
+    from processor_watchdog_final import load_user_settings, send_telegram_notification
+    try:
+        settings = load_user_settings()
+        msg = (
+            "⚙️ *System Upgrade Applied*\n"
+            "- Switched to ultra-fast CSV data ingestion (Excel dependency removed)\n"
+            "- Fixed 9510m duration bug via clock-time analysis\n"
+            "- Improved data deduplication logic\n"
+            "- Optimized network share I/O performance"
+        )
+        send_telegram_notification(msg, settings)
+        return JSONResponse({"status": "success", "message": "Test message sent to Telegram."})
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
 

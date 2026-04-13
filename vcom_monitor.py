@@ -50,7 +50,7 @@ logger = logging.getLogger("vcom_monitor")
 from extraction_code.base_monitor import login, select_inverters, export_metric, load_config
 from extraction_code.pr_monitor import extract_pr
 from extraction_code.potenza_ac_monitor import extract_potenza_ac
-from extraction_code.corrente_dc_monitor import extract_corrente_dc
+from extraction_code.corrente_dc_monitor import extract_corrente_dc, download_corrente_dc_csv
 from extraction_code.resistenza_monitor import extract_resistenza
 from extraction_code.temperatura_monitor import extract_temperatura
 from extraction_code.irraggiamento_monitor import extract_irraggiamento
@@ -64,8 +64,8 @@ METRICS = [
     ("Irraggiamento",         extract_irraggiamento,  "Irraggiamento"),
 ]
 
-# Will dynamically fetch from user settings, defaults to 15
-MAX_RETRIES = 2
+# Will dynamically fetch from user settings, defaults to 3
+MAX_RETRIES = 3
 
 
 # ---------------------------------------------------------------------------
@@ -152,9 +152,19 @@ def run_extraction_cycle(page, cycle_count: int) -> None:
         for attempt in range(1, MAX_RETRIES + 1):
             try:
                 print(f"    (Attempt {attempt}/{MAX_RETRIES})...", flush=True)
-                df = extractor(page)
-                success = True
-                break
+                
+                # Special fallback for Corrente DC on the 3rd attempt (after 2 failures)
+                if label == "Corrente DC" and attempt == 3:
+                     df = download_corrente_dc_csv(page)
+                else:
+                     df = extractor(page)
+                
+                if df is not None and not df.empty:
+                    success = True
+                    break
+                else:
+                    raise ValueError("Empty or None DataFrame returned")
+                    
             except Exception as e:
                 print(f"    (!!) Attempt {attempt} failed: {type(e).__name__}", flush=True)
                 logger.error(f"[{label}] Attempt {attempt} failed:\n{traceback.format_exc()}")

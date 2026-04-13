@@ -310,6 +310,29 @@
         </div>
       </div>
 
+      <!-- Telegram -->
+      <div class="settings-column">
+        <h3 style="color:var(--accent); margin-bottom: 1rem;">Telegram Alerts</h3>
+        <div class="settings-row" style="margin-bottom: 0.5rem; grid-template-columns: 1fr;">
+          <label style="display:flex; flex-direction: row; align-items:center; gap:0.5rem; cursor:pointer; font-size: 0.85rem;">
+            <input type="checkbox" id="cfg-tg-enabled" style="width: auto;"> Enable Notifications
+          </label>
+        </div>
+        
+        <label style="font-size: 0.75rem; color: var(--muted); margin-bottom: 0.2rem; display: block;">Bot Token</label>
+        <input type="password" id="cfg-tg-token" placeholder="8679...">
+        
+        <label style="font-size: 0.75rem; color: var(--muted); margin-top: 0.75rem; margin-bottom: 0.2rem; display: block;">Group ID (Alarms)</label>
+        <input type="text" id="cfg-tg-chat" placeholder="186675376">
+        
+        <label style="font-size: 0.75rem; color: var(--muted); margin-top: 0.75rem; margin-bottom: 0.2rem; display: block;">Personal ID (Credentials)</label>
+        <input type="text" id="cfg-tg-personal" placeholder="5682...">
+        
+        <button id="test-tg-btn" style="margin-top: 1rem; width: 100%; font-size: 0.75rem; padding: 0.5rem; background: var(--border); color: var(--text); border: none; border-radius: 0.25rem; cursor: pointer; transition: background 0.2s;">
+          TEST CONNECTION
+        </button>
+      </div>
+
       <!-- Colors -->
       <div class="settings-column">
         <h3 style="color:var(--accent); margin-bottom: 1rem;">LED Colors</h3>

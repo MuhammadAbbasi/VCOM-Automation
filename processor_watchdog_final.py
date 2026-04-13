@@ -63,6 +63,12 @@ DEFAULT_SETTINGS = {
         "yellow": "#f59e0b",
         "red": "#ef4444",
         "grey": "#6b7280"
+    },
+    "telegram": {
+        "enabled": False,
+        "bot_token": "",
+        "chat_id": "",
+        "personal_id": ""
     }
 }
 
@@ -144,70 +150,61 @@ def get_production_start_time(ac_df: pd.DataFrame) -> float:
     return 7.0
 
 
+def send_telegram_notification(text: str, settings: dict, use_personal: bool = False) -> None:
+    """Send a notification via Telegram Bot API."""
+    tg = settings.get("telegram", {})
+    if not tg.get("enabled", False):
+        return
+
+    token = tg.get("bot_token")
+    # For personal ID, fallback to chat_id if not present
+    chat_id = tg.get("personal_id") if use_personal else tg.get("chat_id")
+    if not chat_id: chat_id = tg.get("chat_id")
+
+    if not token or not chat_id:
+        logger.warning("Telegram enabled but token/chat_id missing.")
+        return
+
+    import requests
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "Markdown"
+    }
+    try:
+        resp = requests.post(url, json=payload, timeout=10)
+        if resp.status_code != 200:
+            logger.error(f"Telegram API error: {resp.text}")
+    except Exception as e:
+        logger.error(f"Failed to send Telegram notification: {e}")
+
+
 # ---------------------------------------------------------------------------
 # Data Loading
 # ---------------------------------------------------------------------------
 
-def excel_to_csv(excel_path: Path, csv_path: Path) -> bool:
-    """Convert Excel to CSV, return True if successful."""
-    for attempt in range(4):
-        try:
-            df = pd.read_excel(str(excel_path))
-            df.to_csv(str(csv_path), index=False)
-            logger.info(f"Converted {excel_path.name} -> {csv_path.name}")
-            return True
-        except Exception as e:
-            if attempt < 3:
-                logger.warning(f"File locked/incomplete (attempt {attempt+1}), waiting 3s to retry {excel_path.name}: {e}")
-                import time
-                time.sleep(3)
-            else:
-                logger.error(f"Failed to convert {excel_path.name} after retries: {e}")
-                return False
-
 def load_metric(date_str: str, metric_prefix: str) -> pd.DataFrame:
-    """Load metric from CSV or Excel.
-    
-    Always re-converts the Excel to CSV when the .xlsx is newer than the .csv,
-    so the analysis uses the latest appended data, not a stale first-export.
-    """
+    """Load metric from CSV and deduplicate."""
     csv_path = DATA_DIR / f"{metric_prefix}_{date_str}.csv"
-    excel_path = DATA_DIR / f"{metric_prefix}_{date_str}.xlsx"
 
-    # Re-convert from Excel if it exists and is newer than the CSV
-    if excel_path.exists():
-        need_convert = True
-        if csv_path.exists():
-            try:
-                xlsx_mtime = excel_path.stat().st_mtime
-                csv_mtime = csv_path.stat().st_mtime
-                need_convert = (xlsx_mtime > csv_mtime)
-            except Exception:
-                need_convert = True
-
-        if need_convert:
-            try:
-                if excel_to_csv(excel_path, csv_path):
-                    df = pd.read_csv(str(csv_path))
-                    logger.info(f"Loaded {csv_path.name} (sep=None)")
-                    if "Ora" in df.columns:
-                        df = df.drop_duplicates(subset=["Ora"], keep="last").reset_index(drop=True)
-                    return df
-            except Exception as e:
-                logger.warning(f"Failed to convert/load {excel_path.name}: {e}")
-
-    # Fall back to existing CSV
     if csv_path.exists():
         try:
-            df = pd.read_csv(str(csv_path), sep=None, engine='python')
-            logger.info(f"Loaded {csv_path.name} (sep=None)")
-            if "Ora" in df.columns:
+            # Load with auto-separator detection
+            df = pd.read_csv(str(csv_path), sep=None, engine='python', encoding="utf-8")
+            
+            # Critical: Data cleaning and deduplication
+            if not df.empty and "Ora" in df.columns:
+                # Keep the last occurrence (most recent scrape) for each timestamp
                 df = df.drop_duplicates(subset=["Ora"], keep="last").reset_index(drop=True)
+                
+            logger.info(f"Loaded {csv_path.name} ({len(df)} unique rows)")
             return df
-        except Exception:
+        except Exception as e:
+            logger.error(f"Failed to load {csv_path.name}: {e}")
             pass
 
-    logger.warning(f"{metric_prefix}_{date_str} not found")
+    logger.warning(f"{metric_prefix}_{date_str}.csv not found")
     return None
 
 
@@ -377,6 +374,7 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
 
         # PR LED
         pr_val = pr_latest.get(inv_id)
+        health["pr_v"] = pr_val
         if pr_val is None:
             health["pr"] = "grey"
         elif pr_val >= thresholds["pr"].get("green", 85.0):
@@ -393,13 +391,16 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
             temp_val = temp_row[temp_col]
 
         if temp_val is None or pd.isna(temp_val):
+            health["temp_v"] = None
             health["temp"] = "grey"
-        elif temp_val > thresholds["temp"].get("red", 45.0):
-            health["temp"] = "red"
-        elif temp_val > thresholds["temp"].get("yellow", 40.0):
-            health["temp"] = "yellow"
         else:
-            health["temp"] = "green"
+            health["temp_v"] = float(temp_val)
+            if temp_val > thresholds["temp"].get("red", 45.0):
+                health["temp"] = "red"
+            elif temp_val > thresholds["temp"].get("yellow", 40.0):
+                health["temp"] = "yellow"
+            else:
+                health["temp"] = "green"
 
         # DC Current LED (average of all MPPTs for this inverter)
         # Thresholds adjusted for real-world conditions (late afternoon DC ~1-2A/MPPT is normal)
@@ -414,6 +415,7 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
 
         if dc_values:
             avg_dc = float(np.mean(dc_values))
+            health["dc_v"] = avg_dc
             # Contextualize to time of day: early morning/evening < afternoon
             if daylight_start <= ora <= 12:  # Morning ramp-up
                 dc_threshold_green = thresholds["dc"].get("morning_green", 10.0)
@@ -446,8 +448,10 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
             ac_val = None
 
         if ac_val is None or pd.isna(ac_val):
+            health["ac_v"] = None
             health["ac_power"] = "grey"
         else:
+            health["ac_v"] = ac_val
             if poa_val < 50 and avg_ac_power < 1000:
                 health["ac_power"] = "green" if (daylight_start <= ora <= DAYLIGHT_END) else "grey"
             else:
@@ -730,6 +734,8 @@ def analyze_site(date_str: str) -> None:
         # We need a quick lookup of previous alarms
         prev_alarm_map = {a.get("id"): a for a in active_anomalies_prev}
         
+        tg_messages = []
+        
         for inv_id in INVERTER_IDS:
             inv_label = f"INV {inv_id}"
             h = inverter_health.get(inv_label, {})
@@ -743,14 +749,16 @@ def analyze_site(date_str: str) -> None:
             if is_comms_lost:
                 if not was_comms_lost:
                     # New alarm
-                    current_active.append({
+                    alarm = {
                         "id": comms_alarm_id,
                         "inverter": inv_label,
                         "type": "COMMS LOST",
                         "severity": "grey",
                         "trip_time": timestamp,
                         "message": "Missing data for this component."
-                    })
+                    }
+                    current_active.append(alarm)
+                    tg_messages.append(f"⚠️ *{alarm['type']}*\nInverter: {alarm['inverter']}\nTime: {alarm['trip_time']}\n{alarm['message']}")
                 else:
                     # Carry over existing
                     current_active.append(prev_alarm_map[comms_alarm_id])
@@ -760,6 +768,7 @@ def analyze_site(date_str: str) -> None:
                     prev_alarm = prev_alarm_map[comms_alarm_id]
                     prev_alarm["recovery_time"] = timestamp
                     historical_trail.append(prev_alarm)
+                    tg_messages.append(f"✅ *RECOVERED*: {prev_alarm['type']}\nInverter: {prev_alarm['inverter']}\nTime: {timestamp}")
 
             # --- 2. PR Alarm ---
             pr_val = h.get("raw_pr")
@@ -773,14 +782,16 @@ def analyze_site(date_str: str) -> None:
             pr_yellow_thresh = settings.get("thresholds", DEFAULT_SETTINGS["thresholds"])["pr"].get("yellow", 75.0)
             if pr_val is not None and pr_val < pr_yellow_thresh and is_stabilized:
                 if not was_low_pr:
-                    current_active.append({
+                    alarm = {
                         "id": pr_alarm_id,
                         "inverter": inv_label,
                         "type": "LOW PR",
                         "severity": "red",
                         "trip_time": data_time_str, # Use ACTUAL time from data
                         "message": f"Performance Ratio dropped to {pr_val:.1f}%"
-                    })
+                    }
+                    current_active.append(alarm)
+                    tg_messages.append(f"🔴 *{alarm['type']}*\nInverter: {alarm['inverter']}\nTime: {alarm['trip_time']}\n{alarm['message']}")
                 else:
                     # Carry over
                     prev_alarm = prev_alarm_map[pr_alarm_id]
@@ -792,6 +803,7 @@ def analyze_site(date_str: str) -> None:
                     prev_alarm = prev_alarm_map[pr_alarm_id]
                     prev_alarm["recovery_time"] = timestamp
                     historical_trail.append(prev_alarm)
+                    tg_messages.append(f"✅ *RECOVERED*: {prev_alarm['type']}\nInverter: {prev_alarm['inverter']}\nTime: {timestamp}")
                     
             # --- 3. AC Power Alarm ---
             ac_alarm_id = f"{inv_id}_LOW_AC"
@@ -800,14 +812,17 @@ def analyze_site(date_str: str) -> None:
             ac_status = h.get("ac_power")
             if ac_status in ["red", "yellow"]:
                 if not was_low_ac:
-                    current_active.append({
+                    alarm = {
                         "id": ac_alarm_id,
                         "inverter": inv_label,
                         "type": "LOW AC POWER" if ac_status == "yellow" else "INVERTER TRIPPED",
                         "severity": ac_status,
                         "trip_time": timestamp,
                         "message": "Power is critically below plant average." if ac_status == "yellow" else "Failed to produce >5% of plant average."
-                    })
+                    }
+                    current_active.append(alarm)
+                    icon = "🟡" if ac_status == "yellow" else "🔴"
+                    tg_messages.append(f"{icon} *{alarm['type']}*\nInverter: {alarm['inverter']}\nTime: {alarm['trip_time']}\n{alarm['message']}")
                 else:
                     current_active.append(prev_alarm_map[ac_alarm_id])
             else:
@@ -815,6 +830,7 @@ def analyze_site(date_str: str) -> None:
                     prev_alarm = prev_alarm_map[ac_alarm_id]
                     prev_alarm["recovery_time"] = timestamp
                     historical_trail.append(prev_alarm)
+                    tg_messages.append(f"✅ *RECOVERED*: {prev_alarm['type']}\nInverter: {prev_alarm['inverter']}\nTime: {timestamp}")
                     
         # --- 4. DC MPPT Faults ---
         active_dc_fault_ids = set()
@@ -824,14 +840,17 @@ def analyze_site(date_str: str) -> None:
             is_new = alarm_id not in prev_alarm_map
             
             if is_new:
-                current_active.append({
+                alarm = {
                     "id": alarm_id,
                     "inverter": f"INV {f['Inverter']}",
                     "type": f['Type'],
                     "severity": "red" if f['Severity'] == "CRITICAL" else "yellow",
                     "trip_time": timestamp,
-                    "message": f"MPPT {f['MPPT']} Measured: {f['Measured']}A (Expected: {f['Expected']}A) for {f['Duration']*15}m."
-                })
+                    "message": f"MPPT {f['MPPT']} Measured: {f['Measured']}A (Expected: {f['Expected']}A) for {f['Duration']}m."
+                }
+                current_active.append(alarm)
+                icon = "🔴" if f['Severity'] == "CRITICAL" else "🟡"
+                tg_messages.append(f"{icon} *{alarm['type']}*\nInverter: {alarm['inverter']}\nTime: {alarm['trip_time']}\n{alarm['message']}")
             else:
                 current_active.append(prev_alarm_map[alarm_id])
                 
@@ -840,6 +859,11 @@ def analyze_site(date_str: str) -> None:
             if past_alarm_id.startswith("DC_") and past_alarm_id not in active_dc_fault_ids:
                 past_alarm["recovery_time"] = timestamp
                 historical_trail.append(past_alarm)
+                tg_messages.append(f"✅ *RECOVERED*: {past_alarm['type']}\nInverter: {past_alarm['inverter']}\nTime: {timestamp}")
+
+        # Send Telegram updates if any
+        for msg in tg_messages:
+            send_telegram_notification(msg, settings)
 
         # Preserve any other active anomalies that we didn't handle in this loop
         handled_ids = set([a["id"] for a in current_active] + [a["id"] for a in historical_trail if "recovery_time" in a])
@@ -881,25 +905,25 @@ def analyze_site(date_str: str) -> None:
 
 class MetricFileHandler(FileSystemEventHandler):
     def on_created(self, event):
-        if event.is_directory or not event.src_path.endswith(".xlsx"):
+        if event.is_directory or not event.src_path.endswith(".csv"):
             return
-        time.sleep(2)
+        time.sleep(1)
         self._check_and_analyze()
 
     def on_modified(self, event):
-        if event.is_directory or not event.src_path.endswith(".xlsx"):
+        if event.is_directory or not event.src_path.endswith(".csv"):
             return
         self._check_and_analyze()
 
     def _check_and_analyze(self):
         today = datetime.now().strftime("%Y-%m-%d")
         required = [
-            f"PR_{today}.xlsx",
-            f"Potenza_AC_{today}.xlsx",
-            f"Corrente_DC_{today}.xlsx",
-            f"Resistenza_Isolamento_{today}.xlsx",
-            f"Temperatura_{today}.xlsx",
-            f"Irraggiamento_{today}.xlsx",
+            f"PR_{today}.csv",
+            f"Potenza_AC_{today}.csv",
+            f"Corrente_DC_{today}.csv",
+            f"Resistenza_Isolamento_{today}.csv",
+            f"Temperatura_{today}.csv",
+            f"Irraggiamento_{today}.csv",
         ]
 
         present = [f for f in required if (DATA_DIR / f).exists()]

@@ -29,14 +29,35 @@ MPPT_CONFIG = {
     "TX3-11": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1], "TX3-12": [2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1]
 }
 
-def get_current_streak(mask):
-    """Return the currently active contiguous True streak length at the end of valid data."""
-    s = mask.dropna().astype(int)
-    if s.empty or s.iloc[-1] == 0: 
+def get_current_streak_minutes(mask, times):
+    """Return the duration in minutes of the currently active fault streak."""
+    # Ensure we only look at non-NA data
+    combined = pd.concat([mask, times], axis=1).dropna()
+    if combined.empty: return 0
+    
+    s = combined.iloc[:, 0].astype(int)
+    t = combined.iloc[:, 1]
+    
+    if s.iloc[-1] == 0: 
         return 0
+        
     blocks = (s != s.shift()).cumsum()
     last_block = blocks.iloc[-1]
-    return int((blocks == last_block).sum())
+    last_streak_times = t[blocks == last_block]
+    
+    if last_streak_times.empty: return 0
+    
+    # Calculate duration based on Ora values (Decimal Hours)
+    def to_total_minutes(val):
+        h = int(val)
+        m = round((val - h) * 60)
+        return h * 60 + m
+        
+    start_m = to_total_minutes(last_streak_times.iloc[0])
+    end_m = to_total_minutes(last_streak_times.iloc[-1])
+    
+    # We add 15 minutes to account for the interval the last point represents
+    return int((end_m - start_m) + 15)
 
 def analyze_dc_current(dc_df: pd.DataFrame, output_md_path: Path, date_str: str):
     """Parses Corrente_DC dataset, calculates thresholds, and generates MD report."""
@@ -46,6 +67,11 @@ def analyze_dc_current(dc_df: pd.DataFrame, output_md_path: Path, date_str: str)
 
     # Clean data & filter daylight (06:30 - 19:00)
     df = dc_df.copy()
+    
+    # Internal fail-safe deduplication
+    if "Ora" in df.columns:
+        df = df.drop_duplicates(subset=["Ora"], keep="last").reset_index(drop=True)
+
     df.replace(['x', ' x '], np.nan, inplace=True)
     if "Ora" in df.columns:
         df["Ora"] = pd.to_numeric(df["Ora"], errors="coerce")
@@ -108,29 +134,29 @@ def analyze_dc_current(dc_df: pd.DataFrame, output_md_path: Path, date_str: str)
 
             # RULE: OPEN CIRCUIT (Critical)
             cond_openC = (series_filled < 0.1 * expected_current.ffill()) & (expected_current.ffill() > 1.0)
-            openC_streak = get_current_streak(cond_openC)
+            open_streak_m = get_current_streak_minutes(cond_openC, df["Ora"])
 
             # RULE: SINGLE STRING LOSS (Warning, only 2-string configs)
-            ss_loss_streak = 0
+            ss_loss_m = 0
             if string_count == 2 and not inv_2str_median.isna().all():
                 cond_ssLoss = (series_filled >= 0.4 * inv_2str_median.ffill()) & (series_filled <= 0.6 * inv_2str_median.ffill()) & (inv_2str_median.ffill() > 2.0)
-                ss_loss_streak = get_current_streak(cond_ssLoss)
+                ss_loss_m = get_current_streak_minutes(cond_ssLoss, df["Ora"])
 
             # RULE: UNDERPERFORMANCE ABSOLUTE (Warning)
-            up_streak = 0
+            up_m = 0
             same_inv_peer_median = inv_2str_median if string_count == 2 else (inv_2str_median / 2.0)
             if not same_inv_peer_median.isna().all():
                 cond_up = (series_filled < 0.75 * same_inv_peer_median.ffill()) & (series_filled > 0.0) & (same_inv_peer_median.ffill() > 1.0)
-                up_streak = get_current_streak(cond_up)
+                up_m = get_current_streak_minutes(cond_up, df["Ora"])
 
             # RULE: CROSS-INVERTER DEVIATION (Warning)
-            cross_streak = 0
+            cross_m = 0
             # To compare cross-domain safely, just check 2-string inverters matching this MPPT's string_count
             domain_peer_cols = [f"Corrente DC MPPT {mppt_num} (INV {oi}) [A]" for oi, ocfg in MPPT_CONFIG.items() if oi[:3] == domain and ocfg[mppt_idx] == string_count and f"Corrente DC MPPT {mppt_num} (INV {oi}) [A]" in df.columns]
             if domain_peer_cols:
                 domain_median = df[domain_peer_cols].median(axis=1)
                 cond_cross = (series_filled < 0.65 * domain_median.ffill()) & (series_filled > 0.0) & (domain_median.ffill() > 2.0)
-                cross_streak = get_current_streak(cond_cross)
+                cross_m = get_current_streak_minutes(cond_cross, df["Ora"])
 
             # Add Normal Info
             if string_count == 1:
@@ -138,17 +164,17 @@ def analyze_dc_current(dc_df: pd.DataFrame, output_md_path: Path, date_str: str)
                 if "Confirmed normal 1-string MPPT currents observed" not in inv_summary[inv]["Notes"]:
                     inv_summary[inv]["Notes"].append("Confirmed normal 1-string MPPT currents observed")
 
-            if openC_streak >= 2:
-                faults.append({"Inverter": inv, "MPPT": mppt_num, "Strings": string_count, "Type": "OPEN CIRCUIT", "Severity": "CRITICAL", "Measured": f"{series.dropna().tail(3).median():.1f}", "Expected": f"{expected_current.dropna().tail(3).median():.1f}", "Duration": int(openC_streak), "Deviation": "<10%", "Action": "Check connection"})
+            if open_streak_m >= 15:
+                faults.append({"Inverter": inv, "MPPT": mppt_num, "Strings": string_count, "Type": "OPEN CIRCUIT", "Severity": "CRITICAL", "Measured": f"{series.dropna().tail(3).median():.1f}", "Expected": f"{expected_current.dropna().tail(3).median():.1f}", "Duration": int(open_streak_m), "Deviation": "<10%", "Action": "Check connection"})
                 inv_summary[inv]["Critical"] += 1
-            elif string_count == 2 and ss_loss_streak >= 4:
-                faults.append({"Inverter": inv, "MPPT": mppt_num, "Strings": string_count, "Type": "SINGLE STRING LOSS", "Severity": "WARNING", "Measured": f"{series.dropna().tail(3).median():.1f}", "Expected": f"{expected_current.dropna().tail(3).median():.1f}", "Duration": int(ss_loss_streak), "Deviation": "~50%", "Action": "Check fuse"})
+            elif string_count == 2 and ss_loss_m >= 45:
+                faults.append({"Inverter": inv, "MPPT": mppt_num, "Strings": string_count, "Type": "SINGLE STRING LOSS", "Severity": "WARNING", "Measured": f"{series.dropna().tail(3).median():.1f}", "Expected": f"{expected_current.dropna().tail(3).median():.1f}", "Duration": int(ss_loss_m), "Deviation": "~50%", "Action": "Check fuse"})
                 inv_summary[inv]["Warnings"] += 1
-            elif cross_streak >= 6:
-                faults.append({"Inverter": inv, "MPPT": mppt_num, "Strings": string_count, "Type": "CROSS-INVERTER DEVIATION", "Severity": "WARNING", "Measured": f"{series.dropna().tail(3).median():.1f}", "Expected": f"{expected_current.dropna().tail(3).median():.1f}", "Duration": int(cross_streak), "Deviation": "<65%", "Action": "Check domain shading"})
+            elif cross_m >= 60:
+                faults.append({"Inverter": inv, "MPPT": mppt_num, "Strings": string_count, "Type": "CROSS-INVERTER DEVIATION", "Severity": "WARNING", "Measured": f"{series.dropna().tail(3).median():.1f}", "Expected": f"{expected_current.dropna().tail(3).median():.1f}", "Duration": int(cross_m), "Deviation": "<65%", "Action": "Check domain shading"})
                 inv_summary[inv]["Warnings"] += 1
-            elif up_streak >= 4:
-                faults.append({"Inverter": inv, "MPPT": mppt_num, "Strings": string_count, "Type": "UNDERPERFORMANCE - ABSOLUTE", "Severity": "WARNING", "Measured": f"{series.dropna().tail(3).median():.1f}", "Expected": f"{expected_current.dropna().tail(3).median():.1f}", "Duration": int(up_streak), "Deviation": "<75%", "Action": "Check shading/soiling"})
+            elif up_m >= 45:
+                faults.append({"Inverter": inv, "MPPT": mppt_num, "Strings": string_count, "Type": "UNDERPERFORMANCE - ABSOLUTE", "Severity": "WARNING", "Measured": f"{series.dropna().tail(3).median():.1f}", "Expected": f"{expected_current.dropna().tail(3).median():.1f}", "Duration": int(up_m), "Deviation": "<75%", "Action": "Check shading/soiling"})
                 inv_summary[inv]["Warnings"] += 1
 
     # Formatting structured Markdown report

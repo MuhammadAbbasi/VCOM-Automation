@@ -63,55 +63,18 @@ def parse_italian_number(s: str):
 
 
 # ---------------------------------------------------------------------------
-# Excel append
+# CSV append
 # ---------------------------------------------------------------------------
 
-def append_df_to_excel(filename: str, df: pd.DataFrame, sheet_name: str = "Sheet1") -> None:
-    """Append df to an existing Excel file, or create it if it doesn't exist.
-    
-    If the existing file is corrupted (Bad CRC / malformed XML — common on
-    network shares), the corrupt file is backed up and a fresh one is created
-    so that the extraction cycle can continue without crashing.
-    """
-    if not os.path.exists(filename):
-        df.to_excel(filename, index=False, sheet_name=sheet_name)
-        return
-
-    try:
-        with pd.ExcelWriter(filename, engine="openpyxl", mode="a", if_sheet_exists="overlay") as writer:
-            write_header = sheet_name not in writer.sheets
-            startrow = writer.sheets[sheet_name].max_row if not write_header else 0
-            df.to_excel(writer, sheet_name=sheet_name, startrow=startrow, index=False, header=write_header)
-
-    except (BadZipFile, Exception) as exc:
-        # Catch corrupted-file errors: BadZipFile, XML ParseError, etc.
-        exc_name = type(exc).__name__
-        if isinstance(exc, BadZipFile) or "ParseError" in exc_name or "not well-formed" in str(exc):
-            logger.warning(
-                f"Corrupted Excel detected ({exc_name}): {filename} — "
-                f"backing up and creating fresh file."
-            )
-            # Back up the corrupted file
-            backup = filename + f".corrupt_{datetime.now().strftime('%H%M%S')}.bak"
-            try:
-                shutil.copy2(filename, backup)
-                logger.info(f"Backed up corrupt file to {backup}")
-            except Exception as copy_err:
-                logger.warning(f"Could not back up corrupt file: {copy_err}")
-
-            # Remove the corrupted file and write fresh
-            try:
-                os.remove(filename)
-            except Exception:
-                pass
-            df.to_excel(filename, index=False, sheet_name=sheet_name)
-            logger.info(f"Created fresh Excel: {filename}")
-        else:
-            raise  # Re-raise unexpected errors
+def append_df_to_csv(filename: str, df: pd.DataFrame) -> None:
+    """Append df to an existing CSV file, or create it if it doesn't exist."""
+    exists = os.path.exists(filename)
+    # We use mode='a' to append, and header=True only if the file doesn't exist
+    df.to_csv(filename, mode='a', index=False, header=not exists, encoding="utf-8")
 
 
 def export_metric(df: pd.DataFrame, prefix: str) -> None:
-    """Stamp with current time and append to the daily Excel file."""
+    """Stamp with current time and append to the daily CSV file."""
     if df is None or df.empty:
         logger.warning(f"[{prefix}] Empty DataFrame — skipping export.")
         return
@@ -122,8 +85,8 @@ def export_metric(df: pd.DataFrame, prefix: str) -> None:
     if "Timestamp Fetch" not in df.columns:
         df.insert(0, "Timestamp Fetch", current_time)
 
-    filepath = str(DATA_DIR / f"{prefix}_{today_str()}.xlsx")
-    append_df_to_excel(filepath, df)
+    filepath = str(DATA_DIR / f"{prefix}_{today_str()}.csv")
+    append_df_to_csv(filepath, df)
     logger.info(f"[OK] Appended {len(df)} rows -> {filepath}")
 
 

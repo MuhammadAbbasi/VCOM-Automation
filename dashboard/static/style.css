@@ -405,15 +405,15 @@ section > h2 {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 0.75rem;
-  width: 90%;
-  max-width: 600px;
+  width: 95%;
+  max-width: 850px;
   padding: 1.5rem;
   box-shadow: 0 10px 40px rgba(0,0,0,0.8);
 }
 
 .settings-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 2rem;
 }
 
@@ -437,7 +437,9 @@ section > h2 {
   gap: 0.25rem;
 }
 
-.settings-column input[type="number"] {
+.settings-column input[type="number"],
+.settings-column input[type="text"],
+.settings-column input[type="password"] {
   background: var(--surface);
   border: 1px solid var(--border);
   color: var(--text);
