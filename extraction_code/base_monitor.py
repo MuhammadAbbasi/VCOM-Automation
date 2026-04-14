@@ -66,15 +66,13 @@ def parse_italian_number(s: str):
 # CSV append
 # ---------------------------------------------------------------------------
 
-def append_df_to_csv(filename: str, df: pd.DataFrame) -> None:
-    """Append df to an existing CSV file, or create it if it doesn't exist."""
-    exists = os.path.exists(filename)
-    # We use mode='a' to append, and header=True only if the file doesn't exist
-    df.to_csv(filename, mode='a', index=False, header=not exists, encoding="utf-8")
+def write_df_to_csv(filename: str, df: pd.DataFrame) -> None:
+    """Write df to a CSV file (overwriting existing)."""
+    df.to_csv(filename, index=False, header=True, encoding="utf-8")
 
 
 def export_metric(df: pd.DataFrame, prefix: str) -> None:
-    """Stamp with current time and append to the daily CSV file."""
+    """Stamp with current time and overwrite the daily CSV file with latest data."""
     if df is None or df.empty:
         logger.warning(f"[{prefix}] Empty DataFrame — skipping export.")
         return
@@ -86,8 +84,8 @@ def export_metric(df: pd.DataFrame, prefix: str) -> None:
         df.insert(0, "Timestamp Fetch", current_time)
 
     filepath = str(DATA_DIR / f"{prefix}_{today_str()}.csv")
-    append_df_to_csv(filepath, df)
-    logger.info(f"[OK] Appended {len(df)} rows -> {filepath}")
+    write_df_to_csv(filepath, df)
+    logger.info(f"[OK] Overwritten with {len(df)} rows -> {filepath}")
 
 
 # ---------------------------------------------------------------------------

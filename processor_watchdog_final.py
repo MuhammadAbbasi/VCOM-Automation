@@ -402,16 +402,25 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
             else:
                 health["temp"] = "green"
 
-        # DC Current LED (average of all MPPTs for this inverter)
-        # Thresholds adjusted for real-world conditions (late afternoon DC ~1-2A/MPPT is normal)
+        # DC Current LED (average of all MPPTs or total inverter current)
         dc_values = []
         if dc_row is not None:
-            for mppt in range(1, 13):  # 12 MPPTs per inverter
+            # 1. Try finding specific MPPT columns (standard naming)
+            for mppt in range(1, 13):
                 dc_col = f"Corrente DC MPPT {mppt} (INV {inv_id}) [A]"
                 if dc_col in dc_row.index:
                     val = dc_row[dc_col]
                     if val is not None and not pd.isna(val):
                         dc_values.append(val)
+            
+            # 2. If no MPPT columns found, try finding ANY column with DC and Inv ID
+            # This handles 'Corrente DC (INV TX#-##) [A]' or other variants
+            if not dc_values:
+                for col in dc_row.index:
+                    if "Corrente DC" in col and inv_id in col:
+                        val = dc_row[col]
+                        if val is not None and not pd.isna(val):
+                            dc_values.append(val)
 
         if dc_values:
             avg_dc = float(np.mean(dc_values))

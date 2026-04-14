@@ -100,13 +100,15 @@ def analyze_dc_current(dc_df: pd.DataFrame, output_md_path: Path, date_str: str)
         mppt_cols = [c for c in inv_cols if "MPPT" in c]
         
         # Inverter Offline exceptions
-        if not mppt_cols:
+        if not inv_cols:
             inv_summary[inv]["Status"] = "Offline"
-            inv_summary[inv]["Notes"].append("Appears fully offline/aggregate only" if inv_cols else "No channels data")
+            inv_summary[inv]["Notes"].append("No channels data found in CSV")
             continue
-        if df[mppt_cols].isna().all(axis=None):
+            
+        # Check if all available columns (MPPT or aggregate) are NaN
+        if df[inv_cols].isna().all(axis=None):
             inv_summary[inv]["Status"] = "Offline"
-            inv_summary[inv]["Notes"].append("All MPPTs read missing/x all day")
+            inv_summary[inv]["Notes"].append("All data reads missing/x all day")
             continue
 
         # Single Inverter Medians
@@ -120,7 +122,18 @@ def analyze_dc_current(dc_df: pd.DataFrame, output_md_path: Path, date_str: str)
         for mppt_idx, string_count in enumerate(mppt_cfg):
             mppt_num = mppt_idx + 1
             col_name = f"Corrente DC MPPT {mppt_num} (INV {inv}) [A]"
-            if col_name not in df.columns: continue
+            
+            # Fallback for aggregate columns (e.g., if MPPT 1 is missing, try total)
+            if col_name not in df.columns:
+                if mppt_num == 1:
+                    alt_col = f"Corrente DC (INV {inv}) [A]"
+                    if alt_col in df.columns:
+                        col_name = alt_col
+                        logger.info(f"Using aggregate DC column {col_name} for MPPT 1 (Inverter {inv})")
+                    else:
+                        continue
+                else:
+                    continue
             
             series = df[col_name]
             if series.isna().all(): continue
