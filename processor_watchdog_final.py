@@ -294,6 +294,18 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
                 val = ac_row.get(c)
                 if pd.isna(val) or str(val).strip().lower() in ['x', '']:
                     latest_ac_missing.add(c)
+        
+        # Site-wide data drop history
+        plant_drop_history = []
+        if not ac_dedup.empty:
+            hist_day = ac_dedup[(ac_dedup["Ora_num"] >= daylight_start) & (ac_dedup["Ora_num"] <= DAYLIGHT_END)]
+            hist_day = hist_day.sort_values("Ora_num")
+            for _, row in hist_day.iterrows():
+                v_count = sum(1 for c in ac_cols if pd.notna(row.get(c)) and str(row.get(c)).strip().lower() not in ['x', ''])
+                if v_count < 2:
+                    plant_drop_history.append({"ora": row.get("Ora"), "time": format_ora(row.get("Ora"))})
+    else:
+        plant_drop_history = []
 
     # Get latest temp row (deduplicated by Ora)
     temp_row = None
@@ -504,7 +516,7 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
 
         inverter_health[inv_label] = health
 
-    return inverter_health
+    return inverter_health, plant_drop_history
 
 
 # ---------------------------------------------------------------------------
@@ -566,13 +578,14 @@ def compute_downtime(ac_df: pd.DataFrame, irrad_df: pd.DataFrame, daylight_start
             continue
             
         data = pd.to_numeric(df_day[ac_col], errors='coerce')
-        is_zero = (data == 0.0)
+        # Treat both 0.0 and missing (NaN) as off-time
+        is_off = (data <= 0.05) | (data.isna())
         
-        zero_indices = is_zero[is_zero].index
+        zero_indices = is_off[is_off].index
         if len(zero_indices) > 0:
-            # Group contiguous zeros to find the latest block
-            blocks = (is_zero != is_zero.shift()).cumsum()
-            zero_blocks = blocks[is_zero]
+            # Group contiguous off-states
+            blocks = (is_off != is_off.shift()).cumsum()
+            zero_blocks = blocks[is_off]
             last_block_id = zero_blocks.iloc[-1]
             last_block_indices = zero_blocks[zero_blocks == last_block_id].index
             
@@ -603,29 +616,33 @@ def compute_downtime(ac_df: pd.DataFrame, irrad_df: pd.DataFrame, daylight_start
                 last_poa = f"{last_poa_val:.1f}"
 
             def ora_to_minutes(o):
-                """Convert decimal hour (e.g., 8.1666) or HH.MM style float to total minutes."""
+                """Convert float in HH.MM style (e.g., 8.30 = 8:30) used by VCOM to total minutes."""
                 if pd.isna(o): return 0
                 try:
                     f = float(o)
-                    # Handle both decimal hour (8.5 = 8:30) and HH.MM (8.30 = 8:30)
-                    # The VCOM Ora column is typically decimal hours
                     hours = int(f)
-                    minutes = int(round((f - hours) * 60))
+                    # Extract the decimal part as minutes (e.g., .30 * 100 = 30)
+                    minutes = int(round((f - hours) * 100))
+                    # Fallback for rare cases where it might be decimal
+                    if minutes >= 60:
+                        minutes = int(round((f - hours) * 60))
                     return hours * 60 + minutes
                 except: return 0
 
             stop_min = ora_to_minutes(df_day.loc[idx_start].get("Ora"))
             
-            # If it's recovered, use recovery time, else use last available data time
+            # If it's recovered, use recovery time, else use the time of the last point analyzed in this block
             if started_again == "still off":
-                end_min = ora_to_minutes(df_day.loc[last_data_idx].get("Ora"))
+                end_min = ora_to_minutes(df_day.loc[idx_end].get("Ora"))
             else:
-                # We used format_ora(df_day.loc[rec_idx].get("Ora")) to get started_again string
                 end_min = ora_to_minutes(df_day.loc[rec_idx].get("Ora"))
             
             # Duration in minutes
             total_time_off_calc = end_min - stop_min
-            if total_time_off_calc < 0: total_time_off_calc = 0 # Safety
+            if total_time_off_calc <= 0 and started_again == "still off":
+                # If stopped at the last row, at least it's a 5-min interval
+                total_time_off_calc = 5 
+
 
             if total_time_off_calc >= min_downtime_minutes:
                 downtime_tracker[inv_label] = {
@@ -665,6 +682,7 @@ def compute_macro_health(inverter_health: dict, daylight_start: float = 7.0) -> 
 
 def analyze_site(date_str: str) -> None:
     """Main analysis: load data, compute health, write JSON."""
+    plant_drop_history = []
     try:
         logger.info(f"Starting analysis for {date_str}...")
 
@@ -674,7 +692,6 @@ def analyze_site(date_str: str) -> None:
         pr_df = load_metric(date_str, "PR")
         temp_df = load_metric(date_str, "Temperatura")
         dc_df = load_metric(date_str, "Corrente_DC")
-        resist_df = load_metric(date_str, "Resistenza_Isolamento")
         irrad_df = load_metric(date_str, "Irraggiamento")
 
         if ac_df is None:
@@ -689,7 +706,7 @@ def analyze_site(date_str: str) -> None:
 
         # Compute health from latest values
         logger.info("Computing health flags...")
-        inverter_health = compute_latest_health(date_str, ac_df, temp_df, dc_df, pr_df, irrad_df=irrad_df, daylight_start=daylight_start, settings=settings)
+        inverter_health, plant_drop_history = compute_latest_health(date_str, ac_df, temp_df, dc_df, pr_df, irrad_df=irrad_df, daylight_start=daylight_start, settings=settings)
         macro_health = compute_macro_health(inverter_health, daylight_start=daylight_start)
         
         # Latest sync from extraction status if available
@@ -708,8 +725,19 @@ def analyze_site(date_str: str) -> None:
 
         logger.info("Evaluating MPPT DC Data...")
         md_report_path = DATA_DIR / f"mppt_analysis_report_{date_str}.md"
-        dc_faults = analyze_dc_current(dc_df, md_report_path, date_str)
-        if dc_faults is None: dc_faults = []
+        dc_analysis_results = analyze_dc_current(dc_df, md_report_path, date_str)
+        
+        if isinstance(dc_analysis_results, dict):
+            dc_faults = dc_analysis_results.get("faults", [])
+            mppt_details = dc_analysis_results.get("mppt_details", {})
+        else:
+            dc_faults = dc_analysis_results if dc_analysis_results else []
+            mppt_details = {}
+
+        # Add MPPT details to inverter_health
+        for inv_label, details in mppt_details.items():
+            if inv_label in inverter_health:
+                inverter_health[inv_label]["mppt_data"] = details
         # -----------------------------------
         
         # Compute Downtime array
@@ -744,6 +772,46 @@ def analyze_site(date_str: str) -> None:
         prev_alarm_map = {a.get("id"): a for a in active_anomalies_prev}
         
         tg_messages = []
+
+        # --- Site-Wide Data Drop Alarm ---
+        if plant_drop_history:
+            # Find the start of the latest contiguous block of drops
+            first_drop_time = plant_drop_history[-1]["time"]
+            # If there are multiple drops, find where the latest block starts
+            all_drop_oras = [d["ora"] for d in plant_drop_history]
+            if len(all_drop_oras) > 1:
+                # Iterate backwards to find gap
+                idx = len(all_drop_oras) - 1
+                while idx > 0:
+                    # In HH.MM style, a 5-min gap is 0.05
+                    diff = abs(all_drop_oras[idx] - all_drop_oras[idx-1])
+                    if diff > 0.06: # More than 5 mins (plus buffer for floats)
+                        break
+                    idx -= 1
+                first_drop_time = plant_drop_history[idx]["time"]
+
+            drop_alarm_id = "SITE_DATA_DROP"
+            if drop_alarm_id not in prev_alarm_map:
+                alarm = {
+                    "id": drop_alarm_id,
+                    "inverter": "SITE",
+                    "type": "PLANT DATA DROP",
+                    "severity": "red",
+                    "trip_time": first_drop_time,
+                    "message": f"Global data outage detected starting at {first_drop_time}."
+                }
+                current_active.append(alarm)
+                tg_messages.append(f"📡 *{alarm['type']}*\nSystem: {alarm['inverter']}\nTime: {alarm['trip_time']}\n{alarm['message']}")
+            else:
+                # Carry over and maybe update trip_time to be earlier if we found an earlier start
+                carried = prev_alarm_map[drop_alarm_id]
+                carried["trip_time"] = first_drop_time
+                current_active.append(carried)
+        elif "SITE_DATA_DROP" in prev_alarm_map:
+             prev_alarm = prev_alarm_map["SITE_DATA_DROP"]
+             prev_alarm["recovery_time"] = timestamp
+             historical_trail.append(prev_alarm)
+             tg_messages.append(f"✅ *RECOVERED*: {prev_alarm['type']}\nSystem: SITE\nTime: {timestamp}")
         
         for inv_id in INVERTER_IDS:
             inv_label = f"INV {inv_id}"
@@ -880,12 +948,23 @@ def analyze_site(date_str: str) -> None:
             if a.get("id") not in handled_ids:
                 current_active.append(a)
                 
+        # Load extraction status for dashboard ingestion cards
+        file_status = {}
+        if status_path.exists():
+            try:
+                with open(status_path, "r", encoding="utf-8") as f:
+                    estatus = json.load(f)
+                    file_status = estatus.get(date_str, {})
+            except Exception:
+                pass
+
         snapshot = {
             "macro_health": macro_health,
             "inverter_health": inverter_health,
             "active_anomalies": current_active,
             "historical_trail": historical_trail,
-            "downtime_tracker": downtime_tracker
+            "downtime_tracker": downtime_tracker,
+            "file_status": file_status
         }
 
         # Save merged data (keep last 50 timestamps)

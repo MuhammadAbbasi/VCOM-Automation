@@ -198,8 +198,10 @@ def main() -> None:
 
     print("[EXTRACTION] Initializing Playwright...", flush=True)
     with sync_playwright() as p:
-        print("[EXTRACTION] Launching Chromium (visible)...", flush=True)
-        browser = p.chromium.launch(headless=False)
+        # Allow headless mode via environment variable (default to false as requested)
+        is_headless = os.environ.get("VCOM_HEADLESS", "false").lower() == "true"
+        print(f"[EXTRACTION] Launching Chromium (headless={is_headless})...", flush=True)
+        browser = p.chromium.launch(headless=is_headless)
         context = browser.new_context(viewport={"width": 1450, "height": 900})
         page = context.new_page()
 

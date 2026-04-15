@@ -1,18 +1,19 @@
 /**
  * app.js — Mazara SCADA Monitor frontend logic.
  *
- * Polls /api/status every 10 seconds and updates all 5 dashboard sections:
- *   1. Macro health metrics (total / online / tripped / comms lost)
- *   2. Data ingestion status (6 file cards)
- *   3. Inverter health matrix (36 LED cards)
- *   4. Active diagnostic alerts
- *   5. Historical alarm trail (newest-first, max 100 rows)
+ * WebSocket-based real-time dashboard with 5 tabs:
+ *   Tab 1 (Overview): Macro health, ingestion, LED matrix, alerts, downtime
+ *   Tab 2 (PR): Performance Ratio detail table for all 36 inverters
+ *   Tab 3 (Temp): Temperature detail table for all 36 inverters
+ *   Tab 4 (DC): DC Current detail table for all 36 inverters
+ *   Tab 5 (AC): AC Power detail table for all 36 inverters
  */
 
 let socket;
 let reconnectInterval = 2000;
 let currentConfig = null;
 let historicalData = [];
+let lastData = null; // cache for tab switching
 
 // Ordered list of inverter names matching the analyser
 const INVERTER_NAMES = [
@@ -30,6 +31,14 @@ const FILE_LABELS = {
   Irraggiamento: "Irraggiamento",
 };
 
+// Sort state for detail tables
+const sortState = {
+  pr:   { column: "value", direction: "desc" },
+  temp: { column: "value", direction: "desc" },
+  dc:   { column: "value", direction: "desc" },
+  ac:   { column: "value", direction: "desc" },
+};
+
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 function el(id) { return document.getElementById(id); }
@@ -40,6 +49,11 @@ function safeNum(v, fallback = "—") {
 
 function now() {
   return new Date().toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function getDomain(name) {
+  // "INV TX1-01" → "TX1"
+  return name.replace("INV ", "").substring(0, 3);
 }
 
 // ─── 1. Macro health ──────────────────────────────────────────────────────
@@ -265,6 +279,361 @@ function updateDowntime(data) {
   `).join("");
 }
 
+// ═══════════════════════════════════════════════════════════
+// 7. DETAIL TABS (PR, Temperature, DC Current, AC Power)
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * Generic detail table renderer.
+ * @param {Object}  opts
+ * @param {string}  opts.metric    - "pr" | "temp" | "dc" | "ac"
+ * @param {string}  opts.valueKey  - key in inverter_health flags, e.g. "pr_v"
+ * @param {string}  opts.statusKey - key for LED status, e.g. "pr"
+ * @param {string}  opts.unit      - "%" | "°C" | "A" | "W"
+ * @param {string}  opts.tbodyId   - target <tbody> id
+ * @param {Object}  opts.statIds   - { avg, max, min, extra } element IDs
+ * @param {boolean} opts.higherIsBetter - true for PR/DC/AC, false for Temp
+ * @param {Function} opts.formatValue - custom value formatter
+ * @param {Function} opts.formatExtra - custom extra stat formatter
+ * @param {Object}  data - full data payload
+ */
+function renderDetailTable(opts, data) {
+  const health = data.inverter_health || {};
+  const tbody  = el(opts.tbodyId);
+  if (!tbody) return;
+
+  // Collect all values
+  const rows = [];
+  INVERTER_NAMES.forEach(name => {
+    const flags = health[name] || {};
+    const rawVal = flags[opts.valueKey];
+    const status = flags[opts.statusKey] || "grey";
+    const domain = getDomain(name);
+    const shortName = name.replace("INV ", "");
+
+    rows.push({
+      name,
+      shortName,
+      domain,
+      value: (rawVal !== null && rawVal !== undefined && !isNaN(rawVal)) ? Number(rawVal) : null,
+      status,
+    });
+  });
+
+  // Calculate statistics
+  const validValues = rows.filter(r => r.value !== null).map(r => r.value);
+  const avg = validValues.length > 0 ? validValues.reduce((s, v) => s + v, 0) / validValues.length : null;
+  const maxVal = validValues.length > 0 ? Math.max(...validValues) : null;
+  const minVal = validValues.length > 0 ? Math.min(...validValues) : null;
+
+  // Update stat cards
+  if (el(opts.statIds.avg)) {
+    el(opts.statIds.avg).textContent = avg !== null ? opts.formatValue(avg) : "—";
+  }
+  if (el(opts.statIds.max)) {
+    el(opts.statIds.max).textContent = maxVal !== null ? opts.formatValue(maxVal) : "—";
+  }
+  if (el(opts.statIds.min)) {
+    el(opts.statIds.min).textContent = minVal !== null ? opts.formatValue(minVal) : "—";
+  }
+  if (el(opts.statIds.extra) && opts.formatExtra) {
+    el(opts.statIds.extra).textContent = opts.formatExtra(rows, validValues, avg);
+  }
+
+  // Sort rows
+  const state = sortState[opts.metric];
+  const sorted = [...rows].sort((a, b) => {
+    let va, vb;
+    switch (state.column) {
+      case "name": va = a.shortName; vb = b.shortName; break;
+      case "domain": va = a.domain; vb = b.domain; break;
+      case "value":
+      case "bar":
+        va = a.value !== null ? a.value : -Infinity;
+        vb = b.value !== null ? b.value : -Infinity;
+        break;
+      default: va = a.value; vb = b.value;
+    }
+    let cmp = 0;
+    if (typeof va === "string") cmp = va.localeCompare(vb);
+    else cmp = (va > vb) ? 1 : (va < vb) ? -1 : 0;
+    return state.direction === "asc" ? cmp : -cmp;
+  });
+
+  // Calculate bar scale — use max of all values for 100% width
+  const barMax = maxVal || 1;
+
+  // Render rows
+  if (sorted.length === 0 || validValues.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="empty-state">No data available yet</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = sorted.map(r => {
+    const valStr = r.value !== null ? opts.formatValue(r.value) : "—";
+    const statusLabel = getStatusLabel(r.status);
+
+    // Deviation from average
+    let devHtml = '<span class="deviation neutral">—</span>';
+    if (r.value !== null && avg !== null && avg !== 0) {
+      const devPct = ((r.value - avg) / avg) * 100;
+      const sign = devPct >= 0 ? "+" : "";
+      let devClass = "neutral";
+      if (opts.higherIsBetter) {
+        devClass = devPct >= 1 ? "positive" : devPct <= -3 ? "negative" : "neutral";
+      } else {
+        // For temp: lower is better
+        devClass = devPct <= -1 ? "positive" : devPct >= 3 ? "negative" : "neutral";
+      }
+      devHtml = `<span class="deviation ${devClass}">${sign}${devPct.toFixed(1)}%</span>`;
+    }
+
+    // Distribution bar
+    const barPct = r.value !== null ? Math.max(0, Math.min(100, (r.value / barMax) * 100)) : 0;
+    const avgPct = avg !== null ? Math.max(0, Math.min(100, (avg / barMax) * 100)) : 0;
+
+    return `
+      <tr>
+        <td><strong>${r.shortName}</strong></td>
+        <td><span class="domain-badge ${r.domain}">${r.domain}</span></td>
+        <td class="value-cell">${valStr}</td>
+        <td>${statusLabel}</td>
+        <td>${devHtml}</td>
+        <td>
+          <div class="dist-bar-container">
+            <div class="dist-bar ${r.status}" style="width:${barPct}%"></div>
+            <div class="dist-avg-marker" style="left:${avgPct}%" title="Plant Avg: ${avg !== null ? opts.formatValue(avg) : '—'}"></div>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join("");
+}
+
+function getStatusLabel(status) {
+  const labels = {
+    green:  "OK",
+    yellow: "Warning",
+    red:    "Critical",
+    grey:   "No Data",
+  };
+  return `<span class="status-pill ${status}"><span class="pill-dot"></span>${labels[status] || status}</span>`;
+}
+
+// ─── PR Detail ────────────────────────────────────────────────────────────
+
+function updatePRDetail(data) {
+  renderDetailTable({
+    metric: "pr",
+    valueKey: "pr_v",
+    statusKey: "pr",
+    unit: "%",
+    tbodyId: "pr-tbody",
+    statIds: { avg: "pr-avg", max: "pr-max", min: "pr-min", extra: "pr-ok-count" },
+    higherIsBetter: true,
+    formatValue: (v) => `${v.toFixed(1)}%`,
+    formatExtra: (rows, vals) => {
+      const okCount = vals.filter(v => v >= 85).length;
+      return `${okCount} / ${vals.length}`;
+    },
+  }, data);
+}
+
+// ─── Temperature Detail ──────────────────────────────────────────────────
+
+function updateTempDetail(data) {
+  renderDetailTable({
+    metric: "temp",
+    valueKey: "temp_v",
+    statusKey: "temp",
+    unit: "°C",
+    tbodyId: "temp-tbody",
+    statIds: { avg: "temp-avg", max: "temp-max", min: "temp-min", extra: "temp-ok-count" },
+    higherIsBetter: false,
+    formatValue: (v) => `${v.toFixed(1)}°C`,
+    formatExtra: (rows, vals) => {
+      const okCount = vals.filter(v => v <= 40).length;
+      return `${okCount} / ${vals.length}`;
+    },
+  }, data);
+}
+
+// ─── DC Current Detail ────────────────────────────────────────────────────
+
+function updateDCDetail(data) {
+  const container = document.getElementById("dc-tbody");
+  if (!container || !data || !data.inverter_health) return;
+
+  const invIds = Object.keys(data.inverter_health).sort();
+  const rows = invIds.map(id => {
+    const h = data.inverter_health[id];
+    return {
+      id: id,
+      shortName: id,
+      domain: h.domain || id.split("-")[0].replace("INV ", ""),
+      value: h.dc_v,
+      status: h.dc_current || "grey",
+      mppt_data: h.mppt_data || []
+    };
+  });
+
+  // Stats
+  const validValues = rows.filter(r => r.value !== null).map(r => r.value);
+  const avg = validValues.length > 0 ? validValues.reduce((a, b) => a + b, 0) / validValues.length : 0;
+  const maxVal = validValues.length > 0 ? Math.max(...validValues) : 0;
+  const minVal = validValues.length > 0 ? Math.min(...validValues) : 0;
+  
+  document.getElementById("dc-avg").textContent = `${avg.toFixed(2)} A`;
+  document.getElementById("dc-max").textContent = `${maxVal.toFixed(2)} A`;
+  document.getElementById("dc-min").textContent = `${minVal.toFixed(2)} A`;
+  document.getElementById("dc-ok-count").textContent = `${rows.filter(r => r.status === "green").length} / ${rows.length}`;
+
+  // Sorting (Reuse state from renderDetailTable if exists)
+  // For now just sort by ID
+  const sorted = rows;
+
+  container.innerHTML = sorted.map(r => {
+    const valStr = r.value !== null ? `${r.value.toFixed(2)} A` : "—";
+    const statusLabel = getStatusLabel(r.status);
+
+    // Deviation
+    let devHtml = '<span class="deviation neutral">—</span>';
+    if (r.value !== null && avg !== null && avg !== 0) {
+      const devPct = ((r.value - avg) / avg) * 100;
+      const sign = devPct >= 0 ? "+" : "";
+      const devClass = devPct >= 1 ? "positive" : devPct <= -5 ? "negative" : "neutral";
+      devHtml = `<span class="deviation ${devClass}">${sign}${devPct.toFixed(1)}%</span>`;
+    }
+
+    // MPPT Grid
+    let mpptGridHtml = '<div class="mppt-grid">';
+    if (r.mppt_data && r.mppt_data.length > 0) {
+        mpptGridHtml += r.mppt_data.map(m => {
+            let mColor = "grey";
+            if (m.v !== null && m.exp !== null && m.exp > 0.5) {
+                const ratio = m.v / m.exp;
+                if (ratio < 0.2) mColor = "red";
+                else if (ratio < 0.7) mColor = "yellow";
+                else mColor = "green";
+            } else if (m.strings === 0) {
+                mColor = "empty";
+            }
+            const title = `MPPT ${m.mppt} (${m.strings} strings): ${m.v !== null ? m.v.toFixed(1) : '—'}A (Exp: ${m.exp !== null ? m.exp.toFixed(1) : '—'}A)`;
+            return `<div class="mppt-dot ${mColor} strings-${m.strings}" title="${title}"></div>`;
+        }).join("");
+    } else {
+        mpptGridHtml += '<span class="empty-state">No MPPT data</span>';
+    }
+    mpptGridHtml += '</div>';
+
+    return `
+      <tr>
+        <td><strong>${r.shortName}</strong></td>
+        <td><span class="domain-badge ${r.domain}">${r.domain}</span></td>
+        <td class="value-cell">${valStr}</td>
+        <td>${statusLabel}</td>
+        <td>${devHtml}</td>
+        <td>${mpptGridHtml}</td>
+      </tr>
+    `;
+  }).join("");
+}
+
+// ─── AC Power Detail ──────────────────────────────────────────────────────
+
+function updateACDetail(data) {
+  renderDetailTable({
+    metric: "ac",
+    valueKey: "ac_v",
+    statusKey: "ac_power",
+    unit: "W",
+    tbodyId: "ac-tbody",
+    statIds: { avg: "ac-avg", max: "ac-max", min: "ac-min", extra: "ac-total" },
+    higherIsBetter: true,
+    formatValue: (v) => v >= 1000 ? `${(v/1000).toFixed(1)} kW` : `${Math.round(v)} W`,
+    formatExtra: (rows, vals) => {
+      const total = vals.reduce((s, v) => s + v, 0);
+      return total >= 1000000 ? `${(total/1000000).toFixed(2)} MW` : total >= 1000 ? `${(total/1000).toFixed(0)} kW` : `${Math.round(total)} W`;
+    },
+  }, data);
+}
+
+
+// ═══════════════════════════════════════════════════════════
+// TAB NAVIGATION
+// ═══════════════════════════════════════════════════════════
+
+function initTabs() {
+  const tabBtns = document.querySelectorAll(".tab-btn");
+  const tabContents = document.querySelectorAll(".tab-content");
+
+  tabBtns.forEach(btn => {
+    btn.addEventListener("click", () => {
+      const targetId = btn.dataset.tab;
+
+      // Deactivate all
+      tabBtns.forEach(b => b.classList.remove("active"));
+      tabContents.forEach(c => c.classList.remove("active"));
+
+      // Activate target
+      btn.classList.add("active");
+      const target = document.getElementById(targetId);
+      if (target) target.classList.add("active");
+
+      // Re-render detail tab with cached data if switching to it
+      if (lastData && targetId !== "tab-overview") {
+        renderActiveDetailTab();
+      }
+    });
+  });
+}
+
+function renderActiveDetailTab() {
+  if (!lastData) return;
+  const activeTab = document.querySelector(".tab-content.active");
+  if (!activeTab) return;
+  const id = activeTab.id;
+
+  if (id === "tab-pr")   updatePRDetail(lastData);
+  if (id === "tab-temp") updateTempDetail(lastData);
+  if (id === "tab-dc")   updateDCDetail(lastData);
+  if (id === "tab-ac")   updateACDetail(lastData);
+}
+
+// ─── Sort click handler for detail tables ──────────────────────────────────
+
+function initSortableHeaders() {
+  document.querySelectorAll(".detail-table th.sortable").forEach(th => {
+    th.addEventListener("click", () => {
+      const table = th.closest("table");
+      const tableId = table.id; // e.g. "pr-table"
+      const metric = tableId.replace("-table", ""); // e.g. "pr"
+      const col = th.dataset.sort;
+
+      const state = sortState[metric];
+      if (!state) return;
+
+      // Toggle direction or change column
+      if (state.column === col) {
+        state.direction = state.direction === "asc" ? "desc" : "asc";
+      } else {
+        state.column = col;
+        state.direction = "desc";
+      }
+
+      // Update header classes
+      table.querySelectorAll("th.sortable").forEach(h => {
+        h.classList.remove("sort-asc", "sort-desc");
+      });
+      th.classList.add(state.direction === "asc" ? "sort-asc" : "sort-desc");
+
+      // Re-render
+      renderActiveDetailTab();
+    });
+  });
+}
+
+
 // ─── WebSocket and Config ───────────────────────────────────────────────────
 
 function connectWebSocket() {
@@ -284,12 +653,20 @@ function connectWebSocket() {
       if (msg.type === "data_update") {
         const data = msg.data;
         if (!data || Object.keys(data).length === 0) return;
+        
+        lastData = data; // cache data
+        
+        // Always update overview
         updateMacro(data);
         updateIngestion(data);
         updateInverterGrid(data);
         updateAlerts(data);
         updateHistory(data);
         updateDowntime(data);
+        
+        // Update whichever detail tab is active
+        renderActiveDetailTab();
+        
         el("last-updated").textContent = `Last updated: ${now()}`;
       } else if (msg.type === "config_update") {
         applyConfig(msg.data);
@@ -367,19 +744,6 @@ function applyConfig(config) {
 }
 
 async function handleSaveSettings() {
-  const settingsMapping = {
-    "cfg-pr-green": ["thresholds", "pr", "green"],
-    "cfg-pr-yellow": ["thresholds", "pr", "yellow"],
-    "cfg-temp-yellow": ["thresholds", "temp", "yellow"],
-    "cfg-temp-red": ["thresholds", "temp", "red"],
-    "cfg-color-green": ["colors", "green"],
-    "cfg-color-yellow": ["colors", "yellow"],
-    "cfg-color-red": ["colors", "red"],
-    "cfg-color-grey": ["colors", "grey"],
-    "cfg-min-downtime": ["thresholds", "min_downtime_minutes"],
-    "cfg-collection-interval": ["collection_interval"]
-  };
-  
   const btn = el("save-settings-btn");
   if (btn.classList.contains("loading")) return;
   
@@ -495,6 +859,11 @@ async function handleRescan() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  // Initialize tabs
+  initTabs();
+  initSortableHeaders();
+  
+  // WebSocket
   connectWebSocket();
 
   const rescanBtn = el("rescan-btn");
@@ -520,6 +889,10 @@ document.addEventListener("DOMContentLoaded", () => {
   if (saveSettingsBtn) {
     saveSettingsBtn.addEventListener("click", handleSaveSettings);
   }
+
+  // Telegram test
+  const testTgBtn = el("test-tg-btn");
+  if (testTgBtn) testTgBtn.addEventListener("click", handleTestTelegram);
 
   // History Filter
   const filterEl = el("history-filter");

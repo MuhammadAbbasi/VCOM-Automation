@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  mazara-monitor:
+    build: .
+    container_name: mazara_vcom_automation
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./extracted_data:/app/extracted_data
+      - ./user_settings.json:/app/user_settings.json
+      - ./config.json:/app/config.json
+      - ./errors:/app/errors
+      - ./monitoring.log:/app/monitoring.log
+      - ./watchdog.log:/app/watchdog.log
+    environment:
+      - VCOM_HEADLESS=false
+      - PYTHONUNBUFFERED=1
+    # If using network/local storage for persistence, ensure these folders are created on the host

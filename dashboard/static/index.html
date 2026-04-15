@@ -27,45 +27,59 @@
   </div>
 </header>
 
-<main>
+<!-- ═══════════════════════════════════════════════════════════
+     Tab Navigation
+════════════════════════════════════════════════════════════ -->
+<nav class="tab-nav" id="tab-nav">
+  <button class="tab-btn active" data-tab="tab-overview">
+    <span class="tab-icon">📊</span> Overview
+  </button>
+  <button class="tab-btn" data-tab="tab-pr">
+    <span class="tab-icon">⚡</span> PR Detail
+  </button>
+  <button class="tab-btn" data-tab="tab-temp">
+    <span class="tab-icon">🌡️</span> Temperature
+  </button>
+  <button class="tab-btn" data-tab="tab-dc">
+    <span class="tab-icon">🔌</span> DC Current
+  </button>
+  <button class="tab-btn" data-tab="tab-ac">
+    <span class="tab-icon">⚙️</span> AC Power
+  </button>
+</nav>
 
-  <!-- ══════════════════════════════════════════════════════════
-       1. Macro Health
-  ═══════════════════════════════════════════════════════════ -->
+<!-- ═══════════════════════════════════════════════════════════
+     TAB 1: OVERVIEW (original content)
+════════════════════════════════════════════════════════════ -->
+<main id="tab-overview" class="tab-content active">
+
+  <!-- 1. Macro Health -->
   <section>
     <h2>Plant Overview</h2>
     <div id="metrics-grid">
-
       <div class="card metric-card">
         <div class="metric-value" id="val-total">36</div>
         <div class="metric-label">Total Inverters</div>
       </div>
-
       <div class="card metric-card online">
         <div class="metric-value" id="val-online">—</div>
         <div class="metric-label">Online</div>
       </div>
-
       <div class="card metric-card tripped">
         <div class="metric-value" id="val-tripped">—</div>
         <div class="metric-label">Tripped</div>
       </div>
-
       <div class="card metric-card comms">
         <div class="metric-value" id="val-comms">—</div>
         <div class="metric-label">Comms Lost</div>
       </div>
-
     </div>
   </section>
 
-  <!-- ══════════════════════════════════════════════════════════
-       2. Data Ingestion Status
-  ═══════════════════════════════════════════════════════════ -->
+  <!-- 2. Data Ingestion Status -->
   <section>
     <h2>Data Ingestion Status</h2>
     <div id="ingestion-grid">
-      <!-- Populated by app.js -->
       <div class="card file-card loading">
         <span class="file-name">PR Inverter</span>
         <span class="file-status"><span class="spinner"></span>loading</span>
@@ -99,9 +113,7 @@
     </div>
   </section>
 
-  <!-- ══════════════════════════════════════════════════════════
-       3. Inverter Health Matrix
-  ═══════════════════════════════════════════════════════════ -->
+  <!-- 3. Inverter Health Matrix -->
   <section>
     <h2>Inverter Health Matrix
       <span style="font-size:0.65rem;font-weight:400;color:var(--muted);margin-left:0.75rem;">
@@ -109,14 +121,11 @@
       </span>
     </h2>
     <div id="inverter-grid">
-      <!-- Populated by app.js -->
       <div class="empty-state" style="grid-column:1/-1;">Waiting for first data cycle…</div>
     </div>
   </section>
 
-  <!-- ══════════════════════════════════════════════════════════
-       4. Active Diagnostic Alerts
-  ═══════════════════════════════════════════════════════════ -->
+  <!-- 4. Active Diagnostic Alerts -->
   <section>
     <h2>Active Diagnostic Alerts</h2>
     <div id="alerts-container" class="alert-list">
@@ -124,9 +133,7 @@
     </div>
   </section>
 
-  <!-- ══════════════════════════════════════════════════════════
-       5. Historical Alarm Trail
-  ═══════════════════════════════════════════════════════════ -->
+  <!-- 5. Historical Alarm Trail -->
   <section>
     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
       <h2>Historical Alarm Trail <span style="font-size:0.65rem;font-weight:400;color:var(--muted);">(newest first · today · max 100)</span></h2>
@@ -134,7 +141,6 @@
         <label for="history-filter" style="color:var(--muted);">Filter:</label>
         <select id="history-filter" style="background:var(--surface); border:1px solid var(--border); color:var(--text); padding:0.3rem 0.5rem; border-radius:0.25rem;">
           <option value="ALL">All Categories</option>
-          <!-- Populated dynamically -->
         </select>
       </div>
     </div>
@@ -156,9 +162,7 @@
     </div>
   </section>
 
-  <!-- ══════════════════════════════════════════════════════════
-       6. Downtime Tracker
-  ═══════════════════════════════════════════════════════════ -->
+  <!-- 6. Downtime Tracker -->
   <section>
     <h2>Downtime Tracker <span id="downtime-subtitle" style="font-size:0.65rem;font-weight:400;color:var(--muted);">(Daylight Hours)</span></h2>
     <div class="alarm-table-wrapper">
@@ -180,16 +184,11 @@
     </div>
   </section>
 
-</main>
-
-  <!-- ══════════════════════════════════════════════════════════
-       7. Analysis Logic & Thresholds
-  ═══════════════════════════════════════════════════════════ -->
-  <section style="margin-top: 3rem;">
+  <!-- 7. Analysis Logic & Thresholds -->
+  <section style="margin-top: 1rem;">
     <h2>Analysis Logic & Thresholds</h2>
     <div class="card" style="padding: 1.5rem; background: rgba(59, 130, 246, 0.03); border-color: rgba(59, 130, 246, 0.2);">
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem;">
-        
         <div>
           <h3 style="font-size: 0.9rem; color: var(--accent); margin-bottom: 0.75rem;">PR (Performance Ratio)</h3>
           <ul style="list-style: none; font-size: 0.8rem; line-height: 1.6; color: var(--muted);">
@@ -199,7 +198,6 @@
             <li style="margin-top: 0.5rem; font-style: italic;">* Logic active 30m after production start (Stabilization)</li>
           </ul>
         </div>
-
         <div>
           <h3 style="font-size: 0.9rem; color: var(--accent); margin-bottom: 0.75rem;">Inverter Temperature</h3>
           <ul style="list-style: none; font-size: 0.8rem; line-height: 1.6; color: var(--muted);">
@@ -208,7 +206,6 @@
             <li><span class="led red" style="display:inline-block; width:8px; height:8px;"></span> <strong>Temp &gt; 45°C</strong> — Critical overheating</li>
           </ul>
         </div>
-
         <div>
           <h3 style="font-size: 0.9rem; color: var(--accent); margin-bottom: 0.75rem;">DC Current (Avg of 12 MPPTs)</h3>
           <ul style="list-style: none; font-size: 0.8rem; line-height: 1.6; color: var(--muted);">
@@ -217,28 +214,222 @@
             <li><span class="led red" style="display:inline-block; width:8px; height:8px;"></span> <strong>Current &lt; Yellow Thr</strong> — Potential string/junction loss</li>
           </ul>
         </div>
-
         <div>
           <h3 style="font-size: 0.9rem; color: var(--accent); margin-bottom: 0.75rem;">AC Power & Production</h3>
           <ul style="list-style: none; font-size: 0.8rem; line-height: 1.6; color: var(--muted);">
-            <li><span class="led green" style="display:inline-block; width:8px; height:8px;"></span> <strong>AC &ge; 0.95 &times; Plant Avg</strong> — Nominal generation</li>
-            <li><span class="led red" style="display:inline-block; width:8px; height:8px;"></span> <strong>0 &lt; AC &lt; 0.95 &times; Plant Avg</strong> — Underperforming</li>
+            <li><span class="led green" style="display:inline-block; width:8px; height:8px;"></span> <strong>AC &ge; 0.85 &times; Plant Avg</strong> — Nominal generation</li>
+            <li><span class="led red" style="display:inline-block; width:8px; height:8px;"></span> <strong>0 &lt; AC &lt; 0.85 &times; Plant Avg</strong> — Underperforming</li>
             <li><span class="led red" style="display:inline-block; width:8px; height:8px;"></span> <strong>AC = 0 W</strong> — Inverter Tripped (Daylight only)</li>
             <li style="margin-top: 0.5rem; font-style: italic;">* Inverters are evaluated relative to exactly what the rest of the plant produces at that exact moment.</li>
             <li style="font-style: italic;">* If POA &lt; 50 W/m² and Plant Avg &lt; 1000 W, deviations are ignored.</li>
             <li style="margin-top: 0.5rem; font-style: italic;">* Downtime threshold: Cumulative off-time &ge; configured minimum</li>
           </ul>
         </div>
-
       </div>
     </div>
   </section>
 
 </main>
 
-<!-- ══════════════════════════════════════════════════════════
-     8. Site Legend
-═══════════════════════════════════════════════════════════ -->
+<!-- ═══════════════════════════════════════════════════════════
+     TAB 2: PR DETAIL
+════════════════════════════════════════════════════════════ -->
+<main id="tab-pr" class="tab-content">
+  <section>
+    <div class="detail-header">
+      <div>
+        <h2>⚡ Performance Ratio (PR) — All Inverters</h2>
+        <p class="detail-desc">Shows the latest PR value for each inverter. Green ≥ 85%, Yellow ≥ 75%, Red &lt; 75%.</p>
+      </div>
+      <div class="detail-stats" id="pr-stats">
+        <div class="stat-card">
+          <div class="stat-value" id="pr-avg">—</div>
+          <div class="stat-label">Plant Average</div>
+        </div>
+        <div class="stat-card stat-best">
+          <div class="stat-value" id="pr-max">—</div>
+          <div class="stat-label">Best</div>
+        </div>
+        <div class="stat-card stat-worst">
+          <div class="stat-value" id="pr-min">—</div>
+          <div class="stat-label">Worst</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="pr-ok-count">—</div>
+          <div class="stat-label">OK (≥85%)</div>
+        </div>
+      </div>
+    </div>
+    <div class="alarm-table-wrapper" style="margin-top:1rem;">
+      <table class="alarm-table detail-table" id="pr-table">
+        <thead>
+          <tr>
+            <th class="sortable" data-sort="name">Inverter</th>
+            <th class="sortable" data-sort="domain">Domain</th>
+            <th class="sortable" data-sort="value">PR (%)</th>
+            <th>Status</th>
+            <th>vs Plant Avg</th>
+            <th class="sortable" data-sort="bar">Distribution</th>
+          </tr>
+        </thead>
+        <tbody id="pr-tbody">
+          <tr><td colspan="6" class="empty-state">Waiting for data…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<!-- ═══════════════════════════════════════════════════════════
+     TAB 3: TEMPERATURE DETAIL
+════════════════════════════════════════════════════════════ -->
+<main id="tab-temp" class="tab-content">
+  <section>
+    <div class="detail-header">
+      <div>
+        <h2>🌡️ Inverter Temperature — All Inverters</h2>
+        <p class="detail-desc">Shows the latest temperature reading. Green ≤ 40°C, Yellow ≤ 45°C, Red &gt; 45°C.</p>
+      </div>
+      <div class="detail-stats" id="temp-stats">
+        <div class="stat-card">
+          <div class="stat-value" id="temp-avg">—</div>
+          <div class="stat-label">Plant Average</div>
+        </div>
+        <div class="stat-card stat-worst">
+          <div class="stat-value" id="temp-max">—</div>
+          <div class="stat-label">Hottest</div>
+        </div>
+        <div class="stat-card stat-best">
+          <div class="stat-value" id="temp-min">—</div>
+          <div class="stat-label">Coolest</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="temp-ok-count">—</div>
+          <div class="stat-label">OK (≤40°C)</div>
+        </div>
+      </div>
+    </div>
+    <div class="alarm-table-wrapper" style="margin-top:1rem;">
+      <table class="alarm-table detail-table" id="temp-table">
+        <thead>
+          <tr>
+            <th class="sortable" data-sort="name">Inverter</th>
+            <th class="sortable" data-sort="domain">Domain</th>
+            <th class="sortable" data-sort="value">Temp (°C)</th>
+            <th>Status</th>
+            <th>vs Plant Avg</th>
+            <th class="sortable" data-sort="bar">Distribution</th>
+          </tr>
+        </thead>
+        <tbody id="temp-tbody">
+          <tr><td colspan="6" class="empty-state">Waiting for data…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<!-- ═══════════════════════════════════════════════════════════
+     TAB 4: DC CURRENT DETAIL
+════════════════════════════════════════════════════════════ -->
+<main id="tab-dc" class="tab-content">
+  <section>
+    <div class="detail-header">
+      <div>
+        <h2>🔌 DC Current (MPPT Average) — All Inverters</h2>
+        <p class="detail-desc">Shows the average DC current across the 12 MPPTs per inverter. Thresholds depend on time of day.</p>
+      </div>
+      <div class="detail-stats" id="dc-stats">
+        <div class="stat-card">
+          <div class="stat-value" id="dc-avg">—</div>
+          <div class="stat-label">Plant Average</div>
+        </div>
+        <div class="stat-card stat-best">
+          <div class="stat-value" id="dc-max">—</div>
+          <div class="stat-label">Highest</div>
+        </div>
+        <div class="stat-card stat-worst">
+          <div class="stat-value" id="dc-min">—</div>
+          <div class="stat-label">Lowest</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="dc-ok-count">—</div>
+          <div class="stat-label">OK (Green)</div>
+        </div>
+      </div>
+    </div>
+    <div class="alarm-table-wrapper" style="margin-top:1rem;">
+      <table class="alarm-table detail-table" id="dc-table">
+        <thead>
+          <tr>
+            <th class="sortable" data-sort="name">Inverter</th>
+            <th class="sortable" data-sort="domain">Domain</th>
+            <th class="sortable" data-sort="value">DC Current (A)</th>
+            <th>Status</th>
+            <th>vs Plant Avg</th>
+            <th>MPPT Distribution (12 MPPTs)</th>
+          </tr>
+        </thead>
+        <tbody id="dc-tbody">
+          <tr><td colspan="6" class="empty-state">Waiting for data…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<!-- ═══════════════════════════════════════════════════════════
+     TAB 5: AC POWER DETAIL
+════════════════════════════════════════════════════════════ -->
+<main id="tab-ac" class="tab-content">
+  <section>
+    <div class="detail-header">
+      <div>
+        <h2>⚙️ AC Power Output — All Inverters</h2>
+        <p class="detail-desc">Shows the latest AC power output. Green ≥ 85% of plant average, Yellow ≥ 5%, Red below or tripped.</p>
+      </div>
+      <div class="detail-stats" id="ac-stats">
+        <div class="stat-card">
+          <div class="stat-value" id="ac-avg">—</div>
+          <div class="stat-label">Plant Average</div>
+        </div>
+        <div class="stat-card stat-best">
+          <div class="stat-value" id="ac-max">—</div>
+          <div class="stat-label">Highest</div>
+        </div>
+        <div class="stat-card stat-worst">
+          <div class="stat-value" id="ac-min">—</div>
+          <div class="stat-label">Lowest</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="ac-total">—</div>
+          <div class="stat-label">Total Output</div>
+        </div>
+      </div>
+    </div>
+    <div class="alarm-table-wrapper" style="margin-top:1rem;">
+      <table class="alarm-table detail-table" id="ac-table">
+        <thead>
+          <tr>
+            <th class="sortable" data-sort="name">Inverter</th>
+            <th class="sortable" data-sort="domain">Domain</th>
+            <th class="sortable" data-sort="value">AC Power (W)</th>
+            <th>Status</th>
+            <th>vs Plant Avg</th>
+            <th class="sortable" data-sort="bar">Distribution</th>
+          </tr>
+        </thead>
+        <tbody id="ac-tbody">
+          <tr><td colspan="6" class="empty-state">Waiting for data…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<!-- ═══════════════════════════════════════════════════════════
+     Site Legend
+════════════════════════════════════════════════════════════ -->
 <section style="margin: 2rem 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border);">
   <h2>Site Legend</h2>
   <div style="display:flex; gap: 2rem; flex-wrap: wrap; margin-top: 1rem;">

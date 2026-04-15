@@ -24,6 +24,8 @@ extracted_data/
 *.xlsx
 *.xls
 *.csv
+!plant_configuration_original.csv
+
 dashboard_data_*.json
 extraction_status.json
 errors/
@@ -87,6 +89,8 @@ env/
 .pydevproject
 .settings/
 *.code-workspace
+.ipynb_checkpoints/
+
 
 # ============================================================================
 # TEMPORARY & BACKUP FILES
@@ -132,6 +136,8 @@ screenshots/
 browser_logs/
 *.trace
 *.har
+VCOM_Screenshots/
+
 
 # ============================================================================
 # DOCKER & DEPLOYMENT (if used)

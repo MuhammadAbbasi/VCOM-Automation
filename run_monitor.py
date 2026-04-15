@@ -77,14 +77,15 @@ def stream_output(proc: subprocess.Popen, prefix: str) -> None:
 # ---------------------------------------------------------------------------
 
 def launch_dashboard() -> subprocess.Popen:
-    """Launch dashboard in a separate console window."""
+    """Launch dashboard in a separate console window or standard process."""
+    creationflags = CREATE_NEW_CONSOLE if os.name == "nt" else 0
     proc = subprocess.Popen(
         DASHBOARD_CMD,
         cwd=str(ROOT),
-        creationflags=CREATE_NEW_CONSOLE,
+        creationflags=creationflags,
     )
     _processes["DASHBOARD"] = proc
-    print(f"[ORCHESTRATOR] Started DASHBOARD in new window (pid={proc.pid})", flush=True)
+    print(f"[ORCHESTRATOR] Started DASHBOARD (pid={proc.pid})", flush=True)
     return proc
 
 
@@ -96,11 +97,12 @@ def launch_service(svc: dict) -> subprocess.Popen:
     
     if svc.get("new_console"):
         # Dashboard → separate console window
+        creationflags = CREATE_NEW_CONSOLE if os.name == "nt" else 0
         proc = subprocess.Popen(
             svc["cmd"],
             cwd=str(ROOT),
             env=env,
-            creationflags=CREATE_NEW_CONSOLE,
+            creationflags=creationflags,
         )
         _processes[name] = proc
         print(f"[ORCHESTRATOR] Started {name} in new window (pid={proc.pid})", flush=True)

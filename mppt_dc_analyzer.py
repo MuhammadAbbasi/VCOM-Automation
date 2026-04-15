@@ -6,28 +6,52 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Mazara Plant Configuration (1-string vs 2-string layout)
+# Mazara Plant Configuration (Loaded from CSV)
 # ---------------------------------------------------------------------------
-MPPT_CONFIG = {
-    "TX1-01": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1], "TX1-02": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1],
-    "TX1-03": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1], "TX1-04": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1],
-    "TX1-05": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1], "TX1-06": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1],
-    "TX1-07": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1], "TX1-08": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1],
-    "TX1-09": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1], "TX1-10": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1],
-    "TX1-11": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1], "TX1-12": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1],
-    "TX2-01": [2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 1, 1], "TX2-02": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1],
-    "TX2-03": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1], "TX2-04": [2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1],
-    "TX2-05": [2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1], "TX2-06": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1],
-    "TX2-07": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1], "TX2-08": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1],
-    "TX2-09": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1], "TX2-10": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1],
-    "TX2-11": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1], "TX2-12": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1],
-    "TX3-01": [2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2], "TX3-02": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1],
-    "TX3-03": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1], "TX3-04": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1],
-    "TX3-05": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1], "TX3-06": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1],
-    "TX3-07": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1], "TX3-08": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1],
-    "TX3-09": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1], "TX3-10": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1],
-    "TX3-11": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1], "TX3-12": [2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1]
-}
+
+def load_mppt_config() -> dict:
+    """Load the 36x12 MPPT string configuration from the CSV."""
+    csv_path = Path(__file__).parent / "plant_configuration_original.csv"
+    config = {}
+    if not csv_path.exists():
+        logger.error(f"Config CSV NOT FOUND at {csv_path}")
+        return {}
+    
+    try:
+        # T1;11;2;1 -> Inverse mapping to INV TX1-01
+        # TX1 maps to T1, TX2 to T2, TX3 to T3
+        # TX1-01 maps to T1;11
+        # TX1-10 maps to T1;110
+        df_cfg = pd.read_csv(csv_path, sep=";", encoding="utf-8")
+        
+        for _, row in df_cfg.iterrows():
+            area = str(row.iloc[0]).strip() # T1
+            box = str(row.iloc[1]).strip() # 11
+            strings = int(row.iloc[2]) # 2
+            mppt_num = int(row.iloc[3]) # 1
+            
+            # Convert area T1 -> TX1
+            tx_area = area.replace("T", "TX")
+            
+            # Convert box 11 -> 01, 110 -> 10, 112 -> 12
+            # The logic seems to be: last two digits or just subtract prefix?
+            # Looking at csv: 11, 12, 13, 14, 15, 16, 17, 18, 19, 110, 111, 112
+            # This is clearly TX1-01 to TX1-12.
+            box_num = int(box[1:]) # "11" -> 1, "112" -> 12
+            inv_key = f"{tx_area}-{box_num:02d}"
+            
+            if inv_key not in config:
+                config[inv_key] = [0] * 12
+            
+            if 1 <= mppt_num <= 12:
+                config[inv_key][mppt_num-1] = strings
+        
+        return config
+    except Exception as e:
+        logger.error(f"Error loading plant config: {e}")
+        return {}
+
+MPPT_CONFIG = load_mppt_config()
 
 def get_current_streak_minutes(mask, times):
     """Return the duration in minutes of the currently active fault streak."""
@@ -117,77 +141,94 @@ def analyze_dc_current(dc_df: pd.DataFrame, output_md_path: Path, date_str: str)
         inv_1str_cols = [f"Corrente DC MPPT {i+1} (INV {inv}) [A]" for i, s in enumerate(mppt_cfg) if s == 1 and f"Corrente DC MPPT {i+1} (INV {inv}) [A]" in df.columns]
         inv_1str_median = df[inv_1str_cols].median(axis=1) if inv_1str_cols else pd.Series(np.nan, index=df.index)
 
+    mppt_details = {}
+
+    for inv, mppt_cfg in MPPT_CONFIG.items():
+        inv_label = f"INV {inv}"
+        mppt_details[inv_label] = []
+
+        inv_cols = [c for c in df.columns if inv in c]
+        
+        # Single Inverter Medians
+        inv_2str_cols = [f"Corrente DC MPPT {i+1} (INV {inv}) [A]" for i, s in enumerate(mppt_cfg) if s == 2 and f"Corrente DC MPPT {i+1} (INV {inv}) [A]" in df.columns]
+        inv_2str_median = df[inv_2str_cols].median(axis=1) if inv_2str_cols else pd.Series(np.nan, index=df.index)
+
         domain = inv[:3]
 
         for mppt_idx, string_count in enumerate(mppt_cfg):
             mppt_num = mppt_idx + 1
             col_name = f"Corrente DC MPPT {mppt_num} (INV {inv}) [A]"
             
-            # Fallback for aggregate columns (e.g., if MPPT 1 is missing, try total)
+            # Fallback for aggregate columns
             if col_name not in df.columns:
                 if mppt_num == 1:
                     alt_col = f"Corrente DC (INV {inv}) [A]"
-                    if alt_col in df.columns:
-                        col_name = alt_col
-                        logger.info(f"Using aggregate DC column {col_name} for MPPT 1 (Inverter {inv})")
+                    if alt_col in df.columns: col_name = alt_col
                     else:
+                        mppt_details[inv_label].append({"mppt": mppt_num, "strings": string_count, "v": None, "exp": None})
                         continue
                 else:
+                    mppt_details[inv_label].append({"mppt": mppt_num, "strings": string_count, "v": None, "exp": None})
                     continue
             
             series = df[col_name]
-            if series.isna().all(): continue
+            # Get latest non-nan value
+            latest_val = None
+            series_valid = series.dropna()
+            if not series_valid.empty:
+                latest_val = float(series_valid.iloc[-1])
 
             # Expected current proportional logic
             nominal = 18.0 if string_count == 2 else 9.0
-            expected_current = nominal * (fleet_2str_median / 18.0)
+            expected_series = nominal * (fleet_2str_median / 18.0)
+            expected_val = None
+            expected_valid = expected_series.dropna()
+            if not expected_valid.empty:
+                expected_val = float(expected_valid.iloc[-1])
 
-            # Fill NA so intermittent packet drops don't break the streak
+            mppt_details[inv_label].append({
+                "mppt": mppt_num,
+                "strings": string_count,
+                "v": latest_val,
+                "exp": expected_val
+            })
+
+            if series.isna().all(): continue
+
+            # Analysis logic (Existing)
             series_filled = series.ffill()
+            expected_current = expected_series
 
             # RULE: OPEN CIRCUIT (Critical)
             cond_openC = (series_filled < 0.1 * expected_current.ffill()) & (expected_current.ffill() > 1.0)
             open_streak_m = get_current_streak_minutes(cond_openC, df["Ora"])
 
-            # RULE: SINGLE STRING LOSS (Warning, only 2-string configs)
+            # RULE: SINGLE STRING LOSS
             ss_loss_m = 0
             if string_count == 2 and not inv_2str_median.isna().all():
                 cond_ssLoss = (series_filled >= 0.4 * inv_2str_median.ffill()) & (series_filled <= 0.6 * inv_2str_median.ffill()) & (inv_2str_median.ffill() > 2.0)
                 ss_loss_m = get_current_streak_minutes(cond_ssLoss, df["Ora"])
 
-            # RULE: UNDERPERFORMANCE ABSOLUTE (Warning)
+            # RULE: UNDERPERFORMANCE ABSOLUTE
             up_m = 0
             same_inv_peer_median = inv_2str_median if string_count == 2 else (inv_2str_median / 2.0)
             if not same_inv_peer_median.isna().all():
                 cond_up = (series_filled < 0.75 * same_inv_peer_median.ffill()) & (series_filled > 0.0) & (same_inv_peer_median.ffill() > 1.0)
                 up_m = get_current_streak_minutes(cond_up, df["Ora"])
 
-            # RULE: CROSS-INVERTER DEVIATION (Warning)
-            cross_m = 0
-            # To compare cross-domain safely, just check 2-string inverters matching this MPPT's string_count
+            # RULE: CROSS-INVERTER DEVIATION
             domain_peer_cols = [f"Corrente DC MPPT {mppt_num} (INV {oi}) [A]" for oi, ocfg in MPPT_CONFIG.items() if oi[:3] == domain and ocfg[mppt_idx] == string_count and f"Corrente DC MPPT {mppt_num} (INV {oi}) [A]" in df.columns]
             if domain_peer_cols:
                 domain_median = df[domain_peer_cols].median(axis=1)
                 cond_cross = (series_filled < 0.65 * domain_median.ffill()) & (series_filled > 0.0) & (domain_median.ffill() > 2.0)
                 cross_m = get_current_streak_minutes(cond_cross, df["Ora"])
 
-            # Add Normal Info
-            if string_count == 1:
-                inv_summary[inv]["Info"] += 1
-                if "Confirmed normal 1-string MPPT currents observed" not in inv_summary[inv]["Notes"]:
-                    inv_summary[inv]["Notes"].append("Confirmed normal 1-string MPPT currents observed")
-
+            # Alarms
             if open_streak_m >= 15:
-                faults.append({"Inverter": inv, "MPPT": mppt_num, "Strings": string_count, "Type": "OPEN CIRCUIT", "Severity": "CRITICAL", "Measured": f"{series.dropna().tail(3).median():.1f}", "Expected": f"{expected_current.dropna().tail(3).median():.1f}", "Duration": int(open_streak_m), "Deviation": "<10%", "Action": "Check connection"})
+                faults.append({"Inverter": inv, "MPPT": mppt_num, "Strings": string_count, "Type": "OPEN CIRCUIT", "Severity": "CRITICAL", "Measured": f"{latest_val:.1f}" if latest_val is not None else "0.0", "Expected": f"{expected_val:.1f}" if expected_val is not None else "0.0", "Duration": int(open_streak_m), "Deviation": "<10%", "Action": "Check connection"})
                 inv_summary[inv]["Critical"] += 1
             elif string_count == 2 and ss_loss_m >= 45:
-                faults.append({"Inverter": inv, "MPPT": mppt_num, "Strings": string_count, "Type": "SINGLE STRING LOSS", "Severity": "WARNING", "Measured": f"{series.dropna().tail(3).median():.1f}", "Expected": f"{expected_current.dropna().tail(3).median():.1f}", "Duration": int(ss_loss_m), "Deviation": "~50%", "Action": "Check fuse"})
-                inv_summary[inv]["Warnings"] += 1
-            elif cross_m >= 60:
-                faults.append({"Inverter": inv, "MPPT": mppt_num, "Strings": string_count, "Type": "CROSS-INVERTER DEVIATION", "Severity": "WARNING", "Measured": f"{series.dropna().tail(3).median():.1f}", "Expected": f"{expected_current.dropna().tail(3).median():.1f}", "Duration": int(cross_m), "Deviation": "<65%", "Action": "Check domain shading"})
-                inv_summary[inv]["Warnings"] += 1
-            elif up_m >= 45:
-                faults.append({"Inverter": inv, "MPPT": mppt_num, "Strings": string_count, "Type": "UNDERPERFORMANCE - ABSOLUTE", "Severity": "WARNING", "Measured": f"{series.dropna().tail(3).median():.1f}", "Expected": f"{expected_current.dropna().tail(3).median():.1f}", "Duration": int(up_m), "Deviation": "<75%", "Action": "Check shading/soiling"})
+                faults.append({"Inverter": inv, "MPPT": mppt_num, "Strings": string_count, "Type": "SINGLE STRING LOSS", "Severity": "WARNING", "Measured": f"{latest_val:.1f}" if latest_val is not None else "0.0", "Expected": f"{expected_val:.1f}" if expected_val is not None else "0.0", "Duration": int(ss_loss_m), "Deviation": "~50%", "Action": "Check fuse"})
                 inv_summary[inv]["Warnings"] += 1
 
     # Formatting structured Markdown report
@@ -218,6 +259,9 @@ def analyze_dc_current(dc_df: pd.DataFrame, output_md_path: Path, date_str: str)
 
     output_path = Path(output_md_path)
     output_path.write_text("\n".join(md), encoding="utf-8")
-    logger.info(f"Wrote DC Analysis Report to {output_path}")
-    return faults
+    
+    return {
+        "faults": faults,
+        "mppt_details": mppt_details
+    }
 
