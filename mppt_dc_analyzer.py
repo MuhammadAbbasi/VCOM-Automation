@@ -26,18 +26,24 @@ def load_mppt_config() -> dict:
         
         for _, row in df_cfg.iterrows():
             area = str(row.iloc[0]).strip() # T1
-            box = str(row.iloc[1]).strip() # 11
-            strings = int(row.iloc[2]) # 2
-            mppt_num = int(row.iloc[3]) # 1
+            box = str(row.iloc[1]).strip()  # 1.01 or 11
+            strings = int(row.iloc[2])      # 2
+            mppt_num = int(row.iloc[3])     # 1
             
             # Convert area T1 -> TX1
             tx_area = area.replace("T", "TX")
             
-            # Convert box 11 -> 01, 110 -> 10, 112 -> 12
-            # The logic seems to be: last two digits or just subtract prefix?
-            # Looking at csv: 11, 12, 13, 14, 15, 16, 17, 18, 19, 110, 111, 112
-            # This is clearly TX1-01 to TX1-12.
-            box_num = int(box[1:]) # "11" -> 1, "112" -> 12
+            # Handle both T.IN (1.01) and legacy (11) formats
+            if "." in box:
+                # 1.10 -> 10, 2.01 -> 1
+                try:
+                    box_num = int(box.split(".")[1])
+                except:
+                    box_num = int(float(box) % 1 * 100 + 0.5) 
+            else:
+                # 11 -> 1, 112 -> 12
+                box_num = int(box[1:]) 
+                
             inv_key = f"{tx_area}-{box_num:02d}"
             
             if inv_key not in config:
@@ -48,10 +54,16 @@ def load_mppt_config() -> dict:
         
         return config
     except Exception as e:
-        logger.error(f"Error loading plant config: {e}")
+        logger.error(f"Error loading plant config at {csv_path}: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return {}
 
 MPPT_CONFIG = load_mppt_config()
+
+# ... (get_current_streak_minutes remains same)
+
+# ... (analyze_dc_current start remains same)
 
 def get_current_streak_minutes(mask, times):
     """Return the duration in minutes of the currently active fault streak."""
@@ -230,6 +242,12 @@ def analyze_dc_current(dc_df: pd.DataFrame, output_md_path: Path, date_str: str)
             elif string_count == 2 and ss_loss_m >= 45:
                 faults.append({"Inverter": inv, "MPPT": mppt_num, "Strings": string_count, "Type": "SINGLE STRING LOSS", "Severity": "WARNING", "Measured": f"{latest_val:.1f}" if latest_val is not None else "0.0", "Expected": f"{expected_val:.1f}" if expected_val is not None else "0.0", "Duration": int(ss_loss_m), "Deviation": "~50%", "Action": "Check fuse"})
                 inv_summary[inv]["Warnings"] += 1
+            elif cross_m >= 60:
+                faults.append({"Inverter": inv, "MPPT": mppt_num, "Strings": string_count, "Type": "LOW CURRENT (vs PEERS)", "Severity": "WARNING", "Measured": f"{latest_val:.1f}" if latest_val is not None else "0.0", "Expected": f"{expected_val:.1f}" if expected_val is not None else "0.0", "Duration": int(cross_m), "Deviation": "<65%", "Action": "Check shading/strings"})
+                inv_summary[inv]["Warnings"] += 1
+            elif up_m >= 60:
+                faults.append({"Inverter": inv, "MPPT": mppt_num, "Strings": string_count, "Type": "UNDERPERFORMANCE", "Severity": "INFO", "Measured": f"{latest_val:.1f}" if latest_val is not None else "0.0", "Expected": f"{expected_val:.1f}" if expected_val is not None else "0.0", "Duration": int(up_m), "Deviation": "<75%", "Action": "Monitor"})
+                inv_summary[inv]["Info"] += 1
 
     # Formatting structured Markdown report
     md = [f"# Mazara PV Plant - DC MPPT Analysis Report ({date_str})\n", "## Section 1: Fault Table"]

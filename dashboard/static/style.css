@@ -797,3 +797,84 @@ section > h2 {
     .stat-card { min-width: 70px; padding: 0.5rem 0.75rem; }
     .stat-value { font-size: 1.1rem; }
 }
+
+.metric-card.sensor-status .metric-value { color: #60a5fa; }
+
+/* ─── Sensor Grid ─────────────────────────────────────────── */
+.sensor-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.5rem;
+}
+
+.sensor-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.sensor-box:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.4);
+    border-color: var(--accent);
+}
+
+.sensor-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.sensor-id {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.sensor-type-icon {
+    font-size: 1.2rem;
+}
+
+.sensor-val-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+}
+
+.sensor-val {
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+}
+
+.sensor-unit {
+    font-size: 0.9rem;
+    color: var(--muted);
+    font-weight: 600;
+}
+
+.sensor-label {
+    font-size: 0.85rem;
+    color: var(--text);
+    opacity: 0.9;
+    font-weight: 500;
+}
+
+/* Specific sensor types */
+.sensor-box.poa { border-left: 4px solid #3b82f6; }
+.sensor-box.ghi { border-left: 4px solid #10b981; }
+.sensor-box.temp { border-left: 4px solid #f97316; }
+.sensor-box.al { border-left: 4px solid #8b5cf6; }
+
+/* Responsive tweaks */
+@media (max-width: 640px) {
+    .sensor-container { grid-template-columns: 1fr; }
+}

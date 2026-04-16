@@ -46,6 +46,10 @@
   <button class="tab-btn" data-tab="tab-ac">
     <span class="tab-icon">⚙️</span> AC Power
   </button>
+  <button class="tab-btn" data-tab="tab-sensors">
+    <span class="tab-icon">📡</span> Sensors
+  </button>
+
 </nav>
 
 <!-- ═══════════════════════════════════════════════════════════
@@ -73,6 +77,11 @@
         <div class="metric-value" id="val-comms">—</div>
         <div class="metric-label">Comms Lost</div>
       </div>
+      <div class="card metric-card sensor-status">
+        <div class="metric-value" id="val-poa">—</div>
+        <div class="metric-label">Plant Irradiance (POA)</div>
+      </div>
+
     </div>
   </section>
 
@@ -426,6 +435,28 @@
     </div>
   </section>
 </main>
+
+<!-- ═══════════════════════════════════════════════════════════
+     TAB 6: SENSORS DETAIL
+════════════════════════════════════════════════════════════ -->
+<main id="tab-sensors" class="tab-content">
+  <section>
+    <div class="detail-header">
+      <div>
+        <h2>📡 Environmental Sensors — Real-time Values</h2>
+        <p class="detail-desc">Status and current readings for all field sensors (Irradiance, Pyranometers, Reference Cells).</p>
+      </div>
+      <div id="sensor-macro-stats" class="detail-stats">
+         <!-- Dynamic stats like avg poa, etc -->
+      </div>
+    </div>
+    
+    <div class="sensor-container" id="sensor-grid-container" style="margin-top: 1.5rem;">
+      <div class="empty-state">Waiting for sensor data…</div>
+    </div>
+  </section>
+</main>
+
 
 <!-- ═══════════════════════════════════════════════════════════
      Site Legend

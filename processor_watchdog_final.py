@@ -130,24 +130,71 @@ INVERTER_IDS = [
     "TX3-07", "TX3-08", "TX3-09", "TX3-10", "TX3-11", "TX3-12",
 ]
 
-DAYLIGHT_END = 19.0
+DAYLIGHT_END = 20.0
 STABILIZATION_MINUTES = 30  # Wait 30m after production start before PR alarms
 
-def get_production_start_time(ac_df: pd.DataFrame) -> float:
-    """Find the first Ora where >10 inverters are producing >0W."""
+def calculate_sunrise(date_str: str) -> float:
+    """Calculate approximate sunrise for Mazara del Vallo (37.6N, 12.6E)."""
+    try:
+        dt = datetime.strptime(date_str, "%Y-%m-%d")
+        doy = dt.timetuple().tm_yday
+        lat_rad = np.radians(37.67)
+        # Solar declination
+        decl = 0.409 * np.sin(2 * np.pi * (doy - 81) / 365)
+        # Hour angle sunset/sunrise: cos(h) = -tan(lat)*tan(decl)
+        cos_h = -np.tan(lat_rad) * np.tan(decl)
+        cos_h = np.clip(cos_h, -1, 1)
+        h = np.arccos(cos_h)
+        # Sunrise base 12:00 - hour angle offset
+        sunrise_utc_base = 12.0 - (np.degrees(h) / 15.0)
+        # Longitude adjustment (Mazara 12.6E is ~9.6 mins later than 15E meridian)
+        lon_adj = (15.0 - 12.59) * 4 / 60.0
+        # Equation of time approx
+        b = 2 * np.pi * (doy - 81) / 365
+        eot = 9.87 * np.sin(2 * b) - 7.53 * np.cos(b) - 1.5 * np.sin(b)
+        eot_adj = eot / 60.0
+        # DST: April to October is +1
+        dst_adj = 1.0 if (3 <= dt.month <= 10) else 0.0
+        
+        sunrise = sunrise_utc_base + lon_adj + dst_adj - eot_adj
+        
+        # Sunset is 12:00 + hour angle
+        sunset_utc_base = 12.0 + (np.degrees(h) / 15.0)
+        sunset = sunset_utc_base + lon_adj + dst_adj - eot_adj
+        
+        return float(sunrise), float(sunset)
+    except Exception as e:
+        logger.error(f"Sun calculation failed: {e}")
+        return 6.5, 19.5
+
+
+def get_production_start_time(ac_df: pd.DataFrame) -> tuple:
+    """Find the first Ora where production starts and return (start_ora, sunset_ora)."""
     if ac_df is None or "Ora" not in ac_df.columns:
-        return 7.0 # Fallback
+        return 7.0, 19.5
     
     ac_cols = [c for c in ac_df.columns if "Potenza AC" in c]
     df_clean = ac_df.replace(["x", " x "], np.nan).apply(pd.to_numeric, errors='coerce')
     
+    # Dynamic search bound: 30 mins before sunrise
+    date_str = ac_df["Data"].iloc[0] if "Data" in ac_df.columns else datetime.now().strftime("%Y-%m-%d")
+    sunrise, sunset = calculate_sunrise(date_str)
+    search_start = sunrise - 0.5
+    
+    prod_start = sunrise
     for idx, row in df_clean.iterrows():
-        # Count how many inverters have production > 100W (more stable than >0)
-        producing = sum(1 for c in ac_cols if row.get(c, 0) > 100)
-        if producing > 10:
-            return float(row.get("Ora", 7.0))
+        ora = float(row.get("Ora", 0))
+        if ora < search_start: continue
+        
+        producing = sum(1 for c in ac_cols if row.get(c, 0) > 200)
+        if producing > 10: 
+            prod_start = ora
+            break
             
-    return 7.0
+    return prod_start, sunset
+
+
+
 
 
 def send_telegram_notification(text: str, settings: dict, use_personal: bool = False) -> None:
@@ -225,7 +272,7 @@ def normalize_pr(val):
 # ---------------------------------------------------------------------------
 
 def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFrame,
-                         dc_df: pd.DataFrame, pr_df: pd.DataFrame, irrad_df: pd.DataFrame, daylight_start: float = 7.0, settings: dict = None) -> dict:
+                         dc_df: pd.DataFrame, pr_df: pd.DataFrame, irrad_df: pd.DataFrame, daylight_start: float = 7.0, daylight_end: float = 19.5, settings: dict = None) -> dict:
     """
     Compute health flags from the latest available NON-NAN values in each metric file.
     """
@@ -296,14 +343,29 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
                     latest_ac_missing.add(c)
         
         # Site-wide data drop history
+        # We only count it as a "Drop" if at least 3 consecutive rows are missing (15m delay)
+        # to avoid false positives from transient fetch delays.
         plant_drop_history = []
         if not ac_dedup.empty:
-            hist_day = ac_dedup[(ac_dedup["Ora_num"] >= daylight_start) & (ac_dedup["Ora_num"] <= DAYLIGHT_END)]
+            # We use the sunset provided by analyze_site
+            hist_day = ac_dedup[(ac_dedup["Ora_num"] >= daylight_start) & (ac_dedup["Ora_num"] <= daylight_end - 0.25)]
             hist_day = hist_day.sort_values("Ora_num")
+            
+            potential_drops = []
             for _, row in hist_day.iterrows():
                 v_count = sum(1 for c in ac_cols if pd.notna(row.get(c)) and str(row.get(c)).strip().lower() not in ['x', ''])
                 if v_count < 2:
-                    plant_drop_history.append({"ora": row.get("Ora"), "time": format_ora(row.get("Ora"))})
+                    potential_drops.append({"ora": row.get("Ora"), "time": format_ora(row.get("Ora"))})
+                else:
+                    # If we find a valid row, check if the previous streak was long enough
+                    if len(potential_drops) >= 3:
+                        plant_drop_history.extend(potential_drops)
+                    potential_drops = []
+            
+            # Catch trailing drops (if the day ends with missing data)
+            if len(potential_drops) >= 3:
+                plant_drop_history.extend(potential_drops)
+
     else:
         plant_drop_history = []
 
@@ -366,17 +428,33 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
         if ac_valid_vals:
             avg_ac_power = sum(ac_valid_vals) / len(ac_valid_vals)
             
+    sensor_data = {}
     if irrad_df is not None and not irrad_df.empty:
+        # 1. Unified POA for AC logic (keep existing poa_val for backward compatibility)
         poa_cols = [c for c in irrad_df.columns if "POA" in c]
-        if poa_cols and ac_row is not None:
+        if ac_row is not None:
             ac_ora = ac_row.get("Ora", 0)
             try:
                 irrad_copy = irrad_df.copy()
                 irrad_copy["Ora_num"] = pd.to_numeric(irrad_copy["Ora"], errors="coerce")
                 diff = (irrad_copy["Ora_num"] - ac_ora).abs()
                 best_idx = diff.idxmin()
-                poa_val = float(irrad_copy.loc[best_idx, poa_cols[0]])
-            except:
+                
+                if poa_cols:
+                    poa_val = float(irrad_copy.loc[best_idx, poa_cols[0]])
+                
+                # 2. Extract ALL relevant sensor columns at this timestamp
+                # (Excluding Ora and internal numeric columns)
+                for col in irrad_df.columns:
+                    if col not in ["Ora", "Ora_num"]:
+                        val = irrad_copy.loc[best_idx, col]
+                        if pd.notna(val) and val != "x":
+                            try:
+                                sensor_data[col] = float(val)
+                            except:
+                                sensor_data[col] = val
+            except Exception as e:
+                logger.error(f"Error mapping irradiance sensors: {e}")
                 poa_val = 0
 
     # Compute health for each inverter
@@ -516,7 +594,8 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
 
         inverter_health[inv_label] = health
 
-    return inverter_health, plant_drop_history
+    return inverter_health, plant_drop_history, sensor_data
+
 
 
 # ---------------------------------------------------------------------------
@@ -533,7 +612,7 @@ def format_ora(val):
     except:
         return "Unknown"
 
-def compute_downtime(ac_df: pd.DataFrame, irrad_df: pd.DataFrame, daylight_start: float = 7.0, settings: dict = None) -> dict:
+def compute_downtime(ac_df: pd.DataFrame, irrad_df: pd.DataFrame, daylight_start: float = 7.0, daylight_end: float = 19.5, settings: dict = None) -> dict:
     """Calculate downtime events based on 0.0 W strings during daylight hours."""
     if settings is None:
         settings = {
@@ -556,8 +635,9 @@ def compute_downtime(ac_df: pd.DataFrame, irrad_df: pd.DataFrame, daylight_start
     ac_dedup = ac_df.drop_duplicates(subset=["Ora"], keep="last").copy()
     ac_dedup["Ora"] = pd.to_numeric(ac_dedup["Ora"], errors="coerce")
         
-    mask = (ac_dedup["Ora"] >= daylight_start) & (ac_dedup["Ora"] <= DAYLIGHT_END)
+    mask = (ac_dedup["Ora"] >= daylight_start) & (ac_dedup["Ora"] <= daylight_end)
     df_day = ac_dedup[mask].copy()
+
     if len(df_day) == 0:
         return downtime_tracker
 
@@ -578,10 +658,15 @@ def compute_downtime(ac_df: pd.DataFrame, irrad_df: pd.DataFrame, daylight_start
             continue
             
         data = pd.to_numeric(df_day[ac_col], errors='coerce')
-        # Treat both 0.0 and missing (NaN) as off-time
-        is_off = (data <= 0.05) | (data.isna())
+        
+        # IRRADIANCE GATING REMOVED as per user request.
+        # We rely on daylight_start (Sunrise - 30m) filter at line 595.
+        
+        is_off = (data <= 50.0) | (pd.isna(data))
         
         zero_indices = is_off[is_off].index
+
+
         if len(zero_indices) > 0:
             # Group contiguous off-states
             blocks = (is_off != is_off.shift()).cumsum()
@@ -697,17 +782,19 @@ def analyze_site(date_str: str) -> None:
         if ac_df is None:
             logger.warning(f"Potenza_AC not found for {date_str}")
             return
-
         # Compute dynamic production start
-        daylight_start = get_production_start_time(ac_df)
+        daylight_start, sunset_end = get_production_start_time(ac_df)
         logger.info(f"Dynamic Daylight Start detected at: {format_ora(daylight_start)}")
+        logger.info(f"Dynamic Sunset detected at: {format_ora(sunset_end)}")
 
         settings = load_user_settings()
 
         # Compute health from latest values
         logger.info("Computing health flags...")
-        inverter_health, plant_drop_history = compute_latest_health(date_str, ac_df, temp_df, dc_df, pr_df, irrad_df=irrad_df, daylight_start=daylight_start, settings=settings)
+        inverter_health, plant_drop_history, sensor_data = compute_latest_health(date_str, ac_df, temp_df, dc_df, pr_df, irrad_df=irrad_df, daylight_start=daylight_start, daylight_end=sunset_end, settings=settings)
+
         macro_health = compute_macro_health(inverter_health, daylight_start=daylight_start)
+        macro_health["sunset_time"] = format_ora(sunset_end)
         
         # Latest sync from extraction status if available
         status_path = DATA_DIR / "extraction_status.json"
@@ -742,7 +829,8 @@ def analyze_site(date_str: str) -> None:
         
         # Compute Downtime array
         logger.info("Evaluating downtime...")
-        downtime_tracker = compute_downtime(ac_df, irrad_df, daylight_start=daylight_start, settings=settings)
+        downtime_tracker = compute_downtime(ac_df, irrad_df, daylight_start=daylight_start, daylight_end=sunset_end, settings=settings)
+
 
         # Build JSON snapshot and process anomalies
         timestamp = datetime.now().isoformat(timespec="seconds")
@@ -964,8 +1052,10 @@ def analyze_site(date_str: str) -> None:
             "active_anomalies": current_active,
             "historical_trail": historical_trail,
             "downtime_tracker": downtime_tracker,
-            "file_status": file_status
+            "file_status": file_status,
+            "sensor_data": sensor_data
         }
+
 
         # Save merged data (keep last 50 timestamps)
         existing_data[timestamp] = snapshot

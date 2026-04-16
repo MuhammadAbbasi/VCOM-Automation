@@ -65,6 +65,16 @@ function updateMacro(data) {
   el("val-tripped").textContent = safeNum(m.tripped, "—");
   el("val-comms").textContent   = safeNum(m.comms_lost, "—");
   
+  // Update Sensor Macro
+  const sData = data.sensor_data || {};
+  // Try to find a POA value to show on overview
+  const poaKey = Object.keys(sData).find(k => k.includes("POA"));
+  if (poaKey && el("val-poa")) {
+      const pVal = sData[poaKey];
+      el("val-poa").textContent = (typeof pVal === 'number') ? `${pVal.toFixed(1)} W/m²` : pVal;
+  }
+
+  
   // Header Metadata
   const start = m.plant_start_time || "--:--";
   const fetch = m.last_data_fetch ? m.last_data_fetch.substring(11, 16) : "--:--";
@@ -558,6 +568,72 @@ function updateACDetail(data) {
   }, data);
 }
 
+// ─── Sensors Detail ────────────────────────────────────────────────────────
+function updateSensorsTab(data) {
+    const sData = data.sensor_data || {};
+    const container = el("sensor-grid-container");
+    if (!container) return;
+
+    if (Object.keys(sData).length === 0) {
+        container.innerHTML = '<div class="empty-state">No sensor data available in this cycle.</div>';
+        return;
+    }
+
+    container.innerHTML = "";
+    const grid = document.createElement("div");
+    grid.className = "sensor-container";
+
+    // Macro stats for sensor tab
+    const macroStats = el("sensor-macro-stats");
+    if (macroStats) {
+        let poaTotal = 0, poaCount = 0;
+        Object.entries(sData).forEach(([k, v]) => {
+            if (k.includes("POA")) { poaTotal += v; poaCount++; }
+        });
+        const avgPoa = poaCount > 0 ? (poaTotal / poaCount).toFixed(1) : "—";
+        macroStats.innerHTML = `
+            <div class="stat-card">
+              <div class="stat-value">${avgPoa}</div>
+              <div class="stat-label">Avg Plant POA</div>
+            </div>
+        `;
+    }
+
+    Object.entries(sData).forEach(([key, val]) => {
+        const box = document.createElement("div");
+        let type = "other";
+        let icon = "📊";
+        let unit = "—";
+        let label = key;
+
+        if (key.includes("POA")) { type = "poa"; icon = "☀️"; unit = "W/m²"; label = "Plane of Array"; }
+        else if (key.includes("GHI")) { type = "ghi"; icon = "🌍"; unit = "W/m²"; label = "Global Horiz. Irrad."; }
+        else if (key.includes("Temp") || key.includes("JB") && (key.includes("IT") || key.includes("AL"))) {
+             type = "temp"; icon = "🌡️"; unit = "°C"; label = "Ambient/Module Temp";
+        }
+        
+        if (key.includes("-DOWN")) label = "Module Temp (Lower)";
+        if (key.includes("-UP")) label = "Module Temp (Upper)";
+        if (key.includes("AL-")) { type = "al"; icon = "📏"; unit = "°C"; label = "Irradiance Sensor Temp"; }
+
+        box.className = `sensor-box ${type}`;
+        box.innerHTML = `
+            <div class="sensor-header">
+                <span class="sensor-id">${key}</span>
+                <span class="sensor-type-icon">${icon}</span>
+            </div>
+            <div class="sensor-val-row">
+                <span class="sensor-val">${typeof val === 'number' ? val.toFixed(1) : val}</span>
+                <span class="sensor-unit">${unit}</span>
+            </div>
+            <div class="sensor-label">${label}</div>
+        `;
+        grid.appendChild(box);
+    });
+    container.appendChild(grid);
+}
+
+
 
 // ═══════════════════════════════════════════════════════════
 // TAB NAVIGATION
@@ -598,7 +674,9 @@ function renderActiveDetailTab() {
   if (id === "tab-temp") updateTempDetail(lastData);
   if (id === "tab-dc")   updateDCDetail(lastData);
   if (id === "tab-ac")   updateACDetail(lastData);
+  if (id === "tab-sensors") updateSensorsTab(lastData);
 }
+
 
 // ─── Sort click handler for detail tables ──────────────────────────────────
 
@@ -663,8 +741,10 @@ function connectWebSocket() {
         updateAlerts(data);
         updateHistory(data);
         updateDowntime(data);
+        updateSensorsTab(data);
         
         // Update whichever detail tab is active
+
         renderActiveDetailTab();
         
         el("last-updated").textContent = `Last updated: ${now()}`;
