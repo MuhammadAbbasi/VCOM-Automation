@@ -162,10 +162,15 @@ def calculate_sunrise(date_str: str) -> float:
         sunset_utc_base = 12.0 + (np.degrees(h) / 15.0)
         sunset = sunset_utc_base + lon_adj + dst_adj - eot_adj
         
+        # Hard safety: Sunrise cannot be at midnight
+        if sunrise < 4.0: sunrise = 6.0
+        if sunset < 16.0: sunset = 19.5
+        
         return float(sunrise), float(sunset)
     except Exception as e:
         logger.error(f"Sun calculation failed: {e}")
         return 6.5, 19.5
+
 
 
 def get_production_start_time(ac_df: pd.DataFrame) -> tuple:
@@ -177,21 +182,31 @@ def get_production_start_time(ac_df: pd.DataFrame) -> tuple:
     df_clean = ac_df.replace(["x", " x "], np.nan).apply(pd.to_numeric, errors='coerce')
     
     # Dynamic search bound: 30 mins before sunrise
-    date_str = ac_df["Data"].iloc[0] if "Data" in ac_df.columns else datetime.now().strftime("%Y-%m-%d")
+    date_str = ac_df["Data"].iloc[0] if ("Data" in ac_df.columns and not pd.isna(ac_df["Data"].iloc[0])) else datetime.now().strftime("%Y-%m-%d")
     sunrise, sunset = calculate_sunrise(date_str)
-    search_start = sunrise - 0.5
+    
+    # HARD SAFETY: Ignore anything before 5 AM
+    search_start = max(5.0, sunrise - 0.5)
     
     prod_start = sunrise
+    found = False
     for idx, row in df_clean.iterrows():
         ora = float(row.get("Ora", 0))
         if ora < search_start: continue
         
-        producing = sum(1 for c in ac_cols if row.get(c, 0) > 200)
-        if producing > 10: 
+        producing = sum(1 for c in ac_cols if row.get(c, 0) > 300)
+        if producing > 15: 
             prod_start = ora
+            found = True
             break
+    
+    if found:
+        logger.info(f"Production detected at {format_ora(prod_start)} (Sun: {format_ora(sunrise)})")
+    else:
+        logger.warning(f"No production detected. Using sunrise {format_ora(sunrise)} as start.")
             
     return prod_start, sunset
+
 
 
 
@@ -634,14 +649,32 @@ def compute_downtime(ac_df: pd.DataFrame, irrad_df: pd.DataFrame, daylight_start
     # Deduplicate by Ora (keep last batch's values)
     ac_dedup = ac_df.drop_duplicates(subset=["Ora"], keep="last").copy()
     ac_dedup["Ora"] = pd.to_numeric(ac_dedup["Ora"], errors="coerce")
-        
-    mask = (ac_dedup["Ora"] >= daylight_start) & (ac_dedup["Ora"] <= daylight_end)
+    
+    # HARD FILTER: Ensure we never count downtime before 5:00 AM or after sunset
+    d_start = max(5.0, daylight_start)
+    mask = (ac_dedup["Ora"] >= d_start) & (ac_dedup["Ora"] <= daylight_end)
     df_day = ac_dedup[mask].copy()
+
 
     if len(df_day) == 0:
         return downtime_tracker
 
     df_day = df_day.replace(["x", " x "], np.nan)
+    
+    # KEY FIX: The extractor writes empty rows for future timestamps.
+    # These all-NaN rows look like "off" periods and cause phantom downtime.
+    # Trim df_day to only include rows up to the last row where ANY inverter
+    # had real data, removing empty future-timestamp rows before analysis.
+    all_ac_cols = [c for c in df_day.columns if "Potenza AC" in c]
+    if all_ac_cols:
+        any_valid = df_day[all_ac_cols].apply(pd.to_numeric, errors='coerce').notna().any(axis=1)
+        valid_rows = any_valid[any_valid].index
+        if len(valid_rows) > 0:
+            last_valid_idx = valid_rows[-1]
+            df_day = df_day.loc[:last_valid_idx].copy()
+            logger.debug(f"Trimmed df_day to {len(df_day)} rows (last real data @ {format_ora(df_day['Ora'].iloc[-1])})")
+        else:
+            return downtime_tracker  # No real data at all — nothing to track
     
     # Get POA array if available
     poa_array = None
@@ -651,95 +684,104 @@ def compute_downtime(ac_df: pd.DataFrame, irrad_df: pd.DataFrame, daylight_start
             poa_array = irrad_df[poa_cols[0]].replace(["x", " x "], np.nan)
             poa_array = pd.to_numeric(poa_array, errors="coerce")
 
+
+    def ora_to_minutes(o):
+        """Convert VCOM HH.MM float (e.g. 8.30 → 8:30 → 510 min) to total minutes."""
+        if pd.isna(o): return 0
+        try:
+            f = float(o)
+            hours = int(f)
+            minutes = int(round((f - hours) * 100))
+            if minutes >= 60:
+                minutes = int(round((f - hours) * 60))
+            return hours * 60 + minutes
+        except:
+            return 0
+
+    # ── Step 1: Determine "plant active" rows ────────────────────────────────
+    # A row is "plant active" if ≥ 20 of the 36 inverters are producing > 200 W.
+    # This filters out natural startup, shutdown and full-plant outages.
+    all_ac_cols = [c for c in df_day.columns if "Potenza AC" in c and "[W]" in c]
+    ac_numeric = df_day[all_ac_cols].apply(pd.to_numeric, errors='coerce')
+    plant_active = (ac_numeric > 200).sum(axis=1) >= 20   # Series[bool], index = df_day.index
+
+    # Last available POA for display
+    last_poa = "—"
+    if poa_array is not None and len(poa_array.dropna()) > 0:
+        last_poa_val = poa_array.dropna().iloc[-1]
+        last_poa = f"{last_poa_val:.1f}"
+
+    # ── Step 2: Per-inverter analysis — only during plant-active windows ─────
     for inv_id in INVERTER_IDS:
         inv_label = f"INV {inv_id}"
         ac_col = f"Potenza AC ({inv_label}) [W]"
         if ac_col not in df_day.columns:
             continue
-            
+
         data = pd.to_numeric(df_day[ac_col], errors='coerce')
-        
-        # IRRADIANCE GATING REMOVED as per user request.
-        # We rely on daylight_start (Sunrise - 30m) filter at line 595.
-        
-        is_off = (data <= 50.0) | (pd.isna(data))
-        
-        zero_indices = is_off[is_off].index
 
+        # An inverter is "off" when it produces ≤50 W or has no data
+        inv_off = (data <= 50.0) | (pd.isna(data))
 
-        if len(zero_indices) > 0:
-            # Group contiguous off-states
-            blocks = (is_off != is_off.shift()).cumsum()
-            zero_blocks = blocks[is_off]
-            last_block_id = zero_blocks.iloc[-1]
-            last_block_indices = zero_blocks[zero_blocks == last_block_id].index
-            
-            idx_start = last_block_indices[0]
-            idx_end = last_block_indices[-1]
-            
-            time_stopped = format_ora(df_day.loc[idx_start].get("Ora"))
-            
-            # Check if it's still off
-            valid_data_idx = data.dropna().index
-            if len(valid_data_idx) > 0 and idx_end == valid_data_idx[-1]:
-                started_again = "still off"
-            else:
-                after_end = data.loc[idx_end:].dropna()
-                if len(after_end) > 1:
-                    rec_idx = after_end.index[1]
-                    started_again = format_ora(df_day.loc[rec_idx].get("Ora"))
-                else:
-                    started_again = "still off"
-                    
-            # Last available data timestamp
-            last_data_idx = valid_data_idx[-1] if len(valid_data_idx) > 0 else df_day.index[-1]
-            last_ts = format_ora(df_day.loc[last_data_idx].get("Ora"))
-            
-            last_poa = "—"
-            if poa_array is not None and len(poa_array.dropna()) > 0:
-                last_poa_val = poa_array.dropna().iloc[-1]
-                last_poa = f"{last_poa_val:.1f}"
+        # Only flag rows where the PLANT is active but THIS inverter is off
+        fault = inv_off & plant_active
 
-            def ora_to_minutes(o):
-                """Convert float in HH.MM style (e.g., 8.30 = 8:30) used by VCOM to total minutes."""
-                if pd.isna(o): return 0
-                try:
-                    f = float(o)
-                    hours = int(f)
-                    # Extract the decimal part as minutes (e.g., .30 * 100 = 30)
-                    minutes = int(round((f - hours) * 100))
-                    # Fallback for rare cases where it might be decimal
-                    if minutes >= 60:
-                        minutes = int(round((f - hours) * 60))
-                    return hours * 60 + minutes
-                except: return 0
+        fault_indices = fault[fault].index
+        if len(fault_indices) == 0:
+            continue   # Inverter was fine during all plant-active periods
 
-            stop_min = ora_to_minutes(df_day.loc[idx_start].get("Ora"))
-            
-            # If it's recovered, use recovery time, else use the time of the last point analyzed in this block
-            if started_again == "still off":
-                end_min = ora_to_minutes(df_day.loc[idx_end].get("Ora"))
-            else:
-                end_min = ora_to_minutes(df_day.loc[rec_idx].get("Ora"))
-            
-            # Duration in minutes
-            total_time_off_calc = end_min - stop_min
-            if total_time_off_calc <= 0 and started_again == "still off":
-                # If stopped at the last row, at least it's a 5-min interval
-                total_time_off_calc = 5 
+        # ── Find the last contiguous fault block ────────────────────────────
+        blocks = (fault != fault.shift()).cumsum()
+        fault_blocks = blocks[fault]
+        last_block_id = fault_blocks.iloc[-1]
+        last_block_indices = fault_blocks[fault_blocks == last_block_id].index
 
+        idx_start = last_block_indices[0]
+        idx_end   = last_block_indices[-1]
 
-            if total_time_off_calc >= min_downtime_minutes:
-                downtime_tracker[inv_label] = {
-                    "inverter": inv_label,
-                    "last_data_fetched": last_ts,
-                    "last_poa": last_poa,
-                    "time_stopped": time_stopped,
-                    "started_again": started_again,
-                    "total_time_off": int(total_time_off_calc)
-                }
-            
+        time_stopped = format_ora(df_day.loc[idx_start].get("Ora"))
+
+        # Determine if it recovered after this block
+        # Look for a plant-active row WHERE the inverter is also on after idx_end
+        after = data.loc[idx_end:]
+        recovered_rows = after[(after > 50) & plant_active.loc[idx_end:]]
+        if len(recovered_rows) > 0:
+            rec_idx = recovered_rows.index[0]
+            started_again = format_ora(df_day.loc[rec_idx].get("Ora"))
+        else:
+            started_again = "still off"
+
+        # Last data timestamp (last row where this inverter had ANY data)
+        valid_data_idx = data.dropna().index
+        last_data_idx = valid_data_idx[-1] if len(valid_data_idx) > 0 else df_day.index[-1]
+        last_ts = format_ora(df_day.loc[last_data_idx].get("Ora"))
+
+        # ── Duration ────────────────────────────────────────────────────────
+        stop_min = ora_to_minutes(df_day.loc[idx_start].get("Ora"))
+        if started_again == "still off":
+            # End = last plant-active row (most recent time we know it was off)
+            active_rows = plant_active[plant_active].index
+            last_active_idx = active_rows[-1] if len(active_rows) > 0 else idx_end
+            end_min = ora_to_minutes(df_day.loc[last_active_idx].get("Ora"))
+        else:
+            end_min = ora_to_minutes(df_day.loc[rec_idx].get("Ora"))
+
+        total_time_off_calc = end_min - stop_min
+        if total_time_off_calc <= 0:
+            total_time_off_calc = settings.get("thresholds", {}).get("collection_interval", 15)
+
+        if total_time_off_calc >= min_downtime_minutes:
+            downtime_tracker[inv_label] = {
+                "inverter": inv_label,
+                "last_data_fetched": last_ts,
+                "last_poa": last_poa,
+                "time_stopped": time_stopped,
+                "started_again": started_again,
+                "total_time_off": int(total_time_off_calc),
+            }
+
     return downtime_tracker
+
 
 # Macro Health
 # ---------------------------------------------------------------------------

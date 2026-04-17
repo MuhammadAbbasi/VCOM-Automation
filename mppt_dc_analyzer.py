@@ -22,7 +22,7 @@ def load_mppt_config() -> dict:
         # TX1 maps to T1, TX2 to T2, TX3 to T3
         # TX1-01 maps to T1;11
         # TX1-10 maps to T1;110
-        df_cfg = pd.read_csv(csv_path, sep=";", encoding="utf-8")
+        df_cfg = pd.read_csv(csv_path, sep=";", encoding="utf-8", dtype={1: str})
         
         for _, row in df_cfg.iterrows():
             area = str(row.iloc[0]).strip() # T1

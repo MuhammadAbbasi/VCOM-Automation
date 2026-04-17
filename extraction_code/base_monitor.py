@@ -197,21 +197,44 @@ def login(page) -> None:
 # ---------------------------------------------------------------------------
 
 def dismiss_popup(page) -> None:
-    """Dismiss the 'Valori minimi non disponibili' popup (and any other Chiudi dialog).
-
-    This popup appears when minute-resolution data is unavailable for the
-    current component selection.  Clicking 'Chiudi' closes it and lets
-    extraction continue with whatever resolution is available.
+    """Dismiss any 'Valori minimi non disponibili' or other blocking Bootstrap Vue modals.
+    
+    Previous approach (clicking the 'Chiudi' button) fails because Playwright's
+    force-click does not trigger Bootstrap Vue's internal event handlers.
+    Instead, we remove the modal and its backdrop directly from the DOM.
     """
     try:
-        chiudi = page.locator('button:has-text("Chiudi"):visible')
-        chiudi.first.wait_for(state="visible", timeout=4_000)
-        chiudi.first.click()
-        logger.info("Dismissed 'Chiudi' popup.")
-        time.sleep(1)
-    except Exception:
-        pass  # No popup — that's fine
-    logger.info("Out of dismiss_popup")
+        removed = page.evaluate("""() => {
+            let removed = 0;
+            // 1. Remove all visible modal backdrops
+            document.querySelectorAll('.modal-backdrop').forEach(el => {
+                el.remove();
+                removed++;
+            });
+            // 2. Hide and remove all open Bootstrap Vue modals
+            document.querySelectorAll('.modal.show, .modal.fade.show').forEach(el => {
+                el.classList.remove('show');
+                el.style.display = 'none';
+                el.setAttribute('aria-hidden', 'true');
+                el.removeAttribute('aria-modal');
+                removed++;
+            });
+            // 3. Also handle the outer wrapper divs (missing-minute-values-modal)
+            document.querySelectorAll('[class*="missing-minute-values-modal"]').forEach(el => {
+                el.style.display = 'none';
+                removed++;
+            });
+            // 4. Clean up body classes that lock scrolling
+            document.body.classList.remove('modal-open');
+            document.body.style.removeProperty('padding-right');
+            document.body.style.overflow = '';
+            return removed;
+        }""")
+        if removed > 0:
+            logger.info(f"Dismissed popup by removing {removed} modal element(s) from DOM.")
+            time.sleep(0.5)
+    except Exception as e:
+        logger.debug(f"Popup dismissal failed: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -299,6 +322,9 @@ def click_dati_tab(page, extra_wait: float = 0) -> None:
     
     for attempt in range(1, max_attempts + 1):
         try:
+            # Clear any blocking modals before attempting to click
+            dismiss_popup(page)
+            
             # VCOM evaluation pages can be long
             page.evaluate("window.scrollTo(0, 450)")
             time.sleep(0.5)  # brief settle after scroll

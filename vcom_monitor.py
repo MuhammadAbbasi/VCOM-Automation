@@ -47,7 +47,7 @@ logger = logging.getLogger("vcom_monitor")
 # ---------------------------------------------------------------------------
 # Metric extractors
 # ---------------------------------------------------------------------------
-from extraction_code.base_monitor import login, select_inverters, export_metric, load_config
+from extraction_code.base_monitor import login, select_inverters, export_metric, load_config, dismiss_popup
 from extraction_code.pr_monitor import extract_pr
 from extraction_code.potenza_ac_monitor import extract_potenza_ac
 from extraction_code.corrente_dc_monitor import extract_corrente_dc
@@ -139,6 +139,7 @@ def run_extraction_cycle(page, cycle_count: int) -> None:
         ensure_on_evaluation_page(page)
         print("[*] Selecting 36 Inverters...", flush=True)
         select_inverters(page)
+        dismiss_popup(page)
     except Exception as e:
         print(f"[!] SETUP FAILED: {e}", flush=True)
         logger.error(f"Pre-extraction setup failed: {e}")
@@ -152,6 +153,7 @@ def run_extraction_cycle(page, cycle_count: int) -> None:
         for attempt in range(1, MAX_RETRIES + 1):
             try:
                 print(f"    (Attempt {attempt}/{MAX_RETRIES})...", flush=True)
+                dismiss_popup(page) # Clear any remaining popups before starting extractor
                 df = extractor(page)
                 success = True
                 break

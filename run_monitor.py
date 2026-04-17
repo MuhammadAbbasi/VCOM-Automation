@@ -1,10 +1,11 @@
 """
 run_monitor.py — Orchestrator for the Mazara SCADA monitoring system.
 
-Launches three concurrent services:
+Launches four concurrent services:
   1. [DASHBOARD]  dashboard/app.py      — opened in a NEW terminal window
   2. [WATCHDOG]   processor_watchdog.py — logs in THIS terminal
   3. [EXTRACTION] vcom_monitor.py       — logs in THIS terminal
+  4. [TELEGRAM]   telegram_bot.py       — logs in THIS terminal
 
 The dashboard gets its own console so its output stays separate.
 WATCHDOG and EXTRACTION stream their logs here with prefixes.
@@ -53,6 +54,11 @@ SERVICES = [
     {
         "name": "EXTRACTION",
         "cmd": [sys.executable, "-u", str(ROOT / "vcom_monitor.py")],
+        "new_console": False,
+    },
+    {
+        "name": "TELEGRAM",
+        "cmd": [sys.executable, "-u", str(ROOT / "telegram_bot.py")],
         "new_console": False,
     },
 ]
@@ -192,6 +198,7 @@ def main() -> None:
     print("[*] Launching DASHBOARD (http://localhost:8080)...", flush=True)
     print("[*] Launching WATCHDOG (Forensic Analysis)...", flush=True)
     print("[*] Launching EXTRACTION (VCOM Browser Automation)...", flush=True)
+    print("[*] Launching TELEGRAM (Bot Commands)...", flush=True)
     print("-" * 60, flush=True)
     print("Streaming logs below:", flush=True)
     print("-" * 60, flush=True)
