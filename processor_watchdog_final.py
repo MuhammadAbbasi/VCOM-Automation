@@ -174,9 +174,9 @@ def calculate_sunrise(date_str: str) -> float:
 
 
 def get_production_start_time(ac_df: pd.DataFrame) -> tuple:
-    """Find the first Ora where production starts and return (start_ora, sunset_ora)."""
+    """Find the first and last Ora where production is active and return (start_ora, end_ora, theo_sunset)."""
     if ac_df is None or "Ora" not in ac_df.columns:
-        return 7.0, 19.5
+        return 7.0, 19.5, 19.5
     
     ac_cols = [c for c in ac_df.columns if "Potenza AC" in c]
     df_clean = ac_df.replace(["x", " x "], np.nan).apply(pd.to_numeric, errors='coerce')
@@ -189,7 +189,7 @@ def get_production_start_time(ac_df: pd.DataFrame) -> tuple:
     search_start = max(5.0, sunrise - 0.5)
     
     prod_start = sunrise
-    found = False
+    found_start = False
     for idx, row in df_clean.iterrows():
         ora = float(row.get("Ora", 0))
         if ora < search_start: continue
@@ -197,15 +197,28 @@ def get_production_start_time(ac_df: pd.DataFrame) -> tuple:
         producing = sum(1 for c in ac_cols if row.get(c, 0) > 300)
         if producing > 15: 
             prod_start = ora
-            found = True
+            found_start = True
             break
     
-    if found:
-        logger.info(f"Production detected at {format_ora(prod_start)} (Sun: {format_ora(sunrise)})")
-    else:
-        logger.warning(f"No production detected. Using sunrise {format_ora(sunrise)} as start.")
+    prod_end = sunset
+    found_end = False
+    # Backward scan for production end
+    for idx, row in df_clean.iloc[::-1].iterrows():
+        ora = float(row.get("Ora", 0))
+        if ora < prod_start: break
+        
+        producing = sum(1 for c in ac_cols if row.get(c, 0) > 300)
+        if producing > 15:
+            prod_end = ora
+            found_end = True
+            break
+
+    if found_start:
+        logger.info(f"Production START at {format_ora(prod_start)} (Sun: {format_ora(sunrise)})")
+    if found_end:
+        logger.info(f"Production END at {format_ora(prod_end)} (Sun: {format_ora(sunset)})")
             
-    return prod_start, sunset
+    return prod_start, prod_end, sunset
 
 
 
@@ -358,28 +371,48 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
                     latest_ac_missing.add(c)
         
         # Site-wide data drop history
-        # We only count it as a "Drop" if at least 3 consecutive rows are missing (15m delay)
-        # to avoid false positives from transient fetch delays.
+        # Identify internal gaps during active production hours.
         plant_drop_history = []
         if not ac_dedup.empty:
-            # We use the sunset provided by analyze_site
-            hist_day = ac_dedup[(ac_dedup["Ora_num"] >= daylight_start) & (ac_dedup["Ora_num"] <= daylight_end - 0.25)]
-            hist_day = hist_day.sort_values("Ora_num")
+            # Look at everything from start to theoretical end of day
+            hist_day = ac_dedup[(ac_dedup["Ora_num"] >= daylight_start) & (ac_dedup["Ora_num"] <= daylight_end)].sort_values("Ora_num")
             
-            potential_drops = []
+            potential_blocks = []
             for _, row in hist_day.iterrows():
                 v_count = sum(1 for c in ac_cols if pd.notna(row.get(c)) and str(row.get(c)).strip().lower() not in ['x', ''])
                 if v_count < 2:
-                    potential_drops.append({"ora": row.get("Ora"), "time": format_ora(row.get("Ora"))})
+                    potential_blocks.append({"ora": row.get("Ora_num"), "time": format_ora(row.get("Ora_num"))})
                 else:
-                    # If we find a valid row, check if the previous streak was long enough
-                    if len(potential_drops) >= 3:
-                        plant_drop_history.extend(potential_drops)
-                    potential_drops = []
+                    if len(potential_blocks) >= 3:
+                        # Internal gap closed by valid data
+                        start_time = potential_blocks[0]["time"]
+                        end_time = format_ora(row.get("Ora_num"))
+                        duration = len(potential_blocks) * 5 # Approx 5m intervals
+                        plant_drop_history.append({
+                            "type": "INTERNAL GAP",
+                            "start": start_time,
+                            "end": end_time,
+                            "duration": duration,
+                            "time": start_time, # Fallback
+                            "ora": potential_blocks[0]["ora"]
+                        })
+                    potential_blocks = []
             
-            # Catch trailing drops (if the day ends with missing data)
-            if len(potential_drops) >= 3:
-                plant_drop_history.extend(potential_drops)
+            # Check for trailing drop
+            if len(potential_blocks) >= 3:
+                start_time = potential_blocks[0]["time"]
+                duration = len(potential_blocks) * 5
+                # Only report trailing drop if it starts before 18:00 (prime hours)
+                # Otherwise it's likely just end-of-day shutdown.
+                if potential_blocks[0]["ora"] < 18.0:
+                    plant_drop_history.append({
+                        "type": "POST-PRODUCTION DROP",
+                        "start": start_time,
+                        "end": "still missing",
+                        "duration": duration,
+                        "time": start_time,
+                        "ora": potential_blocks[0]["ora"]
+                    })
 
     else:
         plant_drop_history = []
@@ -786,6 +819,19 @@ def compute_downtime(ac_df: pd.DataFrame, irrad_df: pd.DataFrame, daylight_start
 # Macro Health
 # ---------------------------------------------------------------------------
 
+def format_duration(minutes):
+    """Convert minutes to readable Xh Ym or Xm."""
+    if pd.isna(minutes) or minutes is None: return "0m"
+    try:
+        m_int = int(minutes)
+        if m_int < 60:
+            return f"{m_int}m"
+        h = m_int // 60
+        remainder = m_int % 60
+        return f"{h}h {remainder}m"
+    except:
+        return f"{minutes}m"
+
 def compute_macro_health(inverter_health: dict, daylight_start: float = 7.0) -> dict:
     """Compute plant-wide health summary."""
     total = len(inverter_health)
@@ -825,18 +871,19 @@ def analyze_site(date_str: str) -> None:
             logger.warning(f"Potenza_AC not found for {date_str}")
             return
         # Compute dynamic production start
-        daylight_start, sunset_end = get_production_start_time(ac_df)
+        daylight_start, actual_sunset, theory_sunset = get_production_start_time(ac_df)
         logger.info(f"Dynamic Daylight Start detected at: {format_ora(daylight_start)}")
-        logger.info(f"Dynamic Sunset detected at: {format_ora(sunset_end)}")
+        logger.info(f"Dynamic Sunset (actual) at: {format_ora(actual_sunset)}")
+        logger.info(f"Dynamic Sunset (theoretical) at: {format_ora(theory_sunset)}")
 
         settings = load_user_settings()
 
-        # Compute health from latest values
+        # Compute health from latest values (use actual_sunset and theory_sunset for context)
         logger.info("Computing health flags...")
-        inverter_health, plant_drop_history, sensor_data = compute_latest_health(date_str, ac_df, temp_df, dc_df, pr_df, irrad_df=irrad_df, daylight_start=daylight_start, daylight_end=sunset_end, settings=settings)
+        inverter_health, plant_drop_history, sensor_data = compute_latest_health(date_str, ac_df, temp_df, dc_df, pr_df, irrad_df=irrad_df, daylight_start=daylight_start, daylight_end=actual_sunset, settings=settings)
 
         macro_health = compute_macro_health(inverter_health, daylight_start=daylight_start)
-        macro_health["sunset_time"] = format_ora(sunset_end)
+        macro_health["sunset_time"] = format_ora(theory_sunset)
         
         # Latest sync from extraction status if available
         status_path = DATA_DIR / "extraction_status.json"
@@ -871,7 +918,7 @@ def analyze_site(date_str: str) -> None:
         
         # Compute Downtime array
         logger.info("Evaluating downtime...")
-        downtime_tracker = compute_downtime(ac_df, irrad_df, daylight_start=daylight_start, daylight_end=sunset_end, settings=settings)
+        downtime_tracker = compute_downtime(ac_df, irrad_df, daylight_start=daylight_start, daylight_end=actual_sunset, settings=settings)
 
 
         # Build JSON snapshot and process anomalies
@@ -903,45 +950,43 @@ def analyze_site(date_str: str) -> None:
         
         tg_messages = []
 
-        # --- Site-Wide Data Drop Alarm ---
-        if plant_drop_history:
-            # Find the start of the latest contiguous block of drops
-            first_drop_time = plant_drop_history[-1]["time"]
-            # If there are multiple drops, find where the latest block starts
-            all_drop_oras = [d["ora"] for d in plant_drop_history]
-            if len(all_drop_oras) > 1:
-                # Iterate backwards to find gap
-                idx = len(all_drop_oras) - 1
-                while idx > 0:
-                    # In HH.MM style, a 5-min gap is 0.05
-                    diff = abs(all_drop_oras[idx] - all_drop_oras[idx-1])
-                    if diff > 0.06: # More than 5 mins (plus buffer for floats)
-                        break
-                    idx -= 1
-                first_drop_time = plant_drop_history[idx]["time"]
-
-            drop_alarm_id = "SITE_DATA_DROP"
+        # --- Site-Wide Data Drop Alarms ---
+        active_site_drop_ids = set()
+        for idx, gap in enumerate(plant_drop_history):
+            drop_alarm_id = f"SITE_DATA_GAP_{gap['start'].replace(':', '')}"
+            active_site_drop_ids.add(drop_alarm_id)
+            
             if drop_alarm_id not in prev_alarm_map:
+                message = f"Data outage detected from {gap['start']} to {gap['end']} ({gap['duration']} min)."
+                if gap['type'] == "POST-PRODUCTION DROP":
+                    message = f"Global data outage started at {gap['start']} and has not recovered."
+                
                 alarm = {
                     "id": drop_alarm_id,
                     "inverter": "SITE",
-                    "type": "PLANT DATA DROP",
+                    "type": gap['type'],
                     "severity": "red",
-                    "trip_time": first_drop_time,
-                    "message": f"Global data outage detected starting at {first_drop_time}."
+                    "trip_time": gap['start'],
+                    "message": message
                 }
                 current_active.append(alarm)
                 tg_messages.append(f"📡 *{alarm['type']}*\nSystem: {alarm['inverter']}\nTime: {alarm['trip_time']}\n{alarm['message']}")
             else:
-                # Carry over and maybe update trip_time to be earlier if we found an earlier start
-                carried = prev_alarm_map[drop_alarm_id]
-                carried["trip_time"] = first_drop_time
-                current_active.append(carried)
-        elif "SITE_DATA_DROP" in prev_alarm_map:
+                current_active.append(prev_alarm_map[drop_alarm_id])
+
+        # Recover resolved site drops
+        for past_alarm_id, past_alarm in prev_alarm_map.items():
+            if past_alarm_id.startswith("SITE_DATA_GAP_") and past_alarm_id not in active_site_drop_ids:
+                past_alarm["recovery_time"] = timestamp
+                historical_trail.append(past_alarm)
+                tg_messages.append(f"✅ *RECOVERED*: {past_alarm['type']}\nSystem: SITE\nTime: {timestamp}")
+                
+        # Handle the legacy SITE_DATA_DROP id for backward compatibility/cleanup
+        if "SITE_DATA_DROP" in prev_alarm_map and "SITE_DATA_DROP" not in active_site_drop_ids:
              prev_alarm = prev_alarm_map["SITE_DATA_DROP"]
              prev_alarm["recovery_time"] = timestamp
              historical_trail.append(prev_alarm)
-             tg_messages.append(f"✅ *RECOVERED*: {prev_alarm['type']}\nSystem: SITE\nTime: {timestamp}")
+             tg_messages.append(f"✅ *LEGACY ALERT CLEANUP*: SITE_DATA_DROP recovered.")
         
         for inv_id in INVERTER_IDS:
             inv_label = f"INV {inv_id}"
@@ -1053,7 +1098,7 @@ def analyze_site(date_str: str) -> None:
                     "type": f['Type'],
                     "severity": "red" if f['Severity'] == "CRITICAL" else "yellow",
                     "trip_time": timestamp,
-                    "message": f"MPPT {f['MPPT']} Measured: {f['Measured']}A (Expected: {f['Expected']}A) for {f['Duration']}m."
+                    "message": f"MPPT {f['MPPT']} Measured: {f['Measured']}A (Expected: {f['Expected']}A) for {format_duration(f['Duration'])}."
                 }
                 current_active.append(alarm)
                 icon = "🔴" if f['Severity'] == "CRITICAL" else "🟡"

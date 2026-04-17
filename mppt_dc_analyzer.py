@@ -95,6 +95,19 @@ def get_current_streak_minutes(mask, times):
     # We add 15 minutes to account for the interval the last point represents
     return int((end_m - start_m) + 15)
 
+def format_duration(minutes):
+    """Convert minutes to readable Xh Ym or Xm."""
+    if minutes is None: return "0m"
+    try:
+        m_int = int(minutes)
+        if m_int < 60:
+            return f"{m_int}m"
+        h = m_int // 60
+        remainder = m_int % 60
+        return f"{h}h {remainder}m"
+    except:
+        return f"{minutes}m"
+
 def analyze_dc_current(dc_df: pd.DataFrame, output_md_path: Path, date_str: str):
     """Parses Corrente_DC dataset, calculates thresholds, and generates MD report."""
     if dc_df is None or len(dc_df) == 0:
@@ -251,13 +264,13 @@ def analyze_dc_current(dc_df: pd.DataFrame, output_md_path: Path, date_str: str)
 
     # Formatting structured Markdown report
     md = [f"# Mazara PV Plant - DC MPPT Analysis Report ({date_str})\n", "## Section 1: Fault Table"]
-    md.append("| Inverter | MPPT | Strings | Fault Type | Severity | Measured(A) | Expected(A) | Duration(m) | Deviation | Action |")
+    md.append("| Inverter | MPPT | Strings | Fault Type | Severity | Measured(A) | Expected(A) | Duration | Deviation | Action |")
     md.append("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |")
     
     severity_rank = {"CRITICAL": 0, "WARNING": 1, "INFO": 2}
     faults.sort(key=lambda x: (severity_rank.get(x["Severity"], 3), x["Inverter"], x["MPPT"]))
     
-    for f in faults: md.append(f"| {f['Inverter']} | {f['MPPT']} | {f['Strings']} | {f['Type']} | {f['Severity']} | {f['Measured']} | {f['Expected']} | {f['Duration']} | {f['Deviation']} | {f['Action']} |")
+    for f in faults: md.append(f"| {f['Inverter']} | {f['MPPT']} | {f['Strings']} | {f['Type']} | {f['Severity']} | {f['Measured']} | {f['Expected']} | {format_duration(f['Duration'])} | {f['Deviation']} | {f['Action']} |")
     if not faults: md.append("| - | - | - | No faults detected | - | - | - | - | - | - |")
     
     md.extend(["\n## Section 2: Per-Inverter Summary", "| Inverter | Domain | Status | Critical | Warnings | Details (Info) |", "| --- | --- | --- | --- | --- | --- |"])
