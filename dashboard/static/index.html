@@ -49,6 +49,9 @@
   <button class="tab-btn" data-tab="tab-sensors">
     <span class="tab-icon">📡</span> Sensors
   </button>
+  <button class="tab-btn" data-tab="tab-chat">
+    <span class="tab-icon">💬</span> AI Chat
+  </button>
 
 </nav>
 
@@ -453,6 +456,32 @@
     
     <div class="sensor-container" id="sensor-grid-container" style="margin-top: 1.5rem;">
       <div class="empty-state">Waiting for sensor data…</div>
+    </div>
+  </section>
+</main>
+
+<!-- ═══════════════════════════════════════════════════════════
+     TAB 7: AI CHAT DETAIL
+════════════════════════════════════════════════════════════ -->
+<main id="tab-chat" class="tab-content">
+  <section style="display: flex; flex-direction: column; height: 100%; width: 100%;">
+    <div class="detail-header">
+      <div>
+        <h2>💬 Offline AI Chat (Local Llama 3.1 8B)</h2>
+        <p class="detail-desc">Ask questions about the current plant status. Answers are generated totally offline.</p>
+      </div>
+    </div>
+    
+    <div class="chat-container">
+      <div id="chat-messages" class="chat-messages">
+        <div class="chat-message bot">
+          <div class="msg-content">Hello! I am the Mazara Solar Plant AI (Llama 3.1). How can I help you today?</div>
+        </div>
+      </div>
+      <div class="chat-input-area">
+        <input type="text" id="chat-input" placeholder="Type a question (e.g. Are there any active alerts?)" />
+        <button id="chat-send-btn" class="btn-rescan">Send</button>
+      </div>
     </div>
   </section>
 </main>

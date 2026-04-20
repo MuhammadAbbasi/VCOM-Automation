@@ -46,7 +46,7 @@ logger = logging.getLogger("telegram_bot")
 TRIGGER_KEYWORDS = [
     "/status", "status", "plant status", "stato", "potenza",
     "stato impianto", "stato dell'impianto", "/potenza",
-    "how is the plant", "plant ok", "update",
+    "how is the plant", "plant ok", 
 ]
 
 POLL_INTERVAL = 5   # seconds between Telegram getUpdates calls
@@ -267,17 +267,38 @@ def main() -> None:
                 continue
 
             if bot.is_trigger(text):
-                logger.info(f"Trigger received from chat_id={chat_id}: '{text}'")
+                logger.info(f"Standard trigger received from chat_id={chat_id}: '{text}'")
                 data = get_latest_dashboard_json()
                 if data:
                     reply = build_status_message(data)
                 else:
-                    reply = (
-                        "⚠️ *No data available yet.*\n"
-                        "The extraction cycle may not have completed. "
-                        "Please try again in a few minutes."
-                    )
+                    reply = "⚠️ *No live data available yet.*"
                 bot.send_message(chat_id, reply)
+
+            elif text.lower().startswith("/ai"):
+                # Explicit AI question command
+                question = text[3:].strip()
+                if not question:
+                    bot.send_message(chat_id, "🤖 *AI Mode:* Please ask a question after /ai (e.g. `/ai how is TX3 performing?`)")
+                    continue
+
+                logger.info(f"AI question (via /ai) from chat_id={chat_id}: '{question}'")
+                bot.send_message(chat_id, "⏳ _AI is thinking... checking plant data..._")
+                
+                data = get_latest_dashboard_json()
+                try:
+                    from llm_agent import ask_llm
+                    reply = ask_llm(question, data)
+                except Exception as e:
+                    logger.error(f"LLM Error: {e}")
+                    reply = f"🤖 My AI brain is offline. Error: {e}"
+                
+                bot.send_message(chat_id, reply)
+            
+            else:
+                # For any other text, suggest the commands
+                if chat_id > 0: # Only reply to direct messages, ignore group noise
+                    bot.send_message(chat_id, "❓ Unknown command. Use *status* for a quick report or */ai <question>* for the chatbot.")
 
         time.sleep(POLL_INTERVAL)
 

@@ -175,3 +175,12 @@ dist/
 *.json.backup
 state.json
 cache/
+
+# ============================================================================
+# AI & LLM ARTIFACTS
+# ============================================================================
+.gemini/
+.ollama/
+temp_analysis_*.py
+llm_agent.log
+system_prompt_backups/

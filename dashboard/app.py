@@ -204,6 +204,43 @@ async def test_telegram():
 
 
 # ---------------------------------------------------------------------------
+# LLM Chat Endpoint
+# ---------------------------------------------------------------------------
+try:
+    from llm_agent import ask_llm
+except ImportError:
+    ask_llm = None
+
+@app.post("/api/chat")
+async def chat_endpoint(request: Request):
+    if not ask_llm:
+        return JSONResponse({"status": "error", "message": "llm_agent module not found."}, status_code=500)
+    
+    try:
+        body = await request.json()
+        question = body.get("question")
+        if not question:
+            return JSONResponse({"status": "error", "message": "No question provided."}, status_code=400)
+        
+        # Load the latest state to pass as context
+        today = datetime.now().strftime("%Y-%m-%d")
+        json_path = DATA_DIR / f"dashboard_data_{today}.json"
+        latest_data = None
+        if json_path.exists():
+            with open(json_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if data:
+                    latest_key = sorted(data.keys())[-1]
+                    latest_data = data[latest_key]
+        
+        # Call the LLM
+        answer = ask_llm(question, latest_data)
+        return JSONResponse({"status": "success", "answer": answer})
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 def get_local_ip():

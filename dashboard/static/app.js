@@ -979,4 +979,86 @@ document.addEventListener("DOMContentLoaded", () => {
   if (filterEl) {
     filterEl.addEventListener("change", renderHistoryTable);
   }
+
+  // AI Chatbot logic
+  const chatInput = el("chat-input");
+  const chatSendBtn = el("chat-send-btn");
+  const chatMessages = el("chat-messages");
+
+  function appendChatMessage(text, sender) {
+    if (!chatMessages) return;
+    const msgDiv = document.createElement("div");
+    msgDiv.className = `chat-message ${sender}`;
+    msgDiv.innerHTML = `<div class="msg-content">${text}</div>`;
+    chatMessages.appendChild(msgDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+
+  async function handleChatSend() {
+    if (!chatInput || !chatInput.value.trim()) return;
+    const question = chatInput.value.trim();
+    chatInput.value = "";
+    
+    appendChatMessage(question, "user");
+    
+    // Add dummy 'Thinking' message
+    const thinkingDiv = document.createElement("div");
+    thinkingDiv.className = "chat-message bot thinking";
+    thinkingDiv.innerHTML = `<div class="msg-content"><span class="spinner"></span> Thinking... Examining plant data...</div>`;
+    chatMessages.appendChild(thinkingDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+
+    if (chatSendBtn) {
+      chatSendBtn.disabled = true;
+      chatSendBtn.style.opacity = "0.5";
+    }
+
+    try {
+      const resp = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question })
+      });
+      
+      const contentType = resp.headers.get("content-type");
+      if (!resp.ok) {
+        const errText = await resp.text();
+        throw new Error(`Server ${resp.status}: ${errText.substring(0, 50)}`);
+      }
+
+      if (contentType && contentType.includes("application/json")) {
+        const data = await resp.json();
+        if (thinkingDiv) thinkingDiv.remove();
+        if (data.status === "success") {
+          appendChatMessage(data.answer, "bot");
+        } else {
+          appendChatMessage("AI Error: " + data.message, "bot");
+        }
+      } else {
+        // Handle non-JSON (HTML error pages etc)
+        const text = await resp.text();
+        if (thinkingDiv) thinkingDiv.remove();
+        appendChatMessage("AI Response Error: Received non-JSON response from server.", "bot");
+        console.error("Non-JSON response:", text);
+      }
+    } catch (err) {
+      if (thinkingDiv) thinkingDiv.remove();
+      appendChatMessage("Error communicating with AI: " + err, "bot");
+    } finally {
+      if (chatSendBtn) {
+        chatSendBtn.disabled = false;
+        chatSendBtn.style.opacity = "1";
+      }
+    }
+  }
+
+  if (chatSendBtn) {
+    chatSendBtn.addEventListener("click", handleChatSend);
+  }
+  
+  if (chatInput) {
+    chatInput.addEventListener("keypress", (e) => {
+      if (e.key === "Enter") handleChatSend();
+    });
+  }
 });
