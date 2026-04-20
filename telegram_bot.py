@@ -5,8 +5,9 @@ Polls the Telegram Bot API for incoming messages every ~5 seconds.
 Responds to any message containing trigger keywords with live plant data
 read from the latest dashboard_data_<date>.json snapshot.
 
-Supported triggers (case-insensitive):
-  /status  |  status  |  plant status  |  stato  |  potenza
+Supported triggers:
+  /status  |  status           -> Live plant summary
+  /ai <question>               -> Local AI Forensic Analysis (Qwen 2.5)
 
 Run standalone:
     python telegram_bot.py
@@ -171,11 +172,7 @@ def main() -> None:
                 text = msg.get("text", "")
                 if not text: continue
 
-                if bot.is_trigger(text):
-                    data = get_latest_dashboard_json()
-                    bot.send_message(chat_id, build_status_message(data) if data else "⚠️ No data.")
-                
-                elif text.lower().startswith("/ai"):
+                if text.lower().startswith("/ai"):
                     question = text[3:].strip()
                     if not question:
                         bot.send_message(chat_id, "🤖 Ask me after /ai")
@@ -185,14 +182,19 @@ def main() -> None:
                     data = get_latest_dashboard_json()
                     
                     if llm_agent:
-                        # Robust execution
                         reply = llm_agent.ask_llm(question, data)
                         bot.send_message(chat_id, reply)
                     else:
                         bot.send_message(chat_id, "❌ AI agent not found.")
+
+                elif bot.is_trigger(text):
+                    data = get_latest_dashboard_json()
+                    bot.send_message(chat_id, build_status_message(data) if data else "⚠️ No data.")
                 
                 elif chat_id > 0:
-                    bot.send_message(chat_id, "❓ Use *status* or */ai <question>*")
+                    bot.send_message(chat_id, "❓ *Available Commands:*\n\n"
+                                     "📊 **/status** — Get the live plant summary (LEDs, MW, Alerts).\n"
+                                     "🤖 **/ai <question>** — Ask the AI for deep analysis (e.g., '/ai check TX1 temp trends').")
 
         except Exception as e:
             logger.error(f"Loop error: {e}")

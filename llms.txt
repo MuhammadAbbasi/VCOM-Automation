@@ -1,0 +1,43 @@
+# 🤖 Mazara VCOM Automation - LLM Context
+
+> [!NOTE]
+> This file is a machine-readable summary of the project for LLMs (like ChatGPT, Claude, and Gemini).
+
+## 🧭 Project Purpose
+A real-time SCADA monitoring and forensic analysis pipeline for the Mazara 01 PV solar plant. It automates VCOM data extraction, performs anomaly detection, and provides a local AI-powered analysis interface.
+
+## 🛠️ Tech Stack
+- **Backend:** Python 3.10+, FastAPI
+- **Automation:** Playwright (Chromium)
+- **Intelligence:** Qwen 2.5 Coder 7B (Local via Ollama)
+- **Frontend:** Vanilla JS, CSS3 (Dark Mode, WebSocket-driven)
+- **Messaging:** Telegram Bot API
+
+## 📂 Core Architecture
+- `run_monitor.py`: Main orchestrator.
+- `vcom_monitor.py`: Scraper (15m cycle).
+- `processor_watchdog_final.py`: Forensic analysis & health status generator.
+- `llm_agent.py`: Local AI sandbox for complex queries.
+- `telegram_bot.py`: Alerting and mobile command interface.
+- `dashboard/`: FastAPI web application.
+
+## 📊 Data Schema (for AI reasoning)
+- **Macro Health:** Global plant status (Online, Tripped, Comms).
+- **Inverter Health:** Per-inverter metrics using keys:
+  - `ac_v`: Power (Watts)
+  - `temp_v`: Temperature (°C)
+  - `pr_v`: Performance Ratio (%)
+  - `dc_v`: Current (Amperes)
+- **CSV Naming:** `extracted_data/{Metric}_{YYYY-MM-DD}.csv`
+- **CSV Columns:** Pattern `Metric MPPT X (INV TX#-##) [Unit]`
+
+## 🌍 Plant Topology (Hardcoded)
+- **System ID:** 2144635
+- **Configuration:** 3 Transformers (TX1, TX2, TX3), 12 inverters each.
+- **Inverter IDs:** `INV TX1-01` through `INV TX3-12`.
+- **Location:** Mazara del Vallo, Italy.
+
+## ⚙️ Thresholds
+- **PR:** Green >= 85%
+- **Temp:** Warning > 40°C, Critical > 45°C
+- **Downtime:** Minimum 9 minutes window for alerts.

@@ -92,7 +92,7 @@ def ask_llm(question: str, plant_data: dict = None, attempt: int = 1, last_code:
     try:
         # Increase context and reduce temperature for coding stability
         payload = {"model": MODEL_NAME, "prompt": prompt, "stream": False, "options": {"num_ctx": 4096, "temperature": 0.0}}
-        resp = requests.post(OLLAMA_API_URL, json=payload, timeout=120)
+        resp = requests.post(OLLAMA_API_URL, json=payload, timeout=300)
         resp.raise_for_status()
         answer = resp.json().get("response", "")
 

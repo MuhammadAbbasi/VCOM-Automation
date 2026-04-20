@@ -1,8 +1,14 @@
-# VCOM Automation — Mazara SCADA Monitoring Pipeline
+# 🌞 Mazara VCOM Automation — AI-Powered SCADA Monitoring Pipeline
 
-A complete automated monitoring system for solar photovoltaic (PV) plants. This project extracts real-time telemetry from VCOM (meteocontrol.com) every 10 minutes, performs forensic health analysis on 36 inverters, and serves a live dark-mode dashboard.
+[![Local AI: Qwen 2.5 Coder 7B](https://img.shields.io/badge/Local%20AI-Qwen%202.5%20Coder%207B-blueviolet)](https://ollama.com)
+[![Status: Production](https://img.shields.io/badge/Status-Production--Ready-success)](#)
 
-**System Status:** ✅ Production-ready — Memory-efficient, tested with real Mazara del Vallo plant data.
+A complete, high-performance automated monitoring system for utility-scale solar photovoltaic (PV) plants. This project integrates **Local LLMs (Qwen 2.5 Coder)** for deep forensic analysis, extracts real-time telemetry from VCOM (meteocontrol.com) every 15 minutes, and serves a reactive, WebSocket-driven dark-mode dashboard.
+
+> [!TIP]
+> **AI-Search Ready:** This repository is optimized for LLM indexing (see [llms.txt](./llms.txt)).
+
+**System Status:** ✅ Active Forensic Analysis | ✅ Local AI Analysis | ✅ Telegram Bot Sync
 
 ---
 
