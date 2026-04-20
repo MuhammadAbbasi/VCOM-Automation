@@ -73,12 +73,23 @@ manager = ConnectionManager()
 # Background Task for Data Push
 async def data_broadcaster():
     last_mtime = 0
-    last_data = {}
     while True:
         try:
             today = datetime.now().strftime("%Y-%m-%d")
             json_path = DATA_DIR / f"dashboard_data_{today}.json"
+            busy_path = ROOT / ".extraction_busy"
+            if not hasattr(manager, "_logged_path"):
+                print(f"[DASHBOARD] Monitoring busy flag at: {busy_path.absolute()}")
+                manager._logged_path = True
             
+            is_extracting = busy_path.exists()
+            
+            # Broadcast extraction status every tick regardless of data change
+            await manager.broadcast({
+                "type": "extraction_status", 
+                "is_extracting": is_extracting
+            })
+
             if json_path.exists():
                 mtime = json_path.stat().st_mtime
                 if mtime > last_mtime:
@@ -88,11 +99,27 @@ async def data_broadcaster():
                     if data:
                         latest_key = sorted(data.keys())[-1]
                         latest_data = data[latest_key]
-                        # Send updated data to all clients
                         await manager.broadcast({"type": "data_update", "data": latest_data})
-        except Exception as e:
+        except Exception:
             pass
         await asyncio.sleep(2)
+
+@app.post("/api/extraction/trigger")
+async def trigger_extraction():
+    print("[DASHBOARD] Manual extraction trigger received!", flush=True)
+    trigger_path = ROOT / ".trigger_extraction"
+    busy_path = ROOT / ".extraction_busy"
+    
+    if busy_path.exists():
+        return JSONResponse({"status": "error", "message": "Extraction already in progress."}, status_code=400)
+    
+    trigger_path.touch()
+    return JSONResponse({"status": "success", "message": "Extraction triggered."})
+
+@app.get("/api/extraction/status")
+async def get_extraction_status():
+    busy_path = ROOT / ".extraction_busy"
+    return JSONResponse({"is_extracting": busy_path.exists()})
 
 @app.on_event("startup")
 async def startup_event():

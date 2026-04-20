@@ -98,7 +98,13 @@
         <div class="metric-value" id="val-poa">—</div>
         <div class="metric-label">Plant Irradiance (POA)</div>
       </div>
-
+      <div class="card metric-card action-card">
+        <button id="btn-trigger-extraction" onclick="triggerExtraction()">
+          <span id="trigger-icon">🚀</span>
+          <span id="trigger-text">Get Data Now</span>
+        </button>
+        <div class="metric-label">VCOM Status: <span id="extraction-status-label">Idle</span></div>
+      </div>
     </div>
   </section>
 

@@ -238,6 +238,68 @@ section > h2 {
 .metric-card.tripped .metric-value { color: var(--red);    }
 .metric-card.comms   .metric-value { color: var(--yellow); }
 
+/* ─── Extraction Action Card ────────────────────────────── */
+.metric-card.action-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.75rem;
+  background: rgba(37, 99, 235, 0.05);
+  border-color: rgba(37, 99, 235, 0.2);
+}
+
+#btn-trigger-extraction {
+  background: linear-gradient(135deg, var(--accent), #2563eb);
+  color: white;
+  border: none;
+  padding: 0.8rem 1rem;
+  border-radius: 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+  width: 100%;
+  letter-spacing: 0.02em;
+}
+
+#btn-trigger-extraction:hover:not(:disabled) {
+  transform: translateY(-2px);
+  filter: brightness(1.1);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.5);
+}
+
+#btn-trigger-extraction:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+#btn-trigger-extraction:disabled {
+  background: rgba(30, 41, 59, 0.7); /* Deep slate for high contrast */
+  color: #ffffff; /* Crisp white text */
+  border: 1px solid var(--accent);
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.9;
+}
+
+#btn-trigger-extraction:disabled #trigger-text {
+  color: #ffffff !important;
+  font-weight: 700;
+}
+
+#btn-trigger-extraction .spinner {
+  border-top-color: #ffffff;
+}
+
+#extraction-status-label {
+  font-weight: 700;
+  transition: color 0.3s ease;
+}
+
 /* ─── File ingestion status ───────────────────────────────── */
 #ingestion-grid {
   display: grid;
@@ -784,8 +846,6 @@ section > h2 {
     }
 }
 
-}
-
 /* ─── Responsive tweaks ───────────────────────────────────── */
 @media (max-width: 640px) {
     main { padding: 1rem; }
@@ -985,6 +1045,74 @@ section > h2 {
   margin-right: 0;
 }
 
+
+/* ─── Extraction Trigger Button ──────────────────────────────── */
+.action-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.8)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 1.5rem !important;
+}
+
+#btn-trigger-extraction {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  border: none;
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: white;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+  margin-bottom: 0.75rem;
+}
+
+#btn-trigger-extraction:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 15px rgba(37, 99, 235, 0.4);
+  filter: brightness(1.1);
+}
+
+#btn-trigger-extraction:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+#btn-trigger-extraction:disabled {
+  background: #334155;
+  color: #94a3b8;
+  cursor: not-allowed;
+  box-shadow: none;
+  opacity: 0.7;
+}
+
+#btn-trigger-extraction.extracting {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  animation: pulse-glow 2s infinite;
+}
+
+@keyframes pulse-glow {
+  0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
+
+.spinning {
+  animation: spin 1.5s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
 
 /* ─── Chat Suggestions (Chips) ──────────────────────────────── */
 .chat-suggestions {

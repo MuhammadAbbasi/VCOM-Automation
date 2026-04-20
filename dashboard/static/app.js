@@ -750,6 +750,8 @@ function connectWebSocket() {
         el("last-updated").textContent = `Last updated: ${now()}`;
       } else if (msg.type === "config_update") {
         applyConfig(msg.data);
+      } else if (msg.type === "extraction_status") {
+        updateExtractionUI(msg.is_extracting);
       }
     } catch (err) {
       console.warn("WS message parse error:", err);
@@ -1094,6 +1096,61 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 });
+
+/**
+ * Update the UI to reflect if the scraper is currently extracting data
+ */
+function updateExtractionUI(isExtracting) {
+  const btn = el("btn-trigger-extraction");
+  const icon = el("trigger-icon");
+  const text = el("trigger-text");
+  const statusLabel = el("extraction-status-label");
+
+  if (!btn || !statusLabel) return;
+
+  if (isExtracting) {
+    btn.classList.add("extracting");
+    btn.disabled = true;
+    if (icon) icon.innerHTML = `<span class="spinner"></span>`;
+    if (text) text.textContent = "Extracting data...";
+    statusLabel.textContent = "BUSY";
+    statusLabel.style.color = "var(--yellow)";
+  } else {
+    btn.classList.remove("extracting");
+    btn.disabled = false;
+    if (icon) icon.textContent = "🚀";
+    if (text) text.textContent = "Get Data Now";
+    statusLabel.textContent = "Idle";
+    statusLabel.style.color = "var(--text)";
+  }
+}
+
+/**
+ * Manual trigger for VCOM data extraction
+ */
+async function triggerExtraction() {
+  const btn = el("btn-trigger-extraction");
+  if (!btn || btn.classList.contains("extracting")) return;
+
+  try {
+    // Optimistic UI update
+    updateExtractionUI(true);
+    
+    const resp = await fetch("/api/extraction/trigger", { method: "POST" });
+    const result = await resp.json();
+    
+    if (result.status === "error") {
+      alert("Trigger failed: " + result.message);
+      updateExtractionUI(false);
+    } else {
+      console.log("Extraction triggered successfully.");
+    }
+  } catch (err) {
+    console.error("Failed to trigger extraction:", err);
+    alert("Error communicating with scraper. Check if the dashboard is connected.");
+    updateExtractionUI(false);
+  }
+}
 
 /**
  * Rapid-fire suggestion handler for the AI Chat

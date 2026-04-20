@@ -56,195 +56,124 @@ from extraction_code.temperatura_monitor import extract_temperatura
 from extraction_code.irraggiamento_monitor import extract_irraggiamento
 
 METRICS = [
-    ("PR",                    extract_pr,             "PR"),
-    ("Potenza AC",            extract_potenza_ac,     "Potenza_AC"),
-    ("Corrente DC",           extract_corrente_dc,    "Corrente_DC"),
-    ("Resistenza Isolamento", extract_resistenza,     "Resistenza_Isolamento"),
-    ("Temperatura",           extract_temperatura,    "Temperatura"),
-    ("Irraggiamento",         extract_irraggiamento,  "Irraggiamento"),
+    ("PR inverter", extract_pr),
+    ("Potenza AC", extract_potenza_ac),
+    ("Corrente DC", extract_corrente_dc),
+    ("Resistenza di isolamento", extract_resistenza),
+    ("Temperatura", extract_temperatura),
+    ("Irraggiamento", extract_irraggiamento),
 ]
 
-# Will dynamically fetch from user settings, defaults to 15
-MAX_RETRIES = 2
-
-
 # ---------------------------------------------------------------------------
-# Session health check
+# Main Logic
 # ---------------------------------------------------------------------------
 
-def ensure_on_evaluation_page(page) -> None:
-    """Check session is alive; click 'Valutazione' if visible, else re-login."""
-    valutazione_selector = 'a[title="Valutazione"]'
-    try:
-        if page.locator(valutazione_selector).is_visible(timeout=5_000):
-            page.locator(valutazione_selector).first.click()
-            time.sleep(2)
-        else:
-            logger.warning("Session may have expired — re-logging in...")
-            login(page)
-    except Exception:
-        logger.warning("Navigation check failed — attempting re-login...")
-        login(page)
-
-
-# ---------------------------------------------------------------------------
-# Status reporting
-# ---------------------------------------------------------------------------
-
-def update_extraction_status(metric_prefix: str, status: str) -> None:
-    """Save extraction status to a JSON file for the dashboard watchdog.
-    Statuses: 'success', 'empty', 'failed'.
-    """
-    try:
-        from extraction_code.base_monitor import DATA_DIR, today_str
-        status_path = DATA_DIR / "extraction_status.json"
-        
-        data = {}
-        if status_path.exists():
-            try:
-                with open(status_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-            except Exception:
-                data = {}
-        
-        today = today_str()
-        if today not in data:
-            data[today] = {}
-        
-        data[today][metric_prefix] = {
-            "status": status,
-            "timestamp": datetime.now().isoformat(timespec="seconds")
-        }
-        
-        with open(status_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-    except Exception as e:
-        logger.error(f"Failed to update extraction status: {e}")
-
-
-# ---------------------------------------------------------------------------
-# Single extraction cycle
-# ---------------------------------------------------------------------------
-
-def run_extraction_cycle(page, cycle_count: int) -> None:
-    print(f"\n\n{'#' * 80}", flush=True)
-    print(f"### [CYCLE #{cycle_count}] STARTING EXTRACTION @ {datetime.now().strftime('%H:%M:%S')}", flush=True)
-    print(f"{'#' * 80}", flush=True)
+def run_extraction_cycle(page, cycle_count: int):
+    logger.info(f"=== Starting Extraction Cycle #{cycle_count} ===")
     
-    logger.info(f"=== Starting Cycle #{cycle_count} ===")
-
-    # Ensure we're on the evaluation page and inverters are selected
+    # 1. Select inverters
     try:
-        print(f"[*] Navigating: {load_config()['SYSTEM_URL']}...", flush=True)
-        ensure_on_evaluation_page(page)
-        print("[*] Selecting 36 Inverters...", flush=True)
         select_inverters(page)
-        dismiss_popup(page)
     except Exception as e:
-        print(f"[!] SETUP FAILED: {e}", flush=True)
-        logger.error(f"Pre-extraction setup failed: {e}")
+        logger.error(f"Failed to select inverters: {e}")
         return
 
-    for label, extractor, prefix in METRICS:
-        print(f"\n[>] EXTRACTING: {label}...", flush=True)
-        df = None
+    # 2. Extract metrics
+    for name, extractor in METRICS:
+        logger.info(f"Extracting: {name}")
         success = False
-        
-        for attempt in range(1, MAX_RETRIES + 1):
+        for attempt in range(1, 3):
             try:
-                print(f"    (Attempt {attempt}/{MAX_RETRIES})...", flush=True)
-                dismiss_popup(page) # Clear any remaining popups before starting extractor
                 df = extractor(page)
-                success = True
-                break
+                if df is not None and not df.empty:
+                    export_metric(df, name)
+                    success = True
+                    break
             except Exception as e:
-                print(f"    (!!) Attempt {attempt} failed: {type(e).__name__}", flush=True)
-                logger.error(f"[{label}] Attempt {attempt} failed:\n{traceback.format_exc()}")
-                ERRORS_DIR.mkdir(parents=True, exist_ok=True)
-                try:
-                    page.screenshot(path=str(ERRORS_DIR / f"error_{label.replace(' ', '_')}_attempt1.png"))
-                except Exception:
-                    pass
-                time.sleep(5)
-
+                logger.warning(f"  Attempt {attempt} failed for {name}: {e}")
+                time.sleep(2)
+        
         if not success:
-            print(f"[!] {label}: ALL ATTEMPTS FAILED.", flush=True)
-            update_extraction_status(prefix, "failed")
-        elif df is None or df.empty:
-            print(f"[?] {label}: NO DATA FOUND.", flush=True)
-            update_extraction_status(prefix, "empty")
-        else:
-            print(f"[OK] {label}: Extracted {len(df)} rows.", flush=True)
-            try:
-                export_metric(df, prefix)
-                update_extraction_status(prefix, "success")
-            except Exception as export_err:
-                logger.error(f"[{label}] Export failed (will retry next cycle): {export_err}")
-                print(f"[!] {label}: EXPORT FAILED — {type(export_err).__name__}", flush=True)
-                update_extraction_status(prefix, "failed")
-
-    print(f"\n{'#' * 80}", flush=True)
-    print(f"### [CYCLE #{cycle_count}] COMPLETED SUCCESSFULLY @ {datetime.now().strftime('%H:%M:%S')}", flush=True)
-    print(f"{'#' * 80}\n", flush=True)
-    logger.info(f"=== Cycle #{cycle_count} finished successfully ===")
-
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
+            logger.error(f"  {name} failed after 2 attempts.")
 
 def main() -> None:
     print("[EXTRACTION] Script started.", flush=True)
     ERRORS_DIR.mkdir(parents=True, exist_ok=True)
     logger.info("VCOM monitor starting...")
 
-    print("[EXTRACTION] Initializing Playwright...", flush=True)
-    with sync_playwright() as p:
-        # Allow headless mode via environment variable (default to false as requested)
-        is_headless = os.environ.get("VCOM_HEADLESS", "false").lower() == "true"
-        print(f"[EXTRACTION] Launching Chromium (headless={is_headless})...", flush=True)
-        browser = p.chromium.launch(headless=is_headless)
-        context = browser.new_context(viewport={"width": 1450, "height": 900})
-        page = context.new_page()
+    trigger_path = ROOT / ".trigger_extraction"
+    busy_path = ROOT / ".extraction_busy"
 
-        try:
-            print("[EXTRACTION] Attempting VCOM Login...", flush=True)
-            login(page)
-            print("[EXTRACTION] Login successful.", flush=True)
+    try:
+        # Mark as busy as soon as we start
+        busy_path.touch()
+        logger.info(f"Sync flags: busy={busy_path}, trigger={trigger_path}")
 
-            cycle_count = 1
-            while True:
-                try:
-                    run_extraction_cycle(page, cycle_count)
-                except Exception:
-                    logger.critical(f"Unhandled error in cycle #{cycle_count}:\n{traceback.format_exc()}")
-                    try:
-                        page.screenshot(path=str(ERRORS_DIR / f"fatal_cycle{cycle_count}.png"))
-                    except Exception:
-                        pass
+        print("[EXTRACTION] Initializing Playwright...", flush=True)
+        with sync_playwright() as p:
+            is_headless = os.environ.get("VCOM_HEADLESS", "false").lower() == "true"
+            print(f"[EXTRACTION] Launching Chromium (headless={is_headless})...", flush=True)
+            browser = p.chromium.launch(headless=is_headless)
+            context = browser.new_context(viewport={"width": 1450, "height": 900})
+            page = context.new_page()
 
-                try:
-                    from processor_watchdog_final import load_user_settings
-                    current_interval = load_user_settings().get("collection_interval", 15)
-                except Exception:
-                    current_interval = 15
-
-                logger.info(f"Sleeping {current_interval} minutes until next cycle...")
-                time.sleep(current_interval * 60)
-                cycle_count += 1
-
-        except KeyboardInterrupt:
-            logger.info("Interrupted by user.")
-        except Exception:
-            logger.critical(f"FATAL:\n{traceback.format_exc()}")
             try:
-                page.screenshot(path=str(ERRORS_DIR / "fatal_error.png"))
-            except Exception:
-                pass
-        finally:
-            logger.info("Closing browser.")
-            browser.close()
+                print("[EXTRACTION] Attempting VCOM Login...", flush=True)
+                login(page)
+                print("[EXTRACTION] Login successful.", flush=True)
 
+                cycle_count = 1
+                while True:
+                    # Refresh busy flag just in case
+                    busy_path.touch()
+                    
+                    try:
+                        run_extraction_cycle(page, cycle_count)
+                    except Exception:
+                        logger.critical(f"Unhandled error in cycle #{cycle_count}:\n{traceback.format_exc()}")
+                        try:
+                            ss_path = ERRORS_DIR / f"fatal_cycle{cycle_count}.png"
+                            page.screenshot(path=str(ss_path))
+                        except Exception:
+                            pass
+
+                    # Mark as IDLE while sleeping (important for manual trigger to work)
+                    if busy_path.exists(): busy_path.unlink()
+
+                    try:
+                        from processor_watchdog_final import load_user_settings
+                        settings = load_user_settings()
+                        current_interval = settings.get("collection_interval", 15)
+                    except Exception:
+                        current_interval = 15
+
+                    logger.info(f"Sleeping {current_interval} minutes until next cycle (or manual trigger)...")
+                    
+                    # 3. INTERRUPTIBLE SLEEP
+                    sleep_seconds = int(current_interval * 60)
+                    for _ in range(sleep_seconds):
+                        if trigger_path.exists():
+                            print("[EXTRACTION] Manual trigger detected!", flush=True)
+                            logger.info("Manual trigger detected! Breaking sleep.")
+                            trigger_path.unlink()
+                            break
+                        time.sleep(1)
+                    
+                    cycle_count += 1
+
+            except KeyboardInterrupt:
+                logger.info("Interrupted by user.")
+            except Exception as e:
+                logger.critical(f"FATAL Exception in main loop: {e}\n{traceback.format_exc()}")
+            finally:
+                print("[EXTRACTION] Closing browser...", flush=True)
+                browser.close()
+
+    finally:
+        # Final cleanup of busy flag
+        if busy_path.exists():
+            busy_path.unlink()
+            logger.info("Removed busy flag on exit.")
 
 if __name__ == "__main__":
     main()

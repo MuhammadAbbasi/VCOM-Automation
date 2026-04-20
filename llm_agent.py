@@ -43,6 +43,8 @@ def get_data_structure_guide():
         "- CSV Column Patterns: 'Corrente DC MPPT 1 (INV TX1-01) [A]', 'Potenza AC (INV TX1-01) [W]', 'Temperatura inverter (INV TX1-01) [°C]'.\n"
         "- Time Format: 'Ora' column is a decimal (HH.MM), e.g., 6.54 means 06:54 AM.\n"
         "- CSV Loading: Always use load_csv(f'Potenza_AC_{TODAY}.csv') which cleans columns and handles paths.\n"
+        "- NAN HANDLING: Metrics in 'data' can be None. Treat None as 0.0 for sums/power. load_csv already fills NaNs with 0.0.\n"
+        "- SKILLS: get_tx_totals(m), find_low_performers(m, rat), find_outliers(m, sig), get_peaks(), check_clipping(th), get_mppt_status(id).\n"
         "- Available vars: load_csv(fn), DATA (dict), DATA_DIR (path), TODAY (str: YYYY-MM-DD)."
     )
 
@@ -55,15 +57,96 @@ def run_python_analysis(code: str, plant_data: dict) -> tuple[str, bool]:
     def load_csv(filename):
         path = (ROOT / "extracted_data" / filename)
         if not path.exists(): return pd.DataFrame()
-        df = pd.read_csv(path)
-        df.columns = [c.strip() for c in df.columns] # Fix 'Ora ' or ' Ora' issues
-        return df
+        try:
+            df = pd.read_csv(path)
+            # Clean column names once for the AI
+            df.columns = [str(c).strip() for c in df.columns]
+            # Convert all numeric-looking columns to float, handling commas/dots
+            for col in df.columns:
+                if col == "Ora": continue
+                try:
+                    df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', '.'), errors='coerce')
+                except:
+                    pass
+            # Fill NaNs with 0 for production metrics
+            df = df.fillna(0.0)
+            return df
+        except Exception as e:
+            logger.error(f"AI load_csv error: {e}")
+            return pd.DataFrame()
+
+    def get_transformer_totals(metric='ac_v'):
+        """Sums a metric by transformer (TX1, TX2, TX3)."""
+        tx_stats = {"TX1": 0.0, "TX2": 0.0, "TX3": 0.0}
+        for inv_id, vals in plant_data.get("inverter_health", {}).items():
+            val = vals.get(metric, 0.0) or 0.0
+            if "TX1" in inv_id: tx_stats["TX1"] += val
+            elif "TX2" in inv_id: tx_stats["TX2"] += val
+            elif "TX3" in inv_id: tx_stats["TX3"] += val
+        return tx_stats
+
+    def find_underperformers(metric='ac_v', threshold_ratio=0.85):
+        """Finds inverters producing < X% of the median."""
+        health = plant_data.get("inverter_health", {})
+        vals = {k: (v.get(metric, 0.0) or 0.0) for k, v in health.items()}
+        valid_vals = [v for v in vals.values() if v > 0]
+        if not valid_vals: return []
+        median_val = np.median(valid_vals)
+        return [k for k, v in vals.items() if v < median_val * threshold_ratio]
+
+    def detect_outliers(metric='temp_v', sigma=2.0):
+        """Finds inverters with metrics significantly different from average."""
+        health = plant_data.get("inverter_health", {})
+        vals = {k: (v.get(metric, 0.0) or 0.0) for k, v in health.items()}
+        valid_vals = list(vals.values())
+        if len(valid_vals) < 5: return []
+        avg, std = np.mean(valid_vals), np.std(valid_vals)
+        return [k for k, v in vals.items() if abs(v - avg) > (sigma * std)]
+
+    def get_peak_power():
+        """Returns the maximum AC power seen today for each inverter."""
+        peaks = {}
+        df = load_csv(f"Potenza_AC_{datetime.now().strftime('%Y-%m-%d')}.csv")
+        if df.empty: return {}
+        for col in df.columns:
+            if "Potenza AC (INV" in col:
+                peaks[col] = df[col].max()
+        return peaks
+
+    def check_clipping(threshold=59500):
+        """Identifies inverters that are plateauing at high power (clipping)."""
+        df = load_csv(f"Potenza_AC_{datetime.now().strftime('%Y-%m-%d')}.csv")
+        if df.empty: return []
+        clipping = []
+        for col in df.columns:
+            if "Potenza AC" in col:
+                # If last 3 values are near peak and very close to each other
+                tail = df[col].tail(10)
+                if tail.max() > threshold and tail.std() < 50:
+                    clipping.append(col)
+        return clipping
+
+    def get_mppt_imbalance(inv_id):
+        """Compares MPPT currents for a single inverter to find string faults."""
+        df = load_csv(f"Corrente_DC_{datetime.now().strftime('%Y-%m-%d')}.csv")
+        if df.empty: return {}
+        mppt_cols = [c for c in df.columns if f"(INV {inv_id})" in c and "MPPT" in c]
+        if not mppt_cols: return {}
+        # Look at the latest non-zero row
+        latest = df[mppt_cols].tail(5).mean()
+        return latest.to_dict()
 
     if plant_data is None: plant_data = {}
     
     namespace = {
         "pd": pd, "np": np, "data": plant_data, "DATA": plant_data,
-        "load_csv": load_csv, # AI-friendly loader
+        "load_csv": load_csv, 
+        "get_tx_totals": get_transformer_totals,
+        "find_low_performers": find_underperformers,
+        "find_outliers": detect_outliers,
+        "get_peaks": get_peak_power,
+        "check_clipping": check_clipping,
+        "get_mppt_status": get_mppt_imbalance,
         "result": None, "ROOT": ROOT, "DATA_DIR": ROOT / "extracted_data",
         "TODAY": datetime.now().strftime("%Y-%m-%d")
     }
