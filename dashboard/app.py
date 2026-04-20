@@ -140,16 +140,27 @@ async def get_settings():
 async def update_settings(request: Request, background_tasks: BackgroundTasks):
     try:
         new_settings = await request.json()
-        with open(USER_SETTINGS_PATH, "w", encoding="utf-8") as f:
-            json.dump(new_settings, f, indent=4)
-            
-        # Broadcast new config to all clients
-        await manager.broadcast({"type": "config_update", "data": new_settings})
         
-        # Trigger an immediate rescan using the new settings
-        today = datetime.now().strftime("%Y-%m-%d")
-        background_tasks.add_task(analyze_site, today)
+        # Define the background work
+        async def apply_changes(settings: dict):
+            try:
+                # 1. Save to disk
+                with open(USER_SETTINGS_PATH, "w", encoding="utf-8") as f:
+                    json.dump(settings, f, indent=4)
+                
+                # 2. Broadcast to clients
+                await manager.broadcast({"type": "config_update", "data": settings})
+                
+                # 3. Rescan
+                today = datetime.now().strftime("%Y-%m-%d")
+                analyze_site(today)
+            except Exception as e:
+                print(f"[!] Background settings error: {e}")
+
+        # Queue the work and return immediately
+        background_tasks.add_task(apply_changes, new_settings)
         return JSONResponse({"status": "success"})
+        
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
 

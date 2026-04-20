@@ -181,6 +181,7 @@ cache/
 # ============================================================================
 .gemini/
 .ollama/
+.graphify/
 temp_analysis_*.py
 llm_agent.log
 system_prompt_backups/

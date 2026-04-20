@@ -830,57 +830,84 @@ async function handleSaveSettings() {
   btn.classList.add("loading");
   btn.textContent = "SAVING...";
 
+  const val = (id) => el(id) ? el(id).value : null;
+  const num = (id, def) => el(id) ? (parseFloat(el(id).value) || def) : def;
+
   const newConfig = {
     thresholds: {
       pr: {
-        green: parseFloat(el("cfg-pr-green").value) || 85.0,
-        yellow: parseFloat(el("cfg-pr-yellow").value) || 75.0
+        green: num("cfg-pr-green", 85.0),
+        yellow: num("cfg-pr-yellow", 75.0)
       },
       temp: {
-        yellow: parseFloat(el("cfg-temp-yellow").value) || 40.0,
-        red: parseFloat(el("cfg-temp-red").value) || 45.0
+        yellow: num("cfg-temp-yellow", 40.0),
+        red: num("cfg-temp-red", 45.0)
       },
       ac: {
-        green: parseFloat(el("cfg-ac-green").value) || 5000,
-        yellow: parseFloat(el("cfg-ac-yellow").value) || 1000
+        green: num("cfg-ac-green", 5000),
+        yellow: num("cfg-ac-yellow", 1000)
       },
       dc: {
-        morning_green: parseFloat(el("cfg-dcm-green").value) || 10.0,
-        morning_yellow: parseFloat(el("cfg-dcm-yellow").value) || 2.0,
-        afternoon_green: parseFloat(el("cfg-dca-green").value) || 5.0,
-        afternoon_yellow: parseFloat(el("cfg-dca-yellow").value) || 0.5
+        morning_green: num("cfg-dcm-green", 10.0),
+        morning_yellow: num("cfg-dcm-yellow", 2.0),
+        afternoon_green: num("cfg-dca-green", 5.0),
+        afternoon_yellow: num("cfg-dca-yellow", 0.5)
       },
-      min_downtime_minutes: parseFloat(el("cfg-min-downtime").value) !== undefined && !isNaN(parseFloat(el("cfg-min-downtime").value)) ? parseFloat(el("cfg-min-downtime").value) : 9
+      min_downtime_minutes: num("cfg-min-downtime", 9)
     },
     colors: {
-      green: el("cfg-color-green").value || "#10b981",
-      yellow: el("cfg-color-yellow").value || "#f59e0b",
-      red: el("cfg-color-red").value || "#ef4444",
-      grey: el("cfg-color-grey").value || "#6b7280"
+      green: val("cfg-color-green") || "#10b981",
+      yellow: val("cfg-color-yellow") || "#f59e0b",
+      red: val("cfg-color-red") || "#ef4444",
+      grey: val("cfg-color-grey") || "#6b7280"
     },
-    collection_interval: parseFloat(el("cfg-collection-interval").value) || 15,
+    collection_interval: num("cfg-collection-interval", 15),
     telegram: {
-      enabled: el("cfg-tg-enabled").checked,
-      bot_token: el("cfg-tg-token").value,
-      chat_id: el("cfg-tg-chat").value,
-      personal_id: el("cfg-tg-personal").value
+      enabled: el("cfg-tg-enabled") ? el("cfg-tg-enabled").checked : false,
+      bot_token: val("cfg-tg-token") || "",
+      chat_id: val("cfg-tg-chat") || "",
+      personal_id: val("cfg-tg-personal") || ""
     }
   };
 
   try {
+    // Add a controller to timeout the request if it hangs
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), 10000);
+
     const resp = await fetch("/api/settings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newConfig)
+      body: JSON.stringify(newConfig),
+      signal: controller.signal
     });
     
+    clearTimeout(id);
+    
     if (resp.ok) {
+      const summary = `
+✅ SETTINGS SAVED SUCCESSFULLY
+
+Threshold Updated:
+- PR Green: ${newConfig.thresholds.pr.green}%
+- Temp Red: ${newConfig.thresholds.temp.red}°C
+- Min Downtime: ${newConfig.thresholds.min_downtime_minutes} min
+- Collection: ${newConfig.collection_interval} min
+
+Telegram: ${newConfig.telegram.enabled ? "ENABLED" : "DISABLED"}
+      `;
+      alert(summary);
       el("settings-modal").classList.add("modal-hidden");
     } else {
-      alert("Failed to save settings.");
+      const err = await resp.json();
+      alert("Failed to save: " + (err.message || "Unknown error"));
     }
   } catch (err) {
-    alert("Error saving settings: " + err);
+    if (err.name === 'AbortError') {
+      alert("Error: Saving timed out. The server is taking too long to respond.");
+    } else {
+      alert("Error saving settings: " + err);
+    }
   } finally {
     btn.classList.remove("loading");
     btn.textContent = "SAVE & APPLY";
@@ -1020,12 +1047,17 @@ document.addEventListener("DOMContentLoaded", () => {
         body: JSON.stringify({ question })
       });
       
-      const contentType = resp.headers.get("content-type");
       if (!resp.ok) {
-        const errText = await resp.text();
-        throw new Error(`Server ${resp.status}: ${errText.substring(0, 50)}`);
+        if (thinkingDiv) thinkingDiv.remove();
+        let errorMsg = `Server error ${resp.status}`;
+        if (resp.status === 404) {
+          errorMsg = "Model not found in Ollama. Please run 'ollama pull qwen2.5-coder:7b' in your terminal.";
+        }
+        appendChatMessage("⚠️ " + errorMsg, "bot error");
+        return;
       }
 
+      const contentType = resp.headers.get("content-type");
       if (contentType && contentType.includes("application/json")) {
         const data = await resp.json();
         if (thinkingDiv) thinkingDiv.remove();
