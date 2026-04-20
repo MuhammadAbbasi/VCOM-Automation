@@ -20,6 +20,7 @@ import logging
 import sys
 import time
 from datetime import datetime
+import threading
 from pathlib import Path
 import requests
 
@@ -67,17 +68,29 @@ def load_settings() -> dict:
         return {}
 
 def get_latest_dashboard_json() -> dict | None:
-    today = datetime.now().strftime("%Y-%m-%d")
-    path  = DATA_DIR / f"dashboard_data_{today}.json"
-    if path.exists():
+    # Try multiple times in case of file lock
+    for _ in range(3):
         try:
+            # 1. Try today's file first
+            today = datetime.now().strftime("%Y-%m-%d")
+            path = DATA_DIR / f"dashboard_data_{today}.json"
+            
+            # 2. Fallback to any dashboard file if today's is missing
+            if not path.exists():
+                json_files = sorted(DATA_DIR.glob("dashboard_data_*.json"))
+                if not json_files: return None
+                path = json_files[-1]
+
             with open(path, "r", encoding="utf-8") as f:
                 full_history = json.load(f)
-                if not full_history: return None
+                if not full_history: 
+                    time.sleep(0.5)
+                    continue
                 latest_ts = sorted(full_history.keys())[-1]
                 return full_history[latest_ts]
         except Exception as e:
-            logger.warning(f"Failed to read dashboard JSON: {e}")
+            logger.warning(f"Dashboard JSON read attempt failed: {e}")
+            time.sleep(0.5)
     return None
 
 def build_status_message(data: dict) -> str:
@@ -180,21 +193,45 @@ def main() -> None:
                     
                     bot.send_message(chat_id, "⏳ _Thinking..._")
                     data = get_latest_dashboard_json()
-                    
                     if llm_agent:
-                        reply = llm_agent.ask_llm(question, data)
-                        bot.send_message(chat_id, reply)
+                        threading.Thread(
+                            target=lambda: bot.send_message(chat_id, llm_agent.ask_llm(question, data)),
+                            daemon=True
+                        ).start()
                     else:
                         bot.send_message(chat_id, "❌ AI agent not found.")
 
-                elif bot.is_trigger(text):
+                elif text.lower().startswith("/alerts") or "alert" in text.lower():
+                    data = get_latest_dashboard_json()
+                    if data and data.get("active_anomalies"):
+                        alerts = "\n".join([f"🔴 {a['inverter']} - {a['rule']}" for a in data["active_anomalies"]])
+                        bot.send_message(chat_id, f"🚨 *Active Alerts:*\n\n{alerts}")
+                    else:
+                        bot.send_message(chat_id, "✅ No active alerts.")
+
+                elif text.lower().startswith("/daily") or "daily" in text.lower():
+                    data = get_latest_dashboard_json()
+                    if data:
+                        h = data.get("macro_health", {})
+                        msg = (f"📅 *Daily Report ({datetime.now().strftime('%d/%m/%Y')})*\n\n"
+                               f"⚡ Production: {h.get('total_ac_power_mw', 0):.2f} MW\n"
+                               f"📈 Avg PR: {h.get('avg_pr', 0):.1f}%\n"
+                               f"✅ Inverters Online: {h.get('inverters_online', 0)}/36\n"
+                               f"⏰ Last Sync: {h.get('last_sync', '—')}")
+                        bot.send_message(chat_id, msg)
+                    else:
+                        bot.send_message(chat_id, "⚠️ Data not found.")
+
+                elif bot.is_trigger(text) or text.lower().startswith("/status"):
                     data = get_latest_dashboard_json()
                     bot.send_message(chat_id, build_status_message(data) if data else "⚠️ No data.")
                 
                 elif chat_id > 0:
-                    bot.send_message(chat_id, "❓ *Available Commands:*\n\n"
-                                     "📊 **/status** — Get the live plant summary (LEDs, MW, Alerts).\n"
-                                     "🤖 **/ai <question>** — Ask the AI for deep analysis (e.g., '/ai check TX1 temp trends').")
+                    bot.send_message(chat_id, "❓ *Mazara Bot Shortcuts:*\n\n"
+                                     "📊 **/status** — Live Plant Summary\n"
+                                     "🚨 **/alerts** — List Active Anomalies\n"
+                                     "📅 **/daily** — Production Report\n"
+                                     "🤖 **/ai <question>** — Deep Analysis")
 
         except Exception as e:
             logger.error(f"Loop error: {e}")

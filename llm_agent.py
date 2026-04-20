@@ -41,7 +41,9 @@ def get_data_structure_guide():
         "- data['inverter_health']: {inv_id: {ac_v, temp_v, pr_v, dc_v, overall_status...}}\n"
         "- Files in 'extracted_data/': Use suffix _{TODAY}.csv (e.g. Potenza_AC_{TODAY}.csv).\n"
         "- CSV Column Patterns: 'Corrente DC MPPT 1 (INV TX1-01) [A]', 'Potenza AC (INV TX1-01) [W]', 'Temperatura inverter (INV TX1-01) [°C]'.\n"
-        "- Available vars: DATA (dict), DATA_DIR (path), TODAY (str: YYYY-MM-DD)."
+        "- Time Format: 'Ora' column is a decimal (HH.MM), e.g., 6.54 means 06:54 AM.\n"
+        "- CSV Loading: Always use load_csv(f'Potenza_AC_{TODAY}.csv') which cleans columns and handles paths.\n"
+        "- Available vars: load_csv(fn), DATA (dict), DATA_DIR (path), TODAY (str: YYYY-MM-DD)."
     )
 
 PROJECT_MEMORY = get_project_context()
@@ -50,8 +52,18 @@ def run_python_analysis(code: str, plant_data: dict) -> tuple[str, bool]:
     """Executes code and returns (result, success)."""
     import pandas as pd
     import numpy as np
+    def load_csv(filename):
+        path = (ROOT / "extracted_data" / filename)
+        if not path.exists(): return pd.DataFrame()
+        df = pd.read_csv(path)
+        df.columns = [c.strip() for c in df.columns] # Fix 'Ora ' or ' Ora' issues
+        return df
+
+    if plant_data is None: plant_data = {}
+    
     namespace = {
         "pd": pd, "np": np, "data": plant_data, "DATA": plant_data,
+        "load_csv": load_csv, # AI-friendly loader
         "result": None, "ROOT": ROOT, "DATA_DIR": ROOT / "extracted_data",
         "TODAY": datetime.now().strftime("%Y-%m-%d")
     }

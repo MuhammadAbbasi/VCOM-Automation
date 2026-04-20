@@ -985,3 +985,32 @@ section > h2 {
   margin-right: 0;
 }
 
+
+/* ─── Chat Suggestions (Chips) ──────────────────────────────── */
+.chat-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+  padding: 0 0.25rem;
+}
+
+.chat-suggestion {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 0.4rem 0.8rem;
+  border-radius: 2rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+}
+
+.chat-suggestion:hover {
+  background: var(--border);
+  color: var(--text);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}

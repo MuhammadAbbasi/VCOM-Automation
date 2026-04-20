@@ -184,6 +184,45 @@ def shutdown(signum=None, frame=None) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Hot Reloader (Local CI/CD)
+# ---------------------------------------------------------------------------
+
+def get_last_mod_time(directory: Path) -> float:
+    """Return the maximum modification time of all .py files in the project."""
+    max_mtime = 0.0
+    # Search root and dashboard folders
+    for folder in [directory, directory / "dashboard", directory / "extraction_code"]:
+        if not folder.exists(): continue
+        for f in folder.glob("*.py"):
+            mtime = f.stat().st_mtime
+            if mtime > max_mtime:
+                max_mtime = mtime
+    return max_mtime
+
+def hot_reloader(on_change_callback) -> None:
+    """Watches for file changes and triggers a restart."""
+    print("[ORCHESTRATOR] 🔄 Hot Reloader (CI/CD) is ACTIVE. Watching for code changes...", flush=True)
+    last_mtime = get_last_mod_time(ROOT)
+    
+    while not _stop_event.is_set():
+        time.sleep(2)  # Check every 2 seconds
+        current_mtime = get_last_mod_time(ROOT)
+        if current_mtime > last_mtime:
+            print("\n[ORCHESTRATOR] 🚀 Code change detected! Triggering auto-reload...", flush=True)
+            last_mtime = current_mtime
+            on_change_callback()
+
+def restart_all_services():
+    """Stops all running processes and clears them for restart."""
+    for name, proc in list(_processes.items()):
+        try:
+            print(f"[ORCHESTRATOR] Stopping {name} for reload...", flush=True)
+            proc.terminate()
+            # proc.wait(timeout=5)
+        except: pass
+    _processes.clear()
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -195,17 +234,18 @@ def main() -> None:
     print("   [ORCHESTRATOR] Mazara SCADA Monitor System Control", flush=True)
     print("=" * 60, flush=True)
     print(f"[*] Root Directory: {ROOT}", flush=True)
-    print("[*] Launching DASHBOARD (http://localhost:8080)...", flush=True)
-    print("[*] Launching WATCHDOG (Forensic Analysis)...", flush=True)
-    print("[*] Launching EXTRACTION (VCOM Browser Automation)...", flush=True)
-    print("[*] Launching TELEGRAM (Bot Commands)...", flush=True)
-    print("-" * 60, flush=True)
-    print("Streaming logs below:", flush=True)
-    print("-" * 60, flush=True)
+    print("------------------------------------------------------------", flush=True)
 
-    t = threading.Thread(target=monitor_services, daemon=False)
-    t.start()
-    t.join()
+    # Start the hot reloader
+    reloader_thread = threading.Thread(
+        target=hot_reloader, 
+        args=(restart_all_services,), 
+        daemon=True
+    )
+    reloader_thread.start()
+
+    # Initial launch
+    monitor_services()
 
 
 if __name__ == "__main__":

@@ -492,6 +492,12 @@
           <div class="msg-content">Hello! I am the Mazara Solar Plant AI (Qwen 2.5 Coder 7B). How can I help you today?</div>
         </div>
       </div>
+      <div class="chat-suggestions">
+        <button class="chat-suggestion" onclick="sendSuggestion('Are there any active alerts right now?')">🚨 Active Alerts</button>
+        <button class="chat-suggestion" onclick="sendSuggestion('Check for zero power inverters in early hours (07:00-09:00)')">☀️ Early Hours Analysis</button>
+        <button class="chat-suggestion" onclick="sendSuggestion('Compare TX1 vs TX2 production levels for today')">📊 Domain Comparison</button>
+        <button class="chat-suggestion" onclick="sendSuggestion('Which inverters have the highest temperature?')">🌡️ Thermal Audit</button>
+      </div>
       <div class="chat-input-area">
         <input type="text" id="chat-input" placeholder="Type a question (e.g. Are there any active alerts?)" />
         <button id="chat-send-btn" class="btn-rescan">Send</button>

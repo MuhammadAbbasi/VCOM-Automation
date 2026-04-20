@@ -1094,3 +1094,18 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 });
+
+/**
+ * Rapid-fire suggestion handler for the AI Chat
+ */
+function sendSuggestion(text) {
+  const input = el("chat-input");
+  if (input) {
+    input.value = text;
+    // Tiny delay to make the click visual before sending
+    setTimeout(() => {
+        const sendBtn = el("chat-send-btn");
+        if (sendBtn) sendBtn.click();
+    }, 100);
+  }
+}

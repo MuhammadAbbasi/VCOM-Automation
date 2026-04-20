@@ -8,7 +8,25 @@ A complete, high-performance automated monitoring system for utility-scale solar
 > [!TIP]
 > **AI-Search Ready:** This repository is optimized for LLM indexing (see [llms.txt](./llms.txt)).
 
-**System Status:** ✅ Active Forensic Analysis | ✅ Local AI Analysis | ✅ Telegram Bot Sync
+**System Status:** ✅ Active Forensic Analysis | ✅ Local AI Agent (Offline) | ✅ Concurrent Telegram Bot | ✅ Hot-Reload CI/CD
+
+---
+
+## 🚀 Key Improvements (April 2026 Update)
+
+### 🤖 Offline AI Forensic Agent (`llm_agent.py`)
+Seamlessly integrates **Qwen 2.5 Coder 7B** via Ollama for plant diagnostics:
+- **Deep CSV Correlation:** Automatically scans historic CSVs to verify startup behavior (e.g., "Early Hours" production checks).
+- **Hardened Data Loading:** Custom `load_csv` helper with auto-column stripping and encoding detection (UTF-8/Latin-1) to handle SCADA formatting quirks.
+- **Data Collision Shield:** Built-in retries and historical fallbacks to prevent crashes during concurrent file writes by the Watchdog.
+
+### 📱 Multi-User Telegram Bot (`telegram_bot.py`)
+- **Concurrency:** Fully multi-threaded; handles dozens of simultaneous AI requests without freezing.
+- **Quick Shortcuts:** Instant commands like `/alerts`, `/daily`, and `/status`.
+- **Instant Feedback:** Immediate "⏳ Thinking..." status while the local GPU processes complex logic.
+
+### 🔄 Local CI/CD & Hot Reload (`run_monitor.py`)
+- **Developer Experience:** The system monitors all project files for changes. Upon saving a Python file, the orchestrator automatically restarts the affected service (Dashboard, Watchdog, or Scraper) without manual intervention.
 
 ---
 
@@ -356,5 +374,5 @@ This project is provided as-is. Adapt and use freely, but ensure compliance with
 
 ---
 
-**Last Updated:** 2026-04-10
-**System Status:** ✅ Fully functional WebSocket integration with customizable frontend thresholds and relative AC/DC analysis algorithms.
+**Last Updated:** 2026-04-20
+**System Status:** ✅ Fully functional multi-threaded AI pipeline with Hot Reload orchestrator and hardened SCADA data parsing.
