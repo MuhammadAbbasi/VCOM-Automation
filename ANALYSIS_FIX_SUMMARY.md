@@ -240,11 +240,10 @@ GET /api/status → Returns latest dashboard_data_{today}.json
 
 LED colors displayed on dashboard:
 - **Green (#10b981)**: Healthy
-- **Yellow (#f59e0b)**: Warning
-- **Red (#ef4444)**: Critical
-- **Grey (#6b7280)**: No data
-
----
+- **Yellow (#f59e0b)**: Warning (Performance/Temp)
+- **Red (#ef4444)**: Critical (Trip/Severe Loss)
+- **Slate Grey (#94a3b8)**: Communications Lost (Plant Overview specific)
+- **Dark Grey (#6b7280)**: No data / outside window
 
 ## Verification Checklist
 
@@ -292,7 +291,25 @@ After deployment:
 
 ---
 
-**Document Version**: 1.0
-**Date**: 2026-04-02
+## Hardening & Stability (April 2026)
+
+The system has been significantly hardened to handle real-world browser and platform instabilities:
+
+**1. Browser Session Shield**
+- **Modal Stripping**: VCOM often overlays "Minimum values not available" Bootstrap-Vue modals that block interactions. The scraper now uses a JS DOM-stripping method to cleanly remove these without relying on frail 'click' events.
+- **Session Recovery**: Checks for visibility of core UI elements every cycle; triggers re-login immediately if the session has timed out.
+
+**2. Data Ingestion Sync**
+- **Extraction Status**: `base_monitor.py` now hooks into the export cycle to update `extraction_status.json`. This provides real-time "Success/Pending" feedback on the dashboard.
+- **Filename Flexibility**: The watchdog loader is now case and character-agnostic, handling both `Potenza AC` (Spaces) and `Potenza_AC` (Underscores) seamlessly to prevent missing data alerts.
+
+**3. Orchestrator Stability**
+- **Smarter Hot-Reload**: Disabled the aggressive "restart all" logic during automated development to prevent browser cycle interruptions.
+- **Deduplication**: Telegram bot and Watchdog now use improved lookups to prevent "Alarm Storms" during intermittent comms drops.
+
+---
+
+**Document Version**: 1.1
+**Date**: 2026-04-21
 **System**: VCOM Mazara del Vallo (36 inverters)
-**Status**: Functional - Processing real data correctly
+**Status**: Production-Ready / Hardened

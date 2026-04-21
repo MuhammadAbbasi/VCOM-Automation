@@ -87,6 +87,39 @@ def export_metric(df: pd.DataFrame, prefix: str) -> None:
     write_df_to_csv(filepath, df)
     logger.info(f"[OK] Overwritten with {len(df)} rows -> {filepath}")
 
+    # Update extraction_status.json for dashboard ingestion visualization
+    try:
+        import json
+        from datetime import datetime
+        status_file = DATA_DIR / "extraction_status.json"
+        
+        status_data = {}
+        if status_file.exists():
+            with open(status_file, "r", encoding="utf-8") as f:
+                try:
+                    status_data = json.load(f)
+                except json.JSONDecodeError:
+                    pass
+                    
+        date_key = today_str()
+        if date_key not in status_data:
+            status_data[date_key] = {}
+            
+        # Map the naming convention seamlessly
+        key_name = prefix.replace(" ", "_") if prefix in ["PR inverter", "Potenza AC", "Corrente DC", "Resistenza di isolamento"] else prefix
+        if prefix == "Resistenza di isolamento": key_name = "Resistenza_Isolamento"
+        if prefix == "PR inverter": key_name = "PR"
+        
+        status_data[date_key][key_name] = {
+            "status": "success",
+            "timestamp": datetime.now().isoformat(timespec="seconds")
+        }
+        
+        with open(status_file, "w", encoding="utf-8") as f:
+            json.dump(status_data, f, indent=2)
+    except Exception as e:
+        logger.warning(f"Failed to update extraction_status.json: {e}")
+
 
 # ---------------------------------------------------------------------------
 # Login
@@ -247,8 +280,9 @@ def select_inverters(page) -> None:
     logger.info("Selecting target inverters...")
     try:
         # Deselect all first for a clean slate
-        if page.locator('button:has-text("Deseleziona tutto")').is_visible():
-            page.locator('button:has-text("Deseleziona tutto")').click()
+        btn_deselect = page.locator('button.selectNone:visible, button:has-text("Deseleziona tutto"):visible').first
+        if btn_deselect.count() > 0 and btn_deselect.is_visible():
+            btn_deselect.click()
             time.sleep(1)
 
         for inv_id in cfg.get("INVERTER_IDS", []):

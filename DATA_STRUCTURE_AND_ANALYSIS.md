@@ -220,15 +220,9 @@ pr_wide = pr_df.pivot_table(
 # Columns: pr_TX1-01, pr_TX1-02, ..., pr_TX3-12
 ```
 
-**Numeric conversion** (Italian format):
-```python
-# Italian format: comma = decimal, period = thousands sep
-# Example: "1.234,56" = 1234.56
-# Pandas auto-detects when reading Excel, but CSV may need manual handling
-
-df["Ora"] = pd.to_numeric(df["Ora"], errors="coerce")
-df["Potenza AC (INV TX1-01) [W]"] = pd.to_numeric(df["Potenza AC (INV TX1-01) [W]"], errors="coerce")
-```
+**Numeric conversion & Filename Agnostic Loading**:
+The watchdog uses a flexible loader (`load_metric`) that handles both spaces and underscores in filenames (e.g., `Potenza_AC` vs `Potenza AC`) to ensure compatibility between different scraper versions.
+It also strips potential 'SunGrow' interference columns during the ingestion phase.
 
 ### Step 3: Apply Forensic Rules
 
@@ -302,6 +296,8 @@ GREY   (#6b7280): No data / outside evaluation window
       "online": 35,
       "tripped": 1,
       "comms_lost": 0,
+      "total_ac_power_mw": 1.25,
+      "avg_pr": 82.4,
       "last_sync": "2026-04-02T17:16:43"
     },
     "inverter_health": {
@@ -401,34 +397,33 @@ timestamp,ora,inverter,rule_id,rule_name,severity,description,value
 
 ---
 
-## Implementation Notes
+## Real-time Status Tracking (`extraction_status.json`)
 
-### file_status.json
+The system uses a persistent JSON file to track real-time ingestion progress for the dashboard's "Data Ingestion Status" UI. It is updated by `base_monitor.py` immediately after a successful CSV export.
 
-Tracks extraction success/failure per metric:
+**Mapping Key Convention:**
+- `PR inverter` → `PR`
+- `Potenza AC` → `Potenza_AC`
+- `Corrente DC` → `Corrente_DC`
+- `Resistenza di isolamento` → `Resistenza_Isolamento`
+- `Temperatura` → `Temperatura`
+- `Irraggiamento` → `Irraggiamento`
+
+**Format**:
 ```json
 {
-  "2026-04-02": {
+  "2026-04-21": {
     "PR": {
       "status": "success",
-      "timestamp": "2026-04-02T17:50:35"
+      "timestamp": "2026-04-21T11:38:03"
     },
     "Potenza_AC": {
       "status": "success",
-      "timestamp": "2026-04-02T17:37:57"
+      "timestamp": "2026-04-21T11:38:15"
     }
   }
 }
 ```
-
-### Handling Missing Files
-
-If a metric file is missing:
-1. Load available files
-2. Mark as "failed" in file_status
-3. Gracefully handle NaN values in rules
-4. Still compute health for other metrics
-5. Log warning but continue
 
 ---
 

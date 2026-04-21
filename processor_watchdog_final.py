@@ -260,10 +260,20 @@ def send_telegram_notification(text: str, settings: dict, use_personal: bool = F
 # ---------------------------------------------------------------------------
 
 def load_metric(date_str: str, metric_prefix: str) -> pd.DataFrame:
-    """Load metric from CSV and deduplicate."""
-    csv_path = DATA_DIR / f"{metric_prefix}_{date_str}.csv"
+    """Load metric from CSV and deduplicate. Handles space/underscore prefixes."""
+    # Try both underscore and space versions
+    paths = [
+        DATA_DIR / f"{metric_prefix}_{date_str}.csv",
+        DATA_DIR / f"{metric_prefix.replace('_', ' ')}_{date_str}.csv"
+    ]
+    
+    csv_path = None
+    for p in paths:
+        if p.exists():
+            csv_path = p
+            break
 
-    if csv_path.exists():
+    if csv_path:
         try:
             # Load with auto-separator detection
             df = pd.read_csv(str(csv_path), sep=None, engine='python', encoding="utf-8")
@@ -323,6 +333,8 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
                 rows = pr_df_clean[pr_df_clean[inv_col] == f"INV {inv_id}"]
                 if len(rows) > 0:
                     pr_latest[inv_id] = rows.iloc[-1][pr_col]
+        else:
+            logger.warning(f"PR column or Inverter column not found in PR data. Columns: {pr_df_clean.columns.tolist()}")
 
     # Find the latest AC row with valid data.
     # The file has many appended batches (each with Ora 0.00-23.55).
@@ -839,11 +851,19 @@ def compute_macro_health(inverter_health: dict, daylight_start: float = 7.0) -> 
     tripped = sum(1 for h in inverter_health.values() if h["ac_power"] == "red")
     comms_lost = sum(1 for h in inverter_health.values() if h["ac_power"] == "grey")
 
+    total_ac_w = sum(h.get("ac_v", 0.0) or 0.0 for h in inverter_health.values())
+    total_ac_power_mw = total_ac_w / 1_000_000.0
+
+    pr_values = [h.get("pr_v") for h in inverter_health.values() if h.get("pr_v") is not None]
+    avg_pr = sum(pr_values) / len(pr_values) if pr_values else 0.0
+
     return {
         "total_inverters": total,
         "online": online,
         "tripped": tripped,
         "comms_lost": comms_lost,
+        "total_ac_power_mw": total_ac_power_mw,
+        "avg_pr": avg_pr,
         "plant_start_time": format_ora(daylight_start),
         "last_sync": datetime.now().isoformat(timespec="seconds"),
     }
@@ -862,7 +882,7 @@ def analyze_site(date_str: str) -> None:
         # Load metrics
         logger.info("Loading metrics...")
         ac_df = load_metric(date_str, "Potenza_AC")
-        pr_df = load_metric(date_str, "PR")
+        pr_df = load_metric(date_str, "PR inverter")
         temp_df = load_metric(date_str, "Temperatura")
         dc_df = load_metric(date_str, "Corrente_DC")
         irrad_df = load_metric(date_str, "Irraggiamento")
@@ -1182,19 +1202,27 @@ class MetricFileHandler(FileSystemEventHandler):
 
     def _check_and_analyze(self):
         today = datetime.now().strftime("%Y-%m-%d")
-        required = [
-            f"PR_{today}.csv",
-            f"Potenza_AC_{today}.csv",
-            f"Corrente_DC_{today}.csv",
-            f"Resistenza_Isolamento_{today}.csv",
-            f"Temperatura_{today}.csv",
-            f"Irraggiamento_{today}.csv",
+        
+        # Updated to match extractor naming conventions (spaces vs underscores)
+        required_prefixes = [
+            "PR inverter", "Potenza AC", "Corrente DC",
+            "Resistenza di isolamento", "Temperatura", "Irraggiamento"
         ]
 
-        present = [f for f in required if (DATA_DIR / f).exists()]
-        if len(present) == len(required):
+        missing = []
+        for prefix in required_prefixes:
+            # Check both space and underscore versions
+            p1 = DATA_DIR / f"{prefix}_{today}.csv"
+            p2 = DATA_DIR / f"{prefix.replace(' ', '_')}_{today}.csv"
+            if not p1.exists() and not p2.exists():
+                missing.append(prefix)
+
+        if not missing:
             logger.info(f"Complete set for {today}. Analyzing...")
             analyze_site(today)
+        else:
+            # Optional: log what's missing every once in a while
+            pass
 
 
 def main():

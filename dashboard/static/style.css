@@ -16,6 +16,7 @@
   --yellow:    #f59e0b;
   --red:       #ef4444;
   --grey:      #6b7280;
+  --comms:     #94a3b8; /* Unique slate for connectivity stats */
 
   --critical:  #ef4444;
   --high:      #f97316;
@@ -234,9 +235,47 @@ section > h2 {
   letter-spacing: 0.05em;
 }
 
-.metric-card.online  .metric-value { color: var(--green);  }
-.metric-card.tripped .metric-value { color: var(--red);    }
-.metric-card.comms   .metric-value { color: var(--yellow); }
+.metric-card.online { 
+  border-color: rgba(16, 185, 129, 0.2); 
+  background: rgba(16, 185, 129, 0.03); 
+}
+.metric-card.online .metric-value { 
+  color: #10b981; 
+  text-shadow: 0 0 15px rgba(16, 185, 129, 0.3); 
+}
+
+.metric-card.tripped { 
+  border-color: rgba(239, 68, 68, 0.2); 
+  background: rgba(239, 68, 68, 0.03); 
+}
+.metric-card.tripped .metric-value { 
+  color: #f43f5e; 
+  text-shadow: 0 0 15px rgba(244, 63, 94, 0.3); 
+}
+
+.metric-card.comms { 
+  border-color: rgba(148, 163, 184, 0.2); 
+  background: rgba(148, 163, 184, 0.03); 
+}
+.metric-card.comms .metric-value { 
+  color: var(--comms); 
+  text-shadow: 0 0 15px rgba(148, 163, 184, 0.2); 
+}
+
+.metric-card.sensor-status {
+  border-color: rgba(59, 130, 246, 0.2);
+  background: rgba(59, 130, 246, 0.03);
+}
+.metric-card.sensor-status .metric-value {
+  color: #3b82f6;
+  text-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
+}
+
+/* Total Inverters card specifically */
+.metric-card:not(.online):not(.tripped):not(.comms):not(.sensor-status):not(.action-card) {
+  border-color: rgba(59, 130, 246, 0.2);
+  background: rgba(59, 130, 246, 0.03);
+}
 
 /* ─── Extraction Action Card ────────────────────────────── */
 .metric-card.action-card {

@@ -23,8 +23,8 @@ This document defines the **data structure, analysis workflow, and forensic rule
 - **Time resolution**: 1-minute intervals (06:00 → 19:00 typical operation window)
 - **Number of inverters**: 36 (TX1-01 → TX1-12, TX2-01 → TX2-12, TX3-01 → TX3-12)
 - **Number of strings**: 808 (ranging 21–23 per inverter, unevenly distributed)
-- **Italian number format**: decimal comma (`,`), thousands separator (`.`) → must convert to float
-- **Night hours (00:00–06:00, 19:00–23:59)**: zero production expected; rules with daylight windows skip these
+- **Dynamic Daylight**: Production START/STOP times are detected dynamically from the AC power stream (searching for non-zero production offsets from theoretical sunrise/sunset).
+- **Italian format**: decimal comma (`,`), thousands separator (`.`) → must convert to float.
 
 ---
 
@@ -40,8 +40,9 @@ Load 6 Excel files by metric prefix:
   - Temperatura_{date}.xlsx
   - Irraggiamento_{date}.xlsx
 
-If Potenza_AC file is missing → abort analysis
-All others are optional (None is acceptable)
+1. **Case & Separator Agnostic Loader**: Uses glob-style matching that handles `Potenza AC` (spaces) or `Potenza_AC` (underscores) seamlessly.
+2. **Master Sequence**: Uses `Potenza_AC` as the master time index.
+3. **Data Stripping**: Filters out 'SunGrow' telemetry columns to prevent plant-wide average pollution.
 ```
 
 ### 2.2 Clean Phase (per DataFrame)
@@ -232,6 +233,9 @@ Computed from latest row:
 - **Online**: Count where AC > 0 W
 - **Tripped**: Count where AC = 0 W
 - **Comms Lost**: Count where AC is NaN
+- **Total Power (MW)**: Aggregated AC output across all 36 inverters
+- **Avg PR**: Plant-wide average Performance Ratio
+- **Dynamic Start/End**: Detected actual generation window vs theoretical sun
 
 ---
 
@@ -294,9 +298,13 @@ dashboard_data_{YYYY-MM-DD}.json
 1. EXTRACT (every 10 min via vcom_monitor.py)
    └─> Write 6 Excel files to extracted_data/
 
-2. WATCHDOG (processor_watchdog.py)
+2. **REAL-TIME SYNC**
+   └─> base_monitor.py updates `extraction_status.json` with success timestamps
+   └─> Dashboard reflects 'SUCCESS' status immediately
+
+3. **WATCHDOG** (processor_watchdog_final.py)
    └─> File system monitor detects new/modified .xlsx
-   └─> Wait 5 sec for file write stabilization
+   └─> Wait 2 sec for file write stabilization
    └─> Check if all 6 daily files exist
    └─> If YES:
        ├─> Load all 6 files

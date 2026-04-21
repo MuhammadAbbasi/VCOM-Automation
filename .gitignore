@@ -181,6 +181,8 @@ cache/
 # ============================================================================
 .gemini/
 .ollama/
+.agent/
+scratch/
 .graphify/
 temp_analysis_*.py
 llm_agent.log

@@ -7,7 +7,7 @@ read from the latest dashboard_data_<date>.json snapshot.
 
 Supported triggers:
   /status  |  status           -> Live plant summary
-  /ai <question>               -> Local AI Forensic Analysis (Qwen 2.5)
+  /ai <question>               -> Remote AI Forensic Analysis (Qwen 3.5)
 
 Run standalone:
     python telegram_bot.py
@@ -107,15 +107,22 @@ def build_status_message(data: dict) -> str:
     lines = [f"🌞 *Mazara 01 — Status* ({sync_time})"]
     inv_health = data.get("inverter_health", {})
     
-    # Corrected keys: ac_v is the power, pr_v is the percentage
-    total_w = sum(float(h.get("ac_v", 0) or 0) for h in inv_health.values())
-    total_mw = total_w / 1000000.0
+    # Use precomputed macro stats if available, otherwise fallback
+    total_mw = macro.get("total_ac_power_mw", 0.0)
+    avg_pr = macro.get("avg_pr", 0.0)
+    
+    if not total_mw:
+        total_w = sum(float(h.get("ac_v", 0) or 0) for h in inv_health.values())
+        total_mw = total_w / 1_000_000.0
+    
     lines.append(f"⚡ AC: {total_mw:.2f} MW")
     lines.append(f"🟢 {macro.get('online', '—')} | 🔴 {macro.get('tripped', '—')} | 🔇 {macro.get('comms_lost', '—')}")
 
-    # Aggregates
-    pr_vals = [float(h.get("pr_v", 0)) for h in inv_health.values() if h.get("pr_v") is not None]
-    if pr_vals: lines.append(f"📊 AVG PR: {sum(pr_vals)/len(pr_vals):.1f}%")
+    if not avg_pr:
+        pr_vals = [float(h.get("pr_v", 0)) for h in inv_health.values() if h.get("pr_v") is not None]
+        avg_pr = sum(pr_vals)/len(pr_vals) if pr_vals else 0.0
+    
+    lines.append(f"📊 AVG PR: {avg_pr:.1f}%")
 
     alerts = data.get("active_anomalies", [])
     if alerts:
@@ -161,6 +168,31 @@ class TelegramBot:
         lower = text.strip().lower()
         return any(kw in lower for kw in TRIGGER_KEYWORDS)
 
+    def set_my_commands(self) -> None:
+        """Sets the bot's command list for the '/' menu."""
+        commands = [
+            {"command": "status", "description": "Live plant summary"},
+            {"command": "alerts", "description": "List all active site anomalies"},
+            {"command": "daily",  "description": "Daily production report"},
+            {"command": "ai",     "description": "Deep Forensic AI Analysis (add question)"},
+        ]
+        try:
+            requests.post(f"{self.base}/setMyCommands", json={"commands": commands}, timeout=API_TIMEOUT)
+        except Exception: pass
+
+    def set_chat_description(self, chat_id: str | int) -> None:
+        """Updates the Telegram group description to match bot capabilities."""
+        desc = (
+            "Mazara Solar Plant Forensic Intelligence. \n\n"
+            "📊 /status - Real-time plant production & health\n"
+            "🚨 /alerts - Active inverter & performance anomalies\n"
+            "📅 /daily  - Daily consolidation report\n"
+            "🤖 /ai <question> - Forensic analysis via Remote high-speed Qwen 3.5"
+        )
+        try:
+            requests.post(f"{self.base}/setChatDescription", json={"chat_id": chat_id, "description": desc[:512]}, timeout=API_TIMEOUT)
+        except Exception: pass
+
 # ---------------------------------------------------------------------------
 # Main loop
 # ---------------------------------------------------------------------------
@@ -173,6 +205,11 @@ def main() -> None:
 
     bot = TelegramBot(tg.get("bot_token", ""))
     
+    # Initialize UI/Metadata
+    bot.set_my_commands()
+    if tg.get("chat_id"):
+        bot.set_chat_description(tg.get("chat_id"))
+        
     while True:
         try:
             updates = bot.get_updates()
@@ -194,18 +231,31 @@ def main() -> None:
                     bot.send_message(chat_id, "⏳ _Thinking..._")
                     data = get_latest_dashboard_json()
                     if llm_agent:
-                        threading.Thread(
-                            target=lambda: bot.send_message(chat_id, llm_agent.ask_llm(question, data)),
-                            daemon=True
-                        ).start()
+                        def run_and_reply():
+                            try:
+                                reply = llm_agent.ask_llm(question, data)
+                                bot.send_message(chat_id, reply)
+                            except Exception as ai_e:
+                                logger.error(f"Telegram AI Thread error: {ai_e}")
+                                bot.send_message(chat_id, "⚠️ AI Agent connection failed.")
+
+                        threading.Thread(target=run_and_reply, daemon=True).start()
                     else:
                         bot.send_message(chat_id, "❌ AI agent not found.")
 
                 elif text.lower().startswith("/alerts") or "alert" in text.lower():
                     data = get_latest_dashboard_json()
                     if data and data.get("active_anomalies"):
-                        alerts = "\n".join([f"🔴 {a['inverter']} - {a['rule']}" for a in data["active_anomalies"]])
-                        bot.send_message(chat_id, f"🚨 *Active Alerts:*\n\n{alerts}")
+                        alert_lines = []
+                        for a in data["active_anomalies"]:
+                            if not isinstance(a, dict):
+                                alert_lines.append(f"🔴 {str(a)}")
+                                continue
+                            inv_name = a.get("inverter", "Unknown")
+                            a_type = a.get("rule", a.get("type", "Anomaly"))
+                            alert_lines.append(f"🔴 {inv_name} - {a_type}")
+                        
+                        bot.send_message(chat_id, f"🚨 *Active Alerts:*\n\n" + "\n".join(alert_lines))
                     else:
                         bot.send_message(chat_id, "✅ No active alerts.")
 
@@ -216,7 +266,7 @@ def main() -> None:
                         msg = (f"📅 *Daily Report ({datetime.now().strftime('%d/%m/%Y')})*\n\n"
                                f"⚡ Production: {h.get('total_ac_power_mw', 0):.2f} MW\n"
                                f"📈 Avg PR: {h.get('avg_pr', 0):.1f}%\n"
-                               f"✅ Inverters Online: {h.get('inverters_online', 0)}/36\n"
+                               f"✅ Inverters Online: {h.get('online', 0)}/36\n"
                                f"⏰ Last Sync: {h.get('last_sync', '—')}")
                         bot.send_message(chat_id, msg)
                     else:

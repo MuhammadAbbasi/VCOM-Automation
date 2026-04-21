@@ -71,12 +71,20 @@ METRICS = [
 def run_extraction_cycle(page, cycle_count: int):
     logger.info(f"=== Starting Extraction Cycle #{cycle_count} ===")
     
-    # 1. Select inverters
+    # 0. Quick session check
     try:
-        select_inverters(page)
+        if not page.locator('text=/Irraggiamento|Potenza AC/').first.is_visible(timeout=5000):
+            logger.warning("Session likely expired. Re-logging...")
+            login(page)
     except Exception as e:
-        logger.error(f"Failed to select inverters: {e}")
-        return
+        logger.warning(f"Session check failed ({e}). Attempting re-login anyway...")
+        try:
+            login(page)
+        except Exception as login_err:
+            logger.error(f"Re-login failed: {login_err}")
+            return # Skip this cycle
+
+    # 1. Select inverters
 
     # 2. Extract metrics
     for name, extractor in METRICS:

@@ -237,12 +237,12 @@ def main() -> None:
     print("------------------------------------------------------------", flush=True)
 
     # Start the hot reloader
-    reloader_thread = threading.Thread(
-        target=hot_reloader, 
-        args=(restart_all_services,), 
-        daemon=True
-    )
-    reloader_thread.start()
+    # reloader_thread = threading.Thread(
+    #     target=hot_reloader, 
+    #     args=(restart_all_services,), 
+    #     daemon=True
+    # )
+    # reloader_thread.start()
 
     # Initial launch
     monitor_services()

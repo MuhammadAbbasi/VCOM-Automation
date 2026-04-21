@@ -1,6 +1,6 @@
 # 🌞 Mazara VCOM Automation — AI-Powered SCADA Monitoring Pipeline
 
-[![Local AI: Qwen 2.5 Coder 7B](https://img.shields.io/badge/Local%20AI-Qwen%202.5%20Coder%207B-blueviolet)](https://ollama.com)
+[![Remote AI: Qwen 2.5 7B](https://img.shields.io/badge/Remote%20AI-Qwen%202.5%207B-blueviolet)](https://ollama.com)
 [![Status: Production](https://img.shields.io/badge/Status-Production--Ready-success)](#)
 
 A complete, high-performance automated monitoring system for utility-scale solar photovoltaic (PV) plants. This project integrates **Local LLMs (Qwen 2.5 Coder)** for deep forensic analysis, extracts real-time telemetry from VCOM (meteocontrol.com) every 15 minutes, and serves a reactive, WebSocket-driven dark-mode dashboard.
@@ -8,14 +8,13 @@ A complete, high-performance automated monitoring system for utility-scale solar
 > [!TIP]
 > **AI-Search Ready:** This repository is optimized for LLM indexing (see [llms.txt](./llms.txt)).
 
-**System Status:** ✅ Active Forensic Analysis | ✅ Local AI Agent (Offline) | ✅ Concurrent Telegram Bot | ✅ Hot-Reload CI/CD
+**System Status:** ✅ Active Forensic Analysis | ✅ Remote AI Agent (High Speed) | ✅ Concurrent Telegram Bot | ✅ Production-Stable Orchestrator
 
 ---
 
 ## 🚀 Key Improvements (April 2026 Update)
 
-### 🤖 Offline AI Forensic Agent (`llm_agent.py`)
-Seamlessly integrates **Qwen 2.5 Coder 7B** via Ollama for plant diagnostics:
+Seamlessly integrates **Qwen 2.5 7B** via remote Ollama (192.168.10.126) for plant diagnostics:
 - **Deep CSV Correlation:** Automatically scans historic CSVs to verify startup behavior (e.g., "Early Hours" production checks).
 - **Hardened Data Loading:** Custom `load_csv` helper with auto-column stripping and encoding detection (UTF-8/Latin-1) to handle SCADA formatting quirks.
 - **Data Collision Shield:** Built-in retries and historical fallbacks to prevent crashes during concurrent file writes by the Watchdog.
@@ -25,8 +24,7 @@ Seamlessly integrates **Qwen 2.5 Coder 7B** via Ollama for plant diagnostics:
 - **Quick Shortcuts:** Instant commands like `/alerts`, `/daily`, and `/status`.
 - **Instant Feedback:** Immediate "⏳ Thinking..." status while the local GPU processes complex logic.
 
-### 🔄 Local CI/CD & Hot Reload (`run_monitor.py`)
-- **Developer Experience:** The system monitors all project files for changes. Upon saving a Python file, the orchestrator automatically restarts the affected service (Dashboard, Watchdog, or Scraper) without manual intervention.
+- **Stable Reliability:** Hot-reload is controlled (semi-automated) to prevent excessive restarts during long extraction cycles, ensuring the browser session remains stable.
 
 ---
 
@@ -75,7 +73,7 @@ http://localhost:8080
 Logs into VCOM every 10 minutes and scrapes 6 metrics:
 - **PR** (Performance Ratio), **Potenza AC**, **Corrente DC**, **Temperatura**, **Resistenza Isolamento**, **Irraggiamento**.
 
-**Universal Login:** Automatically handles both legacy VCOM login and modern Keycloak (Benvenuto) flows with Cookiebot dismissal.
+**Universal Login & Session Shield:** Automatically handles both legacy VCOM login and modern Keycloak flows. Includes automated session-expiry detection and real-time Bootstrap modal dismissal (DOM-stripping method) to prevent extraction stalls.
 
 ### 2. **Forensic Analysis** (`processor_watchdog_final.py`)
 - Scans for 6 anomaly types.
@@ -117,6 +115,7 @@ VCOM Automation/
 │   ├── PR_YYYY-MM-DD.xlsx
 │   ├── Potenza_AC_YYYY-MM-DD.xlsx
 │   ├── ... (4 more metrics)
+│   ├── extraction_status.json         ← Real-time ingestion progress
 │   └── dashboard_data_YYYY-MM-DD.json
 └── requirements.txt
 ```
@@ -187,8 +186,9 @@ This prevents false alerts for normal late-afternoon power decline.
 ### LED Status (PR, Temp, DC, AC)
 - 🟢 **Green** — Healthy (all metrics within thresholds)
 - 🟡 **Yellow** — Warning / Sub-optimal (e.g., thermal warning or slight DC deviation)
-- 🔴 **Red** — Critical条件 (e.g., inverter tripped or severe low PR)
-- ⚫ **Grey** — Comms Lost or outside daylight hours
+- 🔴 **Red** — Critical (e.g., inverter tripped or severe low PR)
+- ⚪ **Slate Grey** — Communications Lost (Distinguished from warnings)
+- ⚫ **Dark Grey** — Off-hours / No data
 
 ### Thresholds (Customizable via Dashboard Settings UI)
 - **PR:** 🟢&ge;x% | 🟡&ge;y% | 🔴<y% (*active after 30m stabilization, handled dynamically*)
@@ -374,5 +374,5 @@ This project is provided as-is. Adapt and use freely, but ensure compliance with
 
 ---
 
-**Last Updated:** 2026-04-20
-**System Status:** ✅ Fully functional multi-threaded AI pipeline with Hot Reload orchestrator and hardened SCADA data parsing.
+**Last Updated:** 2026-04-21
+**System Status:** ✅ Production-hardened with session protection, real-time ingestion status tracking, and premium dashboard UI.
