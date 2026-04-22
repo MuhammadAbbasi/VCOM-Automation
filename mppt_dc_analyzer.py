@@ -243,6 +243,7 @@ def analyze_dc_current(dc_df: pd.DataFrame, output_md_path: Path, date_str: str)
 
             # RULE: CROSS-INVERTER DEVIATION
             domain_peer_cols = [f"Corrente DC MPPT {mppt_num} (INV {oi}) [A]" for oi, ocfg in MPPT_CONFIG.items() if oi[:3] == domain and ocfg[mppt_idx] == string_count and f"Corrente DC MPPT {mppt_num} (INV {oi}) [A]" in df.columns]
+            cross_m = 0
             if domain_peer_cols:
                 domain_median = df[domain_peer_cols].median(axis=1)
                 cond_cross = (series_filled < 0.65 * domain_median.ffill()) & (series_filled > 0.0) & (domain_median.ffill() > 2.0)

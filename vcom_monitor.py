@@ -24,6 +24,7 @@ import json
 import traceback
 from datetime import datetime
 from pathlib import Path
+from logging.handlers import RotatingFileHandler
 
 from playwright.sync_api import sync_playwright
 
@@ -39,7 +40,7 @@ logging.basicConfig(
     format="%(asctime)s [EXTRACTION] %(levelname)s %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler(LOG_PATH, encoding="utf-8"),
+        RotatingFileHandler(LOG_PATH, maxBytes=1_000_000_000, backupCount=3, encoding="utf-8"),
     ],
 )
 logger = logging.getLogger("vcom_monitor")
@@ -85,6 +86,7 @@ def run_extraction_cycle(page, cycle_count: int):
             return # Skip this cycle
 
     # 1. Select inverters
+    select_inverters(page)
 
     # 2. Extract metrics
     for name, extractor in METRICS:

@@ -24,9 +24,12 @@ if str(ROOT) not in sys.path:
 import uvicorn
 import socket
 import asyncio
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks, Request
+import secrets
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks, Request, Depends, HTTPException, status
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 # Import analysis logic
 from processor_watchdog_final import analyze_site
@@ -45,8 +48,35 @@ STATIC_DIR.mkdir(parents=True, exist_ok=True)
 # ---------------------------------------------------------------------------
 # App
 # ---------------------------------------------------------------------------
-app = FastAPI(title="Mazara SCADA Monitor", docs_url=None, redoc_url=None)
+from processor_watchdog_final import load_config
+security = HTTPBasic()
+
+def verify_credentials(credentials: HTTPBasicCredentials = Depends(security)):
+    cfg = load_config()
+    correct_user = secrets.compare_digest(credentials.username, cfg.get("DASHBOARD_USER", "admin"))
+    correct_pass = secrets.compare_digest(credentials.password, cfg.get("DASHBOARD_PASS", "mazara2025"))
+    if not (correct_user and correct_pass):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    return credentials.username
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    asyncio.create_task(data_broadcaster())
+    yield
+
+app = FastAPI(title="Mazara SCADA Monitor", docs_url=None, redoc_url=None, lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' fonts.googleapis.com; font-src 'self' fonts.gstatic.com;"
+    response.headers["X-Frame-Options"] = "DENY"
+    return response
 
 # WebSocket Manager
 class ConnectionManager:
@@ -105,7 +135,7 @@ async def data_broadcaster():
         await asyncio.sleep(2)
 
 @app.post("/api/extraction/trigger")
-async def trigger_extraction():
+async def trigger_extraction(user: str = Depends(verify_credentials)):
     print("[DASHBOARD] Manual extraction trigger received!", flush=True)
     trigger_path = ROOT / ".trigger_extraction"
     busy_path = ROOT / ".extraction_busy"
@@ -117,14 +147,9 @@ async def trigger_extraction():
     return JSONResponse({"status": "success", "message": "Extraction triggered."})
 
 @app.get("/api/extraction/status")
-async def get_extraction_status():
+async def get_extraction_status(user: str = Depends(verify_credentials)):
     busy_path = ROOT / ".extraction_busy"
     return JSONResponse({"is_extracting": busy_path.exists()})
-
-@app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(data_broadcaster())
-
 
 @app.get("/")
 async def index():
@@ -158,13 +183,13 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 @app.get("/api/settings")
-async def get_settings():
+async def get_settings(user: str = Depends(verify_credentials)):
     from processor_watchdog_final import load_user_settings
     return JSONResponse(load_user_settings())
 
 
 @app.post("/api/settings")
-async def update_settings(request: Request, background_tasks: BackgroundTasks):
+async def update_settings(request: Request, background_tasks: BackgroundTasks, user: str = Depends(verify_credentials)):
     try:
         new_settings = await request.json()
         
@@ -180,7 +205,8 @@ async def update_settings(request: Request, background_tasks: BackgroundTasks):
                 
                 # 3. Rescan
                 today = datetime.now().strftime("%Y-%m-%d")
-                analyze_site(today)
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(None, analyze_site, today)
             except Exception as e:
                 print(f"[!] Background settings error: {e}")
 
@@ -193,7 +219,7 @@ async def update_settings(request: Request, background_tasks: BackgroundTasks):
 
 
 @app.post("/api/forensic/rescan")
-async def rescan():
+async def rescan(user: str = Depends(verify_credentials)):
     """Delete current today's JSON, clear error folders, and re-trigger analyze_site."""
     today = datetime.now().strftime("%Y-%m-%d")
     json_path = DATA_DIR / f"dashboard_data_{today}.json"
@@ -215,7 +241,8 @@ async def rescan():
                         pass
 
         # 3. Run analysis
-        analyze_site(today)
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, analyze_site, today)
         
         return JSONResponse({"status": "success", "message": f"Rescan completed for {today}. Errors cleared."})
     except Exception as e:
@@ -223,7 +250,7 @@ async def rescan():
 
 
 @app.post("/api/telegram/test")
-async def test_telegram():
+async def test_telegram(user: str = Depends(verify_credentials)):
     """Send a test message with the detailed system upgrade summary."""
     from processor_watchdog_final import load_user_settings, send_telegram_notification
     try:
@@ -250,7 +277,7 @@ except ImportError:
     ask_llm = None
 
 @app.post("/api/chat")
-async def chat_endpoint(request: Request):
+async def chat_endpoint(request: Request, user: str = Depends(verify_credentials)):
     if not ask_llm:
         return JSONResponse({"status": "error", "message": "llm_agent module not found."}, status_code=500)
     
@@ -346,7 +373,7 @@ if __name__ == "__main__":
         public_url = setup_ngrok(ngrok_token, port, ng_user, ng_pass)
         if public_url:
             print(f"[*] Remote Access (Public): {public_url}")
-            print(f"[*] Security Policy: Basic Auth ({ng_user}:{ng_pass})")
+            print(f"[*] Security Policy: Basic Auth (User: {ng_user})")
         else:
             print("[!] Ngrok failed: Is 'pyngrok' installed? Run: pip install pyngrok")
     else:

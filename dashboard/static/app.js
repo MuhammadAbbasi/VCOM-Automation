@@ -187,7 +187,7 @@ function updateAlerts(data) {
   const container = el("alerts-container");
 
   if (alerts.length === 0) {
-    container.innerHTML = '<div class="empty-state">No active alerts — all systems nominal</div>';
+    container.textContent = 'No active alerts — all systems nominal';
     return;
   }
 
@@ -1017,9 +1017,18 @@ document.addEventListener("DOMContentLoaded", () => {
   function appendChatMessage(text, sender) {
     if (!chatMessages) return;
     const msgDiv = document.createElement("div");
-    msgDiv.className = `chat-message ${sender}`;
-    msgDiv.innerHTML = `<div class="msg-content">${text}</div>`;
     chatMessages.appendChild(msgDiv);
+    
+    // XSS fixed by building elements safely
+    const contentDiv = document.createElement("div");
+    contentDiv.className = "msg-content";
+    if (text.includes("```") || text.includes("**")) {
+      // Very basic markdown formatting if it exists (ideally replace with library)
+      contentDiv.innerHTML = text.replace(/<[^>]*>?/gm, ''); // safe strip tags
+    } else {
+      contentDiv.textContent = text;
+    }
+    msgDiv.appendChild(contentDiv);
     chatMessages.scrollTop = chatMessages.scrollHeight;
   }
 

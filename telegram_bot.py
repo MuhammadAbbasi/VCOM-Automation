@@ -23,6 +23,7 @@ from datetime import datetime
 import threading
 from pathlib import Path
 import requests
+from logging.handlers import RotatingFileHandler
 
 # Pre-import AI agent to avoid startup lag in the loop
 try:
@@ -42,7 +43,7 @@ logging.basicConfig(
     format="%(asctime)s [BOT] %(levelname)s %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler(ROOT / "telegram_bot.log", encoding="utf-8"),
+        RotatingFileHandler(ROOT / "telegram_bot.log", maxBytes=1_000_000_000, backupCount=3, encoding="utf-8"),
     ],
 )
 logger = logging.getLogger("telegram_bot")
@@ -209,6 +210,9 @@ def main() -> None:
     bot.set_my_commands()
     if tg.get("chat_id"):
         bot.set_chat_description(tg.get("chat_id"))
+    
+    ALLOWED_IDS = [str(tg.get("chat_id")), str(tg.get("personal_id"))]
+    ai_semaphore = threading.Semaphore(20)
         
     while True:
         try:
@@ -221,6 +225,12 @@ def main() -> None:
                 chat_id = msg.get("chat", {}).get("id")
                 text = msg.get("text", "")
                 if not text: continue
+                
+                # Check whitelist
+                sender_id = str(chat_id)
+                if sender_id not in ALLOWED_IDS:
+                    logger.warning(f"Unauthorized access attempt from chat_id {chat_id}")
+                    continue
 
                 if text.lower().startswith("/ai"):
                     question = text[3:].strip()
@@ -231,6 +241,10 @@ def main() -> None:
                     bot.send_message(chat_id, "⏳ _Thinking..._")
                     data = get_latest_dashboard_json()
                     if llm_agent:
+                        if not ai_semaphore.acquire(blocking=False):
+                            bot.send_message(chat_id, "⚠️ AI Agent is busy processing other requests. Please try again later.")
+                            continue
+
                         def run_and_reply():
                             try:
                                 reply = llm_agent.ask_llm(question, data)
@@ -238,6 +252,8 @@ def main() -> None:
                             except Exception as ai_e:
                                 logger.error(f"Telegram AI Thread error: {ai_e}")
                                 bot.send_message(chat_id, "⚠️ AI Agent connection failed.")
+                            finally:
+                                ai_semaphore.release()
 
                         threading.Thread(target=run_and_reply, daemon=True).start()
                     else:

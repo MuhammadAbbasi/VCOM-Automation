@@ -8,10 +8,24 @@ from datetime import datetime
 logger = logging.getLogger("llm_agent")
 logger.setLevel(logging.INFO)
 
-OLLAMA_API_URL = "http://192.168.10.126:11434/api/generate"
-MODEL_NAME = "qwen2.5:7b"
+import ast
+
 ROOT = Path(__file__).resolve().parent
-DEBUG_MODE = True # User-requested transparency
+
+def get_user_settings():
+    path = ROOT / "user_settings.json"
+    if path.exists():
+        try:
+            with open(path) as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+_settings = get_user_settings()
+OLLAMA_API_URL = _settings.get("ollama_url", "http://192.168.10.126:11434/api/generate")
+MODEL_NAME = "qwen2.5:7b"
+DEBUG_MODE = _settings.get("debug_mode", False)
 
 def get_project_context():
     """Contextual 'knowledge base' for the remote Qwen 3.5 model."""
@@ -143,7 +157,15 @@ def run_python_analysis(code: str, plant_data: dict) -> tuple[str, bool]:
         "result": None, "ROOT": ROOT, "DATA_DIR": ROOT / "extracted_data",
         "TODAY": datetime.now().strftime("%Y-%m-%d")
     }
+    
     try:
+        tree = ast.parse(code)
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                return ("Security Error: imports are disabled.", False)
+            if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "__import__":
+                return ("Security Error: __import__ calls are disabled.", False)
+                
         exec(code, namespace)
         res = namespace.get("result")
         return (res if res is not None else "Execution finished.", True)

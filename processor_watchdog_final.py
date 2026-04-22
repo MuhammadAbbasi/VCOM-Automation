@@ -22,6 +22,7 @@ import numpy as np
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 from mppt_dc_analyzer import analyze_dc_current
+from logging.handlers import RotatingFileHandler
 
 # ---------------------------------------------------------------------------
 # Paths & Logging
@@ -98,7 +99,7 @@ logging.basicConfig(
     format="%(asctime)s [WATCHDOG] %(levelname)s %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler(LOG_PATH, encoding="utf-8"),
+        RotatingFileHandler(LOG_PATH, maxBytes=1_000_000_000, backupCount=3, encoding="utf-8"),
     ],
 )
 logger = logging.getLogger("watchdog_final")
@@ -171,7 +172,24 @@ def calculate_sunrise(date_str: str) -> float:
         logger.error(f"Sun calculation failed: {e}")
         return 6.5, 19.5
 
+def is_floatable(val):
+    if pd.isna(val) or val == "" or val is None:
+        return False
+    try:
+        float(str(val).replace(",", "."))
+        return True
+    except ValueError:
+        return False
 
+def format_ora(val):
+    """Convert float like 9.25 to '09:25'"""
+    if pd.isna(val): return "Unknown"
+    try:
+        h = int(val)
+        m = int(round((val % 1) * 100))
+        return f"{h:02d}:{m:02d}"
+    except:
+        return "Unknown"
 
 def get_production_start_time(ac_df: pd.DataFrame) -> tuple:
     """Find the first and last Ora where production is active and return (start_ora, end_ora, theo_sunset)."""
@@ -662,16 +680,6 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
 # Downtime Tracker
 # ---------------------------------------------------------------------------
 
-def format_ora(val):
-    """Convert float like 9.25 to '09:25'"""
-    if pd.isna(val): return "Unknown"
-    try:
-        h = int(val)
-        m = int(round((val % 1) * 100))
-        return f"{h:02d}:{m:02d}"
-    except:
-        return "Unknown"
-
 def compute_downtime(ac_df: pd.DataFrame, irrad_df: pd.DataFrame, daylight_start: float = 7.0, daylight_end: float = 19.5, settings: dict = None) -> dict:
     """Calculate downtime events based on 0.0 W strings during daylight hours."""
     if settings is None:
@@ -813,7 +821,7 @@ def compute_downtime(ac_df: pd.DataFrame, irrad_df: pd.DataFrame, daylight_start
 
         total_time_off_calc = end_min - stop_min
         if total_time_off_calc <= 0:
-            total_time_off_calc = settings.get("thresholds", {}).get("collection_interval", 15)
+            total_time_off_calc = settings.get("collection_interval", 15)
 
         if total_time_off_calc >= min_downtime_minutes:
             downtime_tracker[inv_label] = {
