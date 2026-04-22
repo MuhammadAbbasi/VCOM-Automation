@@ -14,6 +14,7 @@ let reconnectInterval = 2000;
 let currentConfig = null;
 let historicalData = [];
 let lastData = null; // cache for tab switching
+let activeAlertFilter = "ALL";
 
 // Ordered list of inverter names matching the analyser
 const INVERTER_NAMES = [
@@ -184,24 +185,73 @@ function updateInverterGrid(data) {
 
 function updateAlerts(data) {
   const alerts = data.active_anomalies || [];
-  const container = el("alerts-container");
+  const containerCrit = el("alerts-container-critical");
+  const containerOthers = el("alerts-container-others");
 
-  if (alerts.length === 0) {
-    container.textContent = 'No active alerts — all systems nominal';
-    return;
+  if (!containerCrit) return;
+
+  const getSevClass = (a) => {
+    const s = (a.severity || "").toLowerCase();
+    if (s.includes("red") || s.includes("crit")) return "red";
+    if (s.includes("yellow") || s.includes("warn")) return "yellow";
+    return "info";
+  };
+
+  const alertTemplate = (a) => {
+    const sevClass = getSevClass(a);
+    const titleText = `${a.inverter || "Unit"} · ${a.type || "Alert"}`;
+    const timeDisplay = (a.trip_time || "").includes('T') ? a.trip_time.split('T')[1] : (a.trip_time || "—");
+    
+    return `
+      <div class="alert-item ${sevClass}">
+        <div class="alert-header-row">
+          <span class="alert-title">${titleText}</span>
+          <div class="header-right-meta">
+            <span class="alert-time-small">${timeDisplay}</span>
+          </div>
+        </div>
+        <div class="alert-body-text">
+           <span class="alert-id-pill">${(a.id || "").slice(-4)}</span> ${a.message || ""}
+        </div>
+      </div>
+    `;
+  };
+
+  const criticals = alerts.filter(a => getSevClass(a) === "red")
+    .sort((a, b) => (b.trip_time || "").localeCompare(a.trip_time || ""));
+    
+  const others = alerts.filter(a => getSevClass(a) !== "red")
+    .sort((a, b) => {
+       const pa = (getSevClass(a) === "yellow" ? 1 : 2);
+       const pb = (getSevClass(b) === "yellow" ? 1 : 2);
+       if (pa !== pb) return pa - pb;
+       return (b.trip_time || "").localeCompare(a.trip_time || "");
+    });
+
+  if (containerCrit) {
+    containerCrit.innerHTML = criticals.length > 0 
+      ? criticals.map(alertTemplate).join("") 
+      : '<div class="empty-state" style="padding:1rem; font-size:0.7rem; opacity:0.6;">No critical alerts</div>';
   }
 
-  container.innerHTML = alerts.map(a => `
-    <div class="alert-item ${a.severity || "Info"}">
-      <span class="alert-timestamp">${a.trip_time || "—"}</span>
-      <span>
-        <span class="alert-inverter">${a.inverter || "—"}</span>
-        <span class="alert-type"> — ${a.type || "Unknown"}</span>
-        <span class="alert-details">&nbsp;(${a.message || ""})</span>
-      </span>
-      <span class="severity-badge ${a.severity || "Info"}">${a.severity || "Info"}</span>
-    </div>
-  `).join("");
+  if (containerOthers) {
+    containerOthers.innerHTML = others.length > 0 
+      ? others.map(alertTemplate).join("") 
+      : '<div class="empty-state" style="padding:1rem; font-size:0.7rem; opacity:0.6;">No active warnings or info messages</div>';
+  }
+}
+
+// Add event listeners for alert filter chips
+function initAlertFilters() {
+    const chips = document.querySelectorAll("#alert-filter-chips .filter-chip");
+    chips.forEach(chip => {
+        chip.addEventListener("click", () => {
+            chips.forEach(c => c.classList.remove("active"));
+            chip.classList.add("active");
+            activeAlertFilter = chip.getAttribute("data-filter");
+            if (lastData) updateAlerts(lastData);
+        });
+    });
 }
 
 // ─── 5. Historical alarm trail ────────────────────────────────────────────
@@ -209,13 +259,11 @@ function updateAlerts(data) {
 function updateHistory(data) {
   historicalData = data.historical_trail || [];
   
-  // Extract unique categories and populate dropdown if it exists
   const filterEl = el("history-filter");
   if (filterEl) {
     const currentVal = filterEl.value;
     const uniqueCats = new Set(historicalData.map(a => a.type));
     
-    // Check if new categories appeared or we need to rebuild
     const existingOptions = Array.from(filterEl.options).map(o => o.value);
     let changed = false;
     for (const c of uniqueCats) {
@@ -231,35 +279,54 @@ function updateHistory(data) {
     }
   }
 
-  renderHistoryTable();
+  renderHistoryTiles();
 }
 
-function renderHistoryTable() {
-  const tbody = el("history-tbody");
-  if (!tbody || !historicalData) return;
+function renderHistoryTiles() {
+  const container = el("historical-container");
+  if (!container || !historicalData) return;
 
   const filterEl = el("history-filter");
   const filterVal = filterEl ? filterEl.value : "ALL";
 
+  const getSevClass = (a) => {
+    const s = (a.severity || "").toLowerCase();
+    if (s.includes("red") || s.includes("crit")) return "red";
+    if (s.includes("yellow") || s.includes("warn")) return "yellow";
+    return "info";
+  };
+
   const filteredArr = filterVal === "ALL" ? historicalData : historicalData.filter(a => a.type === filterVal);
   
   if (filteredArr.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No historical alarms for today</td></tr>';
+    container.innerHTML = '<div class="empty-state" style="padding:2rem;">No historical alarms matching filter</div>';
     return;
   }
 
-  // Newest first (using recovery_time first, fallback to trip_time)
-  const sorted = [...filteredArr].sort((a, b) => (b.recovery_time || b.trip_time || "").localeCompare(a.recovery_time || a.trip_time || "")).slice(0, 100);
+  // Newest first
+  const sorted = [...filteredArr].sort((a, b) => (b.recovery_time || b.trip_time || "").localeCompare(a.recovery_time || a.trip_time || "")).slice(0, 40);
 
-  tbody.innerHTML = sorted.map(a => `
-    <tr>
-      <td style="font-size:0.8rem">Recovered:<br/>${a.recovery_time || "—"}</td>
-      <td>${a.inverter  || "—"}</td>
-      <td>${a.type      || "—"}</td>
-      <td><span class="severity-badge ${a.severity || "Info"}">${a.severity || "Info"}</span></td>
-      <td>${a.message   || ""}</td>
-    </tr>
-  `).join("");
+  container.innerHTML = sorted.map(a => {
+    const sevClass = getSevClass(a);
+    const titleText = `${a.inverter || "Unit"} · ${a.type || "Event"}`;
+    // Show recovery time as primary, trip time as secondary
+    const timeDisplay = (a.recovery_time || "").includes('T') ? a.recovery_time.split('T')[1] : (a.recovery_time || "—");
+    const tripDisplay = (a.trip_time || "").includes('T') ? a.trip_time.split('T')[1] : (a.trip_time || "—");
+    
+    return `
+      <div class="alert-item ${sevClass}" style="filter: grayscale(0.5); opacity: 0.85;">
+        <div class="alert-header-row">
+          <span class="alert-title">${titleText}</span>
+          <div class="header-right-meta">
+            <span class="alert-time-small" title="Trip: ${tripDisplay}">Rec: ${timeDisplay}</span>
+          </div>
+        </div>
+        <div class="alert-body-text" style="font-size: 0.65rem;">
+           <span class="alert-id-pill" style="opacity:0.6">${(a.id || "").slice(-4)}</span> ${a.message || ""}
+        </div>
+      </div>
+    `;
+  }).join("");
 }
 
 // ─── 6. Downtime Tracker ────────────────────────────────────────────────────
@@ -803,6 +870,40 @@ function applyConfig(config) {
       el("cfg-min-downtime").value = t.min_downtime_minutes;
     }
   }
+
+  // Alert Preferences
+  if (config.alert_preferences) {
+    const ap = config.alert_preferences;
+    if (el("pref-comm-db")) el("pref-comm-db").checked = !!ap.comm_lost?.dashboard;
+    if (el("pref-comm-tg")) el("pref-comm-tg").checked = !!ap.comm_lost?.telegram;
+    
+    if (el("pref-site-db")) el("pref-site-db").checked = !!ap.plant_drop?.dashboard;
+    if (el("pref-site-tg")) el("pref-site-tg").checked = !!ap.plant_drop?.telegram;
+
+    if (el("pref-trip-db")) el("pref-trip-db").checked = !!ap.inverter_trip?.dashboard;
+    if (el("pref-trip-tg")) el("pref-trip-tg").checked = !!ap.inverter_trip?.telegram;
+    
+    if (el("pref-ac-db")) el("pref-ac-db").checked = !!ap.ac_drop?.dashboard;
+    if (el("pref-ac-tg")) el("pref-ac-tg").checked = !!ap.ac_drop?.telegram;
+
+    if (el("pref-pr-low-db")) el("pref-pr-low-db").checked = !!ap.low_pr?.dashboard;
+    if (el("pref-pr-low-tg")) el("pref-pr-low-tg").checked = !!ap.low_pr?.telegram;
+    if (el("pref-pr-crit-db")) el("pref-pr-crit-db").checked = !!ap.crit_pr?.dashboard;
+    if (el("pref-pr-crit-tg")) el("pref-pr-crit-tg").checked = !!ap.crit_pr?.telegram;
+    
+    if (el("pref-temp-warn-db")) el("pref-temp-warn-db").checked = !!ap.high_temp?.dashboard;
+    if (el("pref-temp-warn-tg")) el("pref-temp-warn-tg").checked = !!ap.high_temp?.telegram;
+    if (el("pref-temp-crit-db")) el("pref-temp-crit-db").checked = !!ap.crit_temp?.dashboard;
+    if (el("pref-temp-crit-tg")) el("pref-temp-crit-tg").checked = !!ap.crit_temp?.telegram;
+    
+    if (el("pref-dc-warn-db")) el("pref-dc-warn-db").checked = !!ap.dc_warning?.dashboard;
+    if (el("pref-dc-warn-tg")) el("pref-dc-warn-tg").checked = !!ap.dc_warning?.telegram;
+    if (el("pref-dc-crit-db")) el("pref-dc-crit-db").checked = !!ap.dc_critical?.dashboard;
+    if (el("pref-dc-crit-tg")) el("pref-dc-crit-tg").checked = !!ap.dc_critical?.telegram;
+
+    if (el("pref-recovery-tg")) el("pref-recovery-tg").checked = !!ap.recovery?.telegram;
+  }
+
   if (config.collection_interval !== undefined && el("cfg-collection-interval")) {
     el("cfg-collection-interval").value = config.collection_interval;
   }
@@ -869,6 +970,51 @@ async function handleSaveSettings() {
       bot_token: val("cfg-tg-token") || "",
       chat_id: val("cfg-tg-chat") || "",
       personal_id: val("cfg-tg-personal") || ""
+    },
+    alert_preferences: {
+      comm_lost: { 
+        dashboard: !!el("pref-comm-db")?.checked,
+        telegram: !!el("pref-comm-tg")?.checked
+      },
+      plant_drop: {
+        dashboard: !!el("pref-site-db")?.checked,
+        telegram: !!el("pref-site-tg")?.checked
+      },
+      inverter_trip: {
+        dashboard: !!el("pref-trip-db")?.checked,
+        telegram: !!el("pref-trip-tg")?.checked
+      },
+      ac_drop: {
+        dashboard: !!el("pref-ac-db")?.checked,
+        telegram: !!el("pref-ac-tg")?.checked
+      },
+      low_pr: {
+        dashboard: !!el("pref-pr-low-db")?.checked,
+        telegram: !!el("pref-pr-low-tg")?.checked
+      },
+      crit_pr: {
+        dashboard: !!el("pref-pr-crit-db")?.checked,
+        telegram: !!el("pref-pr-crit-tg")?.checked
+      },
+      high_temp: {
+        dashboard: !!el("pref-temp-warn-db")?.checked,
+        telegram: !!el("pref-temp-warn-tg")?.checked
+      },
+      crit_temp: {
+        dashboard: !!el("pref-temp-crit-db")?.checked,
+        telegram: !!el("pref-temp-crit-tg")?.checked
+      },
+      dc_warning: {
+        dashboard: !!el("pref-dc-warn-db")?.checked,
+        telegram: !!el("pref-dc-warn-tg")?.checked
+      },
+      dc_critical: {
+        dashboard: !!el("pref-dc-crit-db")?.checked,
+        telegram: !!el("pref-dc-crit-tg")?.checked
+      },
+      recovery: {
+        telegram: !!el("pref-recovery-tg")?.checked
+      }
     }
   };
 
@@ -971,6 +1117,20 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialize tabs
   initTabs();
   initSortableHeaders();
+  initAlertFilters();
+
+  // Settings Modal Tabs
+  const modalTabBtns = document.querySelectorAll(".m-tab-btn");
+  const modalTabPanels = document.querySelectorAll(".m-tab-panel");
+  modalTabBtns.forEach(btn => {
+    btn.addEventListener("click", () => {
+      const targetId = btn.dataset.mTab;
+      modalTabBtns.forEach(b => b.classList.remove("active"));
+      modalTabPanels.forEach(p => p.classList.remove("active"));
+      btn.classList.add("active");
+      if (el(targetId)) el(targetId).classList.add("active");
+    });
+  });
   
   // WebSocket
   connectWebSocket();

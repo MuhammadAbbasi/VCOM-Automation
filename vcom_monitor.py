@@ -92,19 +92,27 @@ def run_extraction_cycle(page, cycle_count: int):
     for name, extractor in METRICS:
         logger.info(f"Extracting: {name}")
         success = False
-        for attempt in range(1, 3):
+        for attempt in range(1, 4):  # Increased to 3 attempts
             try:
                 df = extractor(page)
                 if df is not None and not df.empty:
                     export_metric(df, name)
                     success = True
                     break
+                else:
+                    logger.warning(f"  Attempt {attempt} for {name} returned empty data.")
             except Exception as e:
                 logger.warning(f"  Attempt {attempt} failed for {name}: {e}")
-                time.sleep(2)
+                if "detached from the DOM" in str(e) or "attached to the DOM" in str(e):
+                    logger.info("  DOM detachment detected. Reloading page...")
+                    page.reload()
+                    page.wait_for_load_state("networkidle")
+                    select_inverters(page) # Re-select after reload
+                
+                time.sleep(3)
         
         if not success:
-            logger.error(f"  {name} failed after 2 attempts.")
+            logger.error(f"  {name} failed after all attempts.")
 
 def main() -> None:
     print("[EXTRACTION] Script started.", flush=True)

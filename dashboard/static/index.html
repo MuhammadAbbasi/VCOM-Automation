@@ -1,633 +1,620 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Mazara PV Monitor — AI-Powered SCADA Dashboard</title>
-  
-  <!-- SEO & Search Engine Optimization -->
-  <meta name="description" content="AI-powered real-time SCADA monitoring dashboard for Mazara 01 PV solar plant. High-precision forensic analysis and remote high-speed AI integration.">
-  <meta name="keywords" content="Solar, SCADA, Monitoring, AI, PV Plant, Inverter, PR, VCOM, Mazara del Vallo">
-  <meta name="author" content="Mazara Solar Team">
-  <meta name="robots" content="noindex, nofollow">
-
-  <!-- Open Graph / Social Media -->
-  <meta property="og:type" content="website">
-  <meta property="og:title" content="Mazara PV Monitor — Real-Time AI SCADA Dashboard">
-  <meta property="og:description" content="Automated health tracking and forensic analysis for 36 utility-scale inverters.">
-  <meta property="og:image" content="/static/og-image.jpg">
-  
+  <meta name="description" content="AI-powered real-time SCADA monitoring dashboard for Mazara 01 PV solar plant.">
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css" />
 </head>
+
 <body>
 
-<!-- ═══════════════════════════════════════════════════════════
-     Header
-════════════════════════════════════════════════════════════ -->
-<header>
-  <div>
-    <h1>Mazara Solar Plant — SCADA Monitor</h1>
-    <div class="subtitle">System ID 2144635 &nbsp;·&nbsp; Mazara del Vallo, Sicily &nbsp;·&nbsp; 36 Inverters · 808 Strings</div>
-    <div class="plant-meta" style="margin-top:0.5rem; font-size:0.8rem; color:var(--text); opacity:0.8;">
-      <span id="meta-start-time">Plant Start: --:--</span> &nbsp;·&nbsp; 
-      <span id="meta-last-fetch">Latest Data: --:--</span>
-    </div>
-  </div>
-  <div class="header-actions">
-    <div id="last-updated" style="color:var(--muted);font-size:0.75rem;">Connecting…</div>
-    <button id="settings-btn" class="btn-rescan" style="margin-right: 0.5rem;">⚙️ SETTINGS</button>
-    <button id="rescan-btn" class="btn-rescan">FORENSIC RE-SCAN</button>
-  </div>
-</header>
-
-<!-- ═══════════════════════════════════════════════════════════
-     Tab Navigation
-════════════════════════════════════════════════════════════ -->
-<nav class="tab-nav" id="tab-nav">
-  <button class="tab-btn active" data-tab="tab-overview">
-    <span class="tab-icon">📊</span> Overview
-  </button>
-  <button class="tab-btn" data-tab="tab-pr">
-    <span class="tab-icon">⚡</span> PR Detail
-  </button>
-  <button class="tab-btn" data-tab="tab-temp">
-    <span class="tab-icon">🌡️</span> Temperature
-  </button>
-  <button class="tab-btn" data-tab="tab-dc">
-    <span class="tab-icon">🔌</span> DC Current
-  </button>
-  <button class="tab-btn" data-tab="tab-ac">
-    <span class="tab-icon">⚙️</span> AC Power
-  </button>
-  <button class="tab-btn" data-tab="tab-sensors">
-    <span class="tab-icon">📡</span> Sensors
-  </button>
-  <button class="tab-btn" data-tab="tab-chat">
-    <span class="tab-icon">💬</span> AI Chat
-  </button>
-
-</nav>
-
-<!-- ═══════════════════════════════════════════════════════════
-     TAB 1: OVERVIEW (original content)
-════════════════════════════════════════════════════════════ -->
-<main id="tab-overview" class="tab-content active">
-
-  <!-- 1. Macro Health -->
-  <section>
-    <h2>Plant Overview</h2>
-    <div id="metrics-grid">
-      <div class="card metric-card">
-        <div class="metric-value" id="val-total">36</div>
-        <div class="metric-label">Total Inverters</div>
-      </div>
-      <div class="card metric-card online">
-        <div class="metric-value" id="val-online">—</div>
-        <div class="metric-label">Online</div>
-      </div>
-      <div class="card metric-card tripped">
-        <div class="metric-value" id="val-tripped">—</div>
-        <div class="metric-label">Tripped</div>
-      </div>
-      <div class="card metric-card comms">
-        <div class="metric-value" id="val-comms">—</div>
-        <div class="metric-label">Comms Lost</div>
-      </div>
-      <div class="card metric-card sensor-status">
-        <div class="metric-value" id="val-poa">—</div>
-        <div class="metric-label">Plant Irradiance (POA)</div>
-      </div>
-      <div class="card metric-card action-card">
-        <button id="btn-trigger-extraction" onclick="triggerExtraction()">
-          <span id="trigger-icon">🚀</span>
-          <span id="trigger-text">Get Data Now</span>
-        </button>
-        <div class="metric-label">VCOM Status: <span id="extraction-status-label">Idle</span></div>
+  <header>
+    <div>
+      <h1>Mazara Solar Plant — SCADA Monitor</h1>
+      <div class="subtitle">System ID 2144635 &nbsp;·&nbsp; Mazara del Vallo, Sicily &nbsp;·&nbsp; 36 Inverters · 808
+        Strings</div>
+      <div class="plant-meta" style="margin-top:0.5rem; font-size:0.8rem; color:var(--text); opacity:0.8;">
+        <span id="meta-start-time">Plant Start: --:--</span> &nbsp;·&nbsp;
+        <span id="meta-last-fetch">Latest Data: --:--</span>
       </div>
     </div>
-  </section>
-
-  <!-- 2. Data Ingestion Status -->
-  <section>
-    <h2>Data Ingestion Status</h2>
-    <div id="ingestion-grid">
-      <div class="card file-card loading">
-        <span class="file-name">PR Inverter</span>
-        <span class="file-status"><span class="spinner"></span>loading</span>
-        <span class="file-time">—</span>
-      </div>
-      <div class="card file-card loading">
-        <span class="file-name">Potenza AC</span>
-        <span class="file-status"><span class="spinner"></span>loading</span>
-        <span class="file-time">—</span>
-      </div>
-      <div class="card file-card loading">
-        <span class="file-name">Corrente DC</span>
-        <span class="file-status"><span class="spinner"></span>loading</span>
-        <span class="file-time">—</span>
-      </div>
-      <div class="card file-card loading">
-        <span class="file-name">Resistenza Isol.</span>
-        <span class="file-status"><span class="spinner"></span>loading</span>
-        <span class="file-time">—</span>
-      </div>
-      <div class="card file-card loading">
-        <span class="file-name">Temperatura</span>
-        <span class="file-status"><span class="spinner"></span>loading</span>
-        <span class="file-time">—</span>
-      </div>
-      <div class="card file-card loading">
-        <span class="file-name">Irraggiamento</span>
-        <span class="file-status"><span class="spinner"></span>loading</span>
-        <span class="file-time">—</span>
-      </div>
+    <div class="header-actions">
+      <div id="last-updated" style="color:var(--muted);font-size:0.75rem;">Connecting…</div>
+      <button id="settings-btn" class="btn-rescan" style="margin-right: 0.5rem;">⚙️ SETTINGS</button>
+      <button id="rescan-btn" class="btn-rescan">FORENSIC RE-SCAN</button>
     </div>
-  </section>
+  </header>
 
-  <!-- 3. Inverter Health Matrix -->
-  <section>
-    <h2>Inverter Health Matrix
-      <span style="font-size:0.65rem;font-weight:400;color:var(--muted);margin-left:0.75rem;">
-        LED: PR &nbsp;|&nbsp; Temp &nbsp;|&nbsp; DC &nbsp;|&nbsp; AC
-      </span>
-    </h2>
-    <div id="inverter-grid">
-      <div class="empty-state" style="grid-column:1/-1;">Waiting for first data cycle…</div>
+  <nav class="tab-nav" id="tab-nav">
+    <button class="tab-btn active" data-tab="tab-overview"><span class="tab-icon">📊</span> Overview</button>
+    <button class="tab-btn" data-tab="tab-pr"><span class="tab-icon">⚡</span> PR Detail</button>
+    <button class="tab-btn" data-tab="tab-temp"><span class="tab-icon">🌡️</span> Temperature</button>
+    <button class="tab-btn" data-tab="tab-dc"><span class="tab-icon">🔌</span> DC Current</button>
+    <button class="tab-btn" data-tab="tab-ac"><span class="tab-icon">⚙️</span> AC Power</button>
+    <button class="tab-btn" data-tab="tab-sensors"><span class="tab-icon">📡</span> Sensors</button>
+    <button class="tab-btn" data-tab="tab-chat"><span class="tab-icon">💬</span> AI Chat</button>
+  </nav>
+
+  <main id="tab-overview" class="tab-content active">
+    <section>
+      <h2>Macro Health Pulse</h2>
+      <div id="metrics-grid">
+        <div class="card metric-card">
+          <div class="metric-value" id="val-total">36</div>
+          <div class="metric-label">Total Inverters</div>
+        </div>
+        <div class="card metric-card online">
+          <div class="metric-value" id="val-online">—</div>
+          <div class="metric-label">Online</div>
+        </div>
+        <div class="card metric-card tripped">
+          <div class="metric-value" id="val-tripped">—</div>
+          <div class="metric-label">Tripped</div>
+        </div>
+        <div class="card metric-card comms">
+          <div class="metric-value" id="val-comms">—</div>
+          <div class="metric-label">Comms Lost</div>
+        </div>
+        <div class="card metric-card sensor-status">
+          <div class="metric-value" id="val-poa">—</div>
+          <div class="metric-label">Plant Irradiance (POA)</div>
+        </div>
+        <div class="card metric-card action-card">
+          <button id="btn-trigger-extraction" onclick="triggerExtraction()">
+            <span id="trigger-icon">🚀</span> <span id="trigger-text">Get Data Now</span>
+          </button>
+          <div class="metric-label">VCOM Status: <span id="extraction-status-label">Idle</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Data Ingestion Status</h2>
+      <div id="ingestion-grid"></div>
+    </section>
+
+    <div class="matrix-alerts-row">
+      <section class="matrix-col">
+        <h2>Inverter Health Matrix
+          <span style="font-size:0.65rem;font-weight:400;color:var(--muted);margin-left:0.75rem;">
+            LED: PR | Temp | DC | AC
+          </span>
+        </h2>
+        <div id="inverter-grid"></div>
+      </section>
+
+      <section class="alerts-col">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+          <h2 style="margin:0;">Critical Alerts</h2>
+          <div id="alert-filter-chips" class="filter-chip-group">
+            <!-- Filters removed from here as sidebar is now critical-only -->
+          </div>
+        </div>
+        <div id="alerts-container-critical" class="alert-list compact"></div>
+      </section>
     </div>
-  </section>
 
-  <!-- 4. Active Diagnostic Alerts -->
-  <section>
-    <h2>Active Diagnostic Alerts</h2>
-    <div id="alerts-container" class="alert-list">
-      <div class="empty-state">No active alerts — waiting for data…</div>
-    </div>
-  </section>
+    <section>
+      <h2>Active Diagnostics (Warnings & Info)</h2>
+      <div id="alerts-container-others" class="alert-list compact horizontal-grid"></div>
+    </section>
 
-  <!-- 5. Historical Alarm Trail -->
-  <section>
-    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
-      <h2>Historical Alarm Trail <span style="font-size:0.65rem;font-weight:400;color:var(--muted);">(newest first · today · max 100)</span></h2>
-      <div style="display:flex; align-items:center; gap:0.5rem; font-size:0.85rem;">
-        <label for="history-filter" style="color:var(--muted);">Filter:</label>
-        <select id="history-filter" style="background:var(--surface); border:1px solid var(--border); color:var(--text); padding:0.3rem 0.5rem; border-radius:0.25rem;">
+    <section>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem;">
+        <h2 style="margin:0;">Historical Alarm Trail</h2>
+        <select id="history-filter"
+          style="background:var(--surface); border:1px solid var(--border); color:var(--text); padding:0.25rem; font-size: 0.7rem;">
           <option value="ALL">All Categories</option>
         </select>
       </div>
-    </div>
-    <div class="alarm-table-wrapper" style="margin-top:0.75rem;">
-      <table class="alarm-table">
-        <thead>
-          <tr>
-            <th>Timestamp</th>
-            <th>Inverter</th>
-            <th>Event Type</th>
-            <th>Severity</th>
-            <th>Details</th>
-          </tr>
-        </thead>
-        <tbody id="history-tbody">
-          <tr><td colspan="5" class="empty-state">No historical data yet</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
+      <div id="historical-container" class="alert-list compact horizontal-grid"></div>
+    </section>
 
-  <!-- 6. Downtime Tracker -->
-  <section>
-    <h2>Downtime Tracker <span id="downtime-subtitle" style="font-size:0.65rem;font-weight:400;color:var(--muted);">(Daylight Hours)</span></h2>
-    <div class="alarm-table-wrapper">
-      <table class="alarm-table">
-        <thead>
-          <tr>
-            <th>Inverter</th>
-            <th>Date and time last data fetched</th>
-            <th>Last POA available</th>
-            <th>Time it stopped</th>
-            <th>Still off or started again</th>
-            <th>Total time off (minutes)</th>
-          </tr>
-        </thead>
-        <tbody id="downtime-tbody">
-          <tr><td colspan="6" class="empty-state">No downtime reported</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
+    <section>
+      <h2>Downtime Tracker</h2>
+      <div class="alarm-table-wrapper">
+        <table class="alarm-table">
+          <thead>
+            <tr>
+              <th>Inverter</th>
+              <th>Last Data Fetch</th>
+              <th>Last POA</th>
+              <th>Stopped At</th>
+              <th>Restarted At</th>
+              <th>Total Min Off</th>
+            </tr>
+          </thead>
+          <tbody id="downtime-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
 
-  <!-- 7. Analysis Logic & Thresholds -->
-  <section style="margin-top: 1rem;">
-    <h2>Analysis Logic & Thresholds</h2>
-    <div class="card" style="padding: 1.5rem; background: rgba(59, 130, 246, 0.03); border-color: rgba(59, 130, 246, 0.2);">
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem;">
-        <div>
-          <h3 style="font-size: 0.9rem; color: var(--accent); margin-bottom: 0.75rem;">PR (Performance Ratio)</h3>
-          <ul style="list-style: none; font-size: 0.8rem; line-height: 1.6; color: var(--muted);">
-            <li><span class="led green" style="display:inline-block; width:8px; height:8px;"></span> <strong>PR &ge; 85%</strong> — Optimal performance</li>
-            <li><span class="led yellow" style="display:inline-block; width:8px; height:8px;"></span> <strong>85% &gt; PR &ge; 75%</strong> — Performance warning</li>
-            <li><span class="led red" style="display:inline-block; width:8px; height:8px;"></span> <strong>PR &lt; 75%</strong> — Significant underperformance</li>
-            <li style="margin-top: 0.5rem; font-style: italic;">* Logic active 30m after production start (Stabilization)</li>
-          </ul>
-        </div>
-        <div>
-          <h3 style="font-size: 0.9rem; color: var(--accent); margin-bottom: 0.75rem;">Inverter Temperature</h3>
-          <ul style="list-style: none; font-size: 0.8rem; line-height: 1.6; color: var(--muted);">
-            <li><span class="led green" style="display:inline-block; width:8px; height:8px;"></span> <strong>Temp &le; 40°C</strong> — Healthy operating range</li>
-            <li><span class="led yellow" style="display:inline-block; width:8px; height:8px;"></span> <strong>40°C &lt; Temp &le; 45°C</strong> — Thermal warning</li>
-            <li><span class="led red" style="display:inline-block; width:8px; height:8px;"></span> <strong>Temp &gt; 45°C</strong> — Critical overheating</li>
-          </ul>
-        </div>
-        <div>
-          <h3 style="font-size: 0.9rem; color: var(--accent); margin-bottom: 0.75rem;">DC Current (Avg of 12 MPPTs)</h3>
-          <ul style="list-style: none; font-size: 0.8rem; line-height: 1.6; color: var(--muted);">
-            <li><strong>Morning (Start to 12:00):</strong> Green &ge; 10A | Yellow &ge; 2A</li>
-            <li><strong>Afternoon (12:00 to 19:00):</strong> Green &ge; 5A | Yellow &ge; 0.5A</li>
-            <li><span class="led red" style="display:inline-block; width:8px; height:8px;"></span> <strong>Current &lt; Yellow Thr</strong> — Potential string/junction loss</li>
-          </ul>
-        </div>
-        <div>
-          <h3 style="font-size: 0.9rem; color: var(--accent); margin-bottom: 0.75rem;">AC Power & Production</h3>
-          <ul style="list-style: none; font-size: 0.8rem; line-height: 1.6; color: var(--muted);">
-            <li><span class="led green" style="display:inline-block; width:8px; height:8px;"></span> <strong>AC &ge; 0.85 &times; Plant Avg</strong> — Nominal generation</li>
-            <li><span class="led red" style="display:inline-block; width:8px; height:8px;"></span> <strong>0 &lt; AC &lt; 0.85 &times; Plant Avg</strong> — Underperforming</li>
-            <li><span class="led red" style="display:inline-block; width:8px; height:8px;"></span> <strong>AC = 0 W</strong> — Inverter Tripped (Daylight only)</li>
-            <li style="margin-top: 0.5rem; font-style: italic;">* Inverters are evaluated relative to exactly what the rest of the plant produces at that exact moment.</li>
-            <li style="font-style: italic;">* If POA &lt; 50 W/m² and Plant Avg &lt; 1000 W, deviations are ignored.</li>
-            <li style="margin-top: 0.5rem; font-style: italic;">* Downtime threshold: Cumulative off-time &ge; configured minimum</li>
-          </ul>
+  <main id="tab-pr" class="tab-content">
+    <section>
+      <div class="detail-header">
+        <h2>⚡ Performance Ratio Detail</h2>
+        <div class="detail-stats">
+          <div class="stat-card">
+            <div class="stat-value" id="pr-avg">—</div>
+            <div class="stat-label">Avg</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="pr-max">—</div>
+            <div class="stat-label">Best</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="pr-min">—</div>
+            <div class="stat-label">Worst</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="pr-ok-count">—</div>
+            <div class="stat-label">OK Count</div>
+          </div>
         </div>
       </div>
-    </div>
-  </section>
+      <div class="alarm-table-wrapper">
+        <table class="alarm-table detail-table" id="pr-table">
+          <thead>
+            <tr>
+              <th class="sortable" data-sort="name">Inverter</th>
+              <th class="sortable" data-sort="domain">Domain</th>
+              <th class="sortable" data-sort="value">PR (%)</th>
+              <th>Status</th>
+              <th>vs Avg</th>
+              <th class="sortable" data-sort="bar">Distribution</th>
+            </tr>
+          </thead>
+          <tbody id="pr-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
 
-</main>
+  <main id="tab-temp" class="tab-content">
+    <section>
+      <div class="detail-header">
+        <h2>🌡️ Temperature Detail</h2>
+        <div class="detail-stats">
+          <div class="stat-card">
+            <div class="stat-value" id="temp-avg">—</div>
+            <div class="stat-label">Avg</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="temp-max">—</div>
+            <div class="stat-label">Max</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="temp-min">—</div>
+            <div class="stat-label">Min</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="temp-ok-count">—</div>
+            <div class="stat-label">OK Count</div>
+          </div>
+        </div>
+      </div>
+      <div class="alarm-table-wrapper">
+        <table class="alarm-table detail-table" id="temp-table">
+          <thead>
+            <tr>
+              <th class="sortable" data-sort="name">Inverter</th>
+              <th class="sortable" data-sort="domain">Domain</th>
+              <th class="sortable" data-sort="value">Temp (°C)</th>
+              <th>Status</th>
+              <th>vs Avg</th>
+              <th class="sortable" data-sort="bar">Distribution</th>
+            </tr>
+          </thead>
+          <tbody id="temp-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
 
-<!-- ═══════════════════════════════════════════════════════════
-     TAB 2: PR DETAIL
-════════════════════════════════════════════════════════════ -->
-<main id="tab-pr" class="tab-content">
-  <section>
-    <div class="detail-header">
-      <div>
-        <h2>⚡ Performance Ratio (PR) — All Inverters</h2>
-        <p class="detail-desc">Shows the latest PR value for each inverter. Green ≥ 85%, Yellow ≥ 75%, Red &lt; 75%.</p>
-      </div>
-      <div class="detail-stats" id="pr-stats">
-        <div class="stat-card">
-          <div class="stat-value" id="pr-avg">—</div>
-          <div class="stat-label">Plant Average</div>
-        </div>
-        <div class="stat-card stat-best">
-          <div class="stat-value" id="pr-max">—</div>
-          <div class="stat-label">Best</div>
-        </div>
-        <div class="stat-card stat-worst">
-          <div class="stat-value" id="pr-min">—</div>
-          <div class="stat-label">Worst</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value" id="pr-ok-count">—</div>
-          <div class="stat-label">OK (≥85%)</div>
+  <main id="tab-dc" class="tab-content">
+    <section>
+      <div class="detail-header">
+        <h2>🔌 DC Current Detail</h2>
+        <div class="detail-stats">
+          <div class="stat-card">
+            <div class="stat-value" id="dc-avg">—</div>
+            <div class="stat-label">Avg</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="dc-max">—</div>
+            <div class="stat-label">Max</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="dc-min">—</div>
+            <div class="stat-label">Min</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="dc-ok-count">—</div>
+            <div class="stat-label">OK Count</div>
+          </div>
         </div>
       </div>
-    </div>
-    <div class="alarm-table-wrapper" style="margin-top:1rem;">
-      <table class="alarm-table detail-table" id="pr-table">
-        <thead>
-          <tr>
-            <th class="sortable" data-sort="name">Inverter</th>
-            <th class="sortable" data-sort="domain">Domain</th>
-            <th class="sortable" data-sort="value">PR (%)</th>
-            <th>Status</th>
-            <th>vs Plant Avg</th>
-            <th class="sortable" data-sort="bar">Distribution</th>
-          </tr>
-        </thead>
-        <tbody id="pr-tbody">
-          <tr><td colspan="6" class="empty-state">Waiting for data…</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-</main>
+      <div class="alarm-table-wrapper">
+        <table class="alarm-table detail-table" id="dc-table">
+          <thead>
+            <tr>
+              <th class="sortable" data-sort="name">Inverter</th>
+              <th class="sortable" data-sort="domain">Domain</th>
+              <th class="sortable" data-sort="value">DC Avg (A)</th>
+              <th>Status</th>
+              <th>vs Avg</th>
+              <th>MPPTs</th>
+            </tr>
+          </thead>
+          <tbody id="dc-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
 
-<!-- ═══════════════════════════════════════════════════════════
-     TAB 3: TEMPERATURE DETAIL
-════════════════════════════════════════════════════════════ -->
-<main id="tab-temp" class="tab-content">
-  <section>
-    <div class="detail-header">
-      <div>
-        <h2>🌡️ Inverter Temperature — All Inverters</h2>
-        <p class="detail-desc">Shows the latest temperature reading. Green ≤ 40°C, Yellow ≤ 45°C, Red &gt; 45°C.</p>
-      </div>
-      <div class="detail-stats" id="temp-stats">
-        <div class="stat-card">
-          <div class="stat-value" id="temp-avg">—</div>
-          <div class="stat-label">Plant Average</div>
-        </div>
-        <div class="stat-card stat-worst">
-          <div class="stat-value" id="temp-max">—</div>
-          <div class="stat-label">Hottest</div>
-        </div>
-        <div class="stat-card stat-best">
-          <div class="stat-value" id="temp-min">—</div>
-          <div class="stat-label">Coolest</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value" id="temp-ok-count">—</div>
-          <div class="stat-label">OK (≤40°C)</div>
+  <main id="tab-ac" class="tab-content">
+    <section>
+      <div class="detail-header">
+        <h2>⚙️ AC Power Detail</h2>
+        <div class="detail-stats">
+          <div class="stat-card">
+            <div class="stat-value" id="ac-avg">—</div>
+            <div class="stat-label">Avg</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="ac-max">—</div>
+            <div class="stat-label">Max</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="ac-min">—</div>
+            <div class="stat-label">Min</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="ac-total">—</div>
+            <div class="stat-label">Total Out</div>
+          </div>
         </div>
       </div>
-    </div>
-    <div class="alarm-table-wrapper" style="margin-top:1rem;">
-      <table class="alarm-table detail-table" id="temp-table">
-        <thead>
-          <tr>
-            <th class="sortable" data-sort="name">Inverter</th>
-            <th class="sortable" data-sort="domain">Domain</th>
-            <th class="sortable" data-sort="value">Temp (°C)</th>
-            <th>Status</th>
-            <th>vs Plant Avg</th>
-            <th class="sortable" data-sort="bar">Distribution</th>
-          </tr>
-        </thead>
-        <tbody id="temp-tbody">
-          <tr><td colspan="6" class="empty-state">Waiting for data…</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-</main>
+      <div class="alarm-table-wrapper">
+        <table class="alarm-table detail-table" id="ac-table">
+          <thead>
+            <tr>
+              <th class="sortable" data-sort="name">Inverter</th>
+              <th class="sortable" data-sort="domain">Domain</th>
+              <th class="sortable" data-sort="value">AC Power (W)</th>
+              <th>Status</th>
+              <th>vs Avg</th>
+              <th class="sortable" data-sort="bar">Distribution</th>
+            </tr>
+          </thead>
+          <tbody id="ac-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
 
-<!-- ═══════════════════════════════════════════════════════════
-     TAB 4: DC CURRENT DETAIL
-════════════════════════════════════════════════════════════ -->
-<main id="tab-dc" class="tab-content">
-  <section>
-    <div class="detail-header">
-      <div>
-        <h2>🔌 DC Current (MPPT Average) — All Inverters</h2>
-        <p class="detail-desc">Shows the average DC current across the 12 MPPTs per inverter. Thresholds depend on time of day.</p>
-      </div>
-      <div class="detail-stats" id="dc-stats">
-        <div class="stat-card">
-          <div class="stat-value" id="dc-avg">—</div>
-          <div class="stat-label">Plant Average</div>
-        </div>
-        <div class="stat-card stat-best">
-          <div class="stat-value" id="dc-max">—</div>
-          <div class="stat-label">Highest</div>
-        </div>
-        <div class="stat-card stat-worst">
-          <div class="stat-value" id="dc-min">—</div>
-          <div class="stat-label">Lowest</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value" id="dc-ok-count">—</div>
-          <div class="stat-label">OK (Green)</div>
-        </div>
-      </div>
-    </div>
-    <div class="alarm-table-wrapper" style="margin-top:1rem;">
-      <table class="alarm-table detail-table" id="dc-table">
-        <thead>
-          <tr>
-            <th class="sortable" data-sort="name">Inverter</th>
-            <th class="sortable" data-sort="domain">Domain</th>
-            <th class="sortable" data-sort="value">DC Current (A)</th>
-            <th>Status</th>
-            <th>vs Plant Avg</th>
-            <th>MPPT Distribution (12 MPPTs)</th>
-          </tr>
-        </thead>
-        <tbody id="dc-tbody">
-          <tr><td colspan="6" class="empty-state">Waiting for data…</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-</main>
+  <main id="tab-sensors" class="tab-content">
+    <section>
+      <h2>📡 Environmental Sensors</h2>
+      <div id="sensor-macro-stats" class="detail-stats" style="margin-bottom:1.5rem;"></div>
+      <div id="sensor-grid-container" class="sensor-container"></div>
+    </section>
+  </main>
 
-<!-- ═══════════════════════════════════════════════════════════
-     TAB 5: AC POWER DETAIL
-════════════════════════════════════════════════════════════ -->
-<main id="tab-ac" class="tab-content">
-  <section>
-    <div class="detail-header">
-      <div>
-        <h2>⚙️ AC Power Output — All Inverters</h2>
-        <p class="detail-desc">Shows the latest AC power output. Green ≥ 85% of plant average, Yellow ≥ 5%, Red below or tripped.</p>
-      </div>
-      <div class="detail-stats" id="ac-stats">
-        <div class="stat-card">
-          <div class="stat-value" id="ac-avg">—</div>
-          <div class="stat-label">Plant Average</div>
+  <main id="tab-chat" class="tab-content">
+    <section style="display: flex; flex-direction: column; height: 80vh;">
+      <div class="chat-container">
+        <div id="chat-messages" class="chat-messages">
+          <div class="chat-message bot">
+            <div class="msg-content">Welcome! I'm the Mazara 01 Plant AI. Ask me anything.</div>
+          </div>
         </div>
-        <div class="stat-card stat-best">
-          <div class="stat-value" id="ac-max">—</div>
-          <div class="stat-label">Highest</div>
+        <div class="chat-suggestions">
+          <button class="chat-suggestion" onclick="sendSuggestion('Are there any active alerts?')">🚨 Alerts</button>
+          <button class="chat-suggestion" onclick="sendSuggestion('Which inverters have high temperature?')">🌡️ High
+            Temp</button>
+          <button class="chat-suggestion" onclick="sendSuggestion('Compare TX1 vs TX2 vs TX3 production today')">📊 TX
+            Check</button>
         </div>
-        <div class="stat-card stat-worst">
-          <div class="stat-value" id="ac-min">—</div>
-          <div class="stat-label">Lowest</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value" id="ac-total">—</div>
-          <div class="stat-label">Total Output</div>
+        <div class="chat-input-area">
+          <input type="text" id="chat-input" placeholder="Ask AI about the plant..." />
+          <button id="chat-send-btn" class="btn-rescan">Send</button>
         </div>
       </div>
-    </div>
-    <div class="alarm-table-wrapper" style="margin-top:1rem;">
-      <table class="alarm-table detail-table" id="ac-table">
-        <thead>
-          <tr>
-            <th class="sortable" data-sort="name">Inverter</th>
-            <th class="sortable" data-sort="domain">Domain</th>
-            <th class="sortable" data-sort="value">AC Power (W)</th>
-            <th>Status</th>
-            <th>vs Plant Avg</th>
-            <th class="sortable" data-sort="bar">Distribution</th>
-          </tr>
-        </thead>
-        <tbody id="ac-tbody">
-          <tr><td colspan="6" class="empty-state">Waiting for data…</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-</main>
+    </section>
+  </main>
 
-<!-- ═══════════════════════════════════════════════════════════
-     TAB 6: SENSORS DETAIL
-════════════════════════════════════════════════════════════ -->
-<main id="tab-sensors" class="tab-content">
-  <section>
-    <div class="detail-header">
-      <div>
-        <h2>📡 Environmental Sensors — Real-time Values</h2>
-        <p class="detail-desc">Status and current readings for all field sensors (Irradiance, Pyranometers, Reference Cells).</p>
-      </div>
-      <div id="sensor-macro-stats" class="detail-stats">
-         <!-- Dynamic stats like avg poa, etc -->
-      </div>
-    </div>
-    
-    <div class="sensor-container" id="sensor-grid-container" style="margin-top: 1.5rem;">
-      <div class="empty-state">Waiting for sensor data…</div>
-    </div>
-  </section>
-</main>
+  <!-- Redundant site legend removed as it is now integrated into the premium footer -->
 
-<!-- ═══════════════════════════════════════════════════════════
-     TAB 7: AI CHAT DETAIL
-════════════════════════════════════════════════════════════ -->
-<main id="tab-chat" class="tab-content">
-  <section style="display: flex; flex-direction: column; height: 100%; width: 100%;">
-    <div class="detail-header">
-      <div>
-        <h2>🧠 Plant Intelligence</h2>
-        <p class="detail-desc">Ask any question about the plant — temperatures, production, alerts, comparisons, and more.</p>
+  <div id="settings-modal" class="modal-hidden">
+    <div class="modal-content">
+      <div
+        style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:1rem; margin-bottom:1rem;">
+        <h2 style="margin:0;">Dashboard Configuration</h2>
+        <button id="close-settings"
+          style="background:transparent; border:none; color:var(--text); font-size:1.5rem; cursor:pointer;">&times;</button>
       </div>
-    </div>
-    
-    <div class="chat-container">
-      <div id="chat-messages" class="chat-messages">
-        <div class="chat-message bot">
-          <div class="msg-content">Welcome! I'm the Mazara 01 Plant AI. I have access to all live and historical plant data — temperatures, AC power, DC currents, irradiance, PR, and anomalies. Ask me anything.</div>
+
+      <div class="modal-tabs"
+        style="display:flex; gap:1rem; margin-bottom:1.5rem; border-bottom:1px solid var(--border); padding-bottom:0.5rem;">
+        <button class="m-tab-btn active" data-m-tab="m-tab-thresholds">Thresholds</button>
+        <button class="m-tab-btn" data-m-tab="m-tab-telegram">Telegram</button>
+        <button class="m-tab-btn" data-m-tab="m-tab-alerts">Alerts</button>
+      </div>
+
+      <div class="modal-body">
+        <div id="m-tab-thresholds" class="m-tab-panel active">
+          <div class="settings-grid">
+            <div class="settings-column">
+              <h3>Diagnostic Limits</h3>
+              <div class="settings-row"><label>PR Green % <input type="number" id="cfg-pr-green"
+                    step="0.1"></label><label>PR Yellow % <input type="number" id="cfg-pr-yellow" step="0.1"></label>
+              </div>
+              <div class="settings-row"><label>Temp Red °C <input type="number" id="cfg-temp-red"
+                    step="0.1"></label><label>Temp Yellow °C <input type="number" id="cfg-temp-yellow"
+                    step="0.1"></label></div>
+              <div class="settings-row"><label>Min Downtime (min) <input type="number" id="cfg-min-downtime"
+                    step="1"></label></div>
+              <div class="settings-row"><label>Morning DC Green <input type="number" id="cfg-dcm-green"
+                    step="0.1"></label><label>Morning DC Yellow <input type="number" id="cfg-dcm-yellow"
+                    step="0.1"></label></div>
+              <div class="settings-row"><label>Afternoon DC Green <input type="number" id="cfg-dca-green"
+                    step="0.1"></label><label>Afternoon DC Yellow <input type="number" id="cfg-dca-yellow"
+                    step="0.1"></label></div>
+            </div>
+            <div class="settings-column">
+              <h3>UI Design Tokens</h3>
+              <label class="color-label">Success Colour (Green) <input type="color" id="cfg-color-green"></label>
+              <label class="color-label">Warning Colour (Yellow) <input type="color" id="cfg-color-yellow"></label>
+              <label class="color-label">Danger Colour (Red) <input type="color" id="cfg-color-red"></label>
+              <label class="color-label">Offline Colour (Grey) <input type="color" id="cfg-color-grey"></label>
+            </div>
+          </div>
+        </div>
+
+        <div id="m-tab-telegram" class="m-tab-panel">
+          <div class="settings-column">
+            <h3>Telegram Bot Integration</h3>
+            <label class="checkbox-label"><input type="checkbox" id="cfg-tg-enabled"> ⚡ Enable Telegram Forensic
+              Push</label>
+            <label>API Bot Token <input type="password" id="cfg-tg-token" placeholder="123456789:ABCDEF..."></label>
+            <label>Target Group/Chat ID <input type="text" id="cfg-tg-chat" placeholder="-123456789"></label>
+            <label>Personal Admin ID (Optional) <input type="text" id="cfg-tg-personal" placeholder="123456789"></label>
+            <button id="test-tg-btn" class="btn-rescan" style="margin-top:1rem; width:fit-content;">SEND TEST
+              NOTIFICATION</button>
+          </div>
+        </div>
+
+        <div id="m-tab-alerts" class="m-tab-panel">
+          <h3>Notification Distribution Preferences</h3>
+          <p style="font-size:0.7rem; color:var(--muted); margin-bottom:1rem;">Select which anomaly types should trigger
+            dashboard UI updates and Telegram messages.</p>
+          <div class="alarm-table-wrapper">
+            <table class="alarm-table" style="width:100%;">
+              <thead>
+                <tr>
+                  <th>CATEGORY</th>
+                  <th style="text-align:center;">DASHBOARD</th>
+                  <th style="text-align:center;">TELEGRAM</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style="padding:0.75rem;"><span
+                      style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">📡</span> Comms Lost
+                    (Inverter)</td>
+                  <td style="text-align:center;"><input type="checkbox" id="pref-comm-db"></td>
+                  <td style="text-align:center;"><input type="checkbox" id="pref-comm-tg"></td>
+                </tr>
+                <tr>
+                  <td style="padding:0.75rem;"><span
+                      style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">🌍</span> Site Outages
+                    (Plant Drop)</td>
+                  <td style="text-align:center;"><input type="checkbox" id="pref-site-db"></td>
+                  <td style="text-align:center;"><input type="checkbox" id="pref-site-tg"></td>
+                </tr>
+
+                <tr style="border-top: 1px solid var(--border);">
+                  <td colspan="3"
+                    style="font-size:0.65rem; color:var(--muted); padding:0.25rem 0.75rem; background:rgba(0,0,0,0.2);">
+                    AC POWER ALERTS</td>
+                </tr>
+                <tr>
+                  <td style="padding:0.75rem;"><span
+                      style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">🟡</span> AC Warning (Low
+                    Power)</td>
+                  <td style="text-align:center;"><input type="checkbox" id="pref-ac-db"></td>
+                  <td style="text-align:center;"><input type="checkbox" id="pref-ac-tg"></td>
+                </tr>
+                <tr>
+                  <td style="padding:0.75rem;"><span
+                      style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">🔴</span> Inverter Tripped
+                    (Zero AC)</td>
+                  <td style="text-align:center;"><input type="checkbox" id="pref-trip-db"></td>
+                  <td style="text-align:center;"><input type="checkbox" id="pref-trip-tg"></td>
+                </tr>
+
+                <tr style="border-top: 1px solid var(--border);">
+                  <td colspan="3"
+                    style="font-size:0.65rem; color:var(--muted); padding:0.25rem 0.75rem; background:rgba(0,0,0,0.2);">
+                    PERFORMANCE RATIO (PR)</td>
+                </tr>
+                <tr>
+                  <td style="padding:0.75rem;"><span
+                      style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">⚡</span> Low PR (Warning)
+                  </td>
+                  <td style="text-align:center;"><input type="checkbox" id="pref-pr-low-db"></td>
+                  <td style="text-align:center;"><input type="checkbox" id="pref-pr-low-tg"></td>
+                </tr>
+                <tr>
+                  <td style="padding:0.75rem;"><span
+                      style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">🚨</span> Critical PR (Red)
+                  </td>
+                  <td style="text-align:center;"><input type="checkbox" id="pref-pr-crit-db"></td>
+                  <td style="text-align:center;"><input type="checkbox" id="pref-pr-crit-tg"></td>
+                </tr>
+
+                <tr style="border-top: 1px solid var(--border);">
+                  <td colspan="3"
+                    style="font-size:0.65rem; color:var(--muted); padding:0.25rem 0.75rem; background:rgba(0,0,0,0.2);">
+                    TEMPERATURE ALERTS</td>
+                </tr>
+                <tr>
+                  <td style="padding:0.75rem;"><span
+                      style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">🌡️</span> High Temperature
+                    (Yellow)</td>
+                  <td style="text-align:center;"><input type="checkbox" id="pref-temp-warn-db"></td>
+                  <td style="text-align:center;"><input type="checkbox" id="pref-temp-warn-tg"></td>
+                </tr>
+                <tr>
+                  <td style="padding:0.75rem;"><span
+                      style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">🔥</span> Critical Temp
+                    (Red)</td>
+                  <td style="text-align:center;"><input type="checkbox" id="pref-temp-crit-db"></td>
+                  <td style="text-align:center;"><input type="checkbox" id="pref-temp-crit-tg"></td>
+                </tr>
+
+                <tr style="border-top: 1px solid var(--border);">
+                  <td colspan="3"
+                    style="font-size:0.65rem; color:var(--muted); padding:0.25rem 0.75rem; background:rgba(0,0,0,0.2);">
+                    DC STRING FORENSICS</td>
+                </tr>
+                <tr>
+                  <td style="padding:0.75rem;"><span
+                      style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">🔌</span> DC Warning (MPPT
+                    Unbalance)</td>
+                  <td style="text-align:center;"><input type="checkbox" id="pref-dc-warn-db"></td>
+                  <td style="text-align:center;"><input type="checkbox" id="pref-dc-warn-tg"></td>
+                </tr>
+                <tr>
+                  <td style="padding:0.75rem;"><span
+                      style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">⚡</span> DC Critical
+                    (Strings Offline)</td>
+                  <td style="text-align:center;"><input type="checkbox" id="pref-dc-crit-db"></td>
+                  <td style="text-align:center;"><input type="checkbox" id="pref-dc-crit-tg"></td>
+                </tr>
+
+                <tr style="border-top: 2px solid var(--border);">
+                  <td style="padding:0.75rem; font-weight:700;"><span
+                      style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">✅</span> Event Recoveries
+                  </td>
+                  <td style="text-align:center;">—</td>
+                  <td style="text-align:center;"><input type="checkbox" id="pref-recovery-tg"></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
-      <div class="chat-suggestions">
-        <button class="chat-suggestion" onclick="sendSuggestion('Are there any active alerts?')">🚨 Active Alerts</button>
-        <button class="chat-suggestion" onclick="sendSuggestion('Which inverters have temperature above 50°C?')">🌡️ High Temp</button>
-        <button class="chat-suggestion" onclick="sendSuggestion('Compare TX1 vs TX2 vs TX3 production today')">📊 TX Comparison</button>
-        <button class="chat-suggestion" onclick="sendSuggestion('What is the total production today in MWh?')">⚡ Total Energy</button>
-        <button class="chat-suggestion" onclick="sendSuggestion('Any inverters offline right now?')">🔴 Offline Check</button>
-        <button class="chat-suggestion" onclick="sendSuggestion('What is the current irradiance?')">☀️ Irradiance</button>
-      </div>
-      <div class="chat-input-area">
-        <input type="text" id="chat-input" placeholder="Type a question (e.g. Are there any active alerts?)" />
-        <button id="chat-send-btn" class="btn-rescan">Send</button>
-      </div>
-    </div>
-  </section>
-</main>
 
-
-<!-- ═══════════════════════════════════════════════════════════
-     Site Legend
-════════════════════════════════════════════════════════════ -->
-<section style="margin: 2rem 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border);">
-  <h2>Site Legend</h2>
-  <div style="display:flex; gap: 2rem; flex-wrap: wrap; margin-top: 1rem;">
-    <div style="flex:1; min-width: 200px;">
-      <h3 style="font-size: 0.9rem; color: var(--muted); margin-bottom: 0.5rem; text-transform: uppercase;">Inverter Header Labels</h3>
-      <ul style="list-style: none; padding: 0; line-height: 1.8; font-size: 0.9rem; color:var(--text);">
-        <li><span class="led green" style="display:inline-block; width:10px; height:10px; margin-right:8px;"></span> <strong>Green:</strong> All LEDs nominal</li>
-        <li><span class="led yellow" style="display:inline-block; width:10px; height:10px; margin-right:8px;"></span> <strong>Yellow:</strong> At least one Warning</li>
-        <li><span class="led red" style="display:inline-block; width:10px; height:10px; margin-right:8px;"></span> <strong>Red:</strong> At least one Critical Trip</li>
-        <li><span class="led grey" style="display:inline-block; width:10px; height:10px; margin-right:8px;"></span> <strong>Grey:</strong> Total COMMS LOST</li>
-      </ul>
-    </div>
-    
-    <div style="flex:2; min-width: 300px;">
-      <h3 style="font-size: 0.9rem; color: var(--muted); margin-bottom: 0.5rem; text-transform: uppercase;">Domain Layout (36 Inverters)</h3>
-      <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; font-size: 0.85rem; color: var(--muted);">
-        <div><strong style="color:var(--text)">TX1 (12x)</strong><br/>INV TX1-01 to TX1-12</div>
-        <div><strong style="color:var(--text)">TX2 (12x)</strong><br/>INV TX2-01 to TX2-12</div>
-        <div><strong style="color:var(--text)">TX3 (12x)</strong><br/>INV TX3-01 to TX3-12</div>
+      <div style="margin-top:2rem; text-align:right; border-top:1px solid var(--border); padding-top:1rem;">
+        <button id="save-settings-btn" class="btn-rescan">SAVE & APPLY CHANGES</button>
       </div>
     </div>
   </div>
-</section>
 
-<!-- Settings Modal -->
-<div id="settings-modal" class="modal-hidden">
-  <div class="modal-content">
-    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:1rem; margin-bottom:1rem;">
-      <h2 style="margin:0; font-size:1.1rem;">Dashboard Configuration</h2>
-      <button id="close-settings" style="background:transparent; border:none; color:var(--text); font-size:1.5rem; cursor:pointer;">&times;</button>
-    </div>
-    
-    <div class="settings-grid">
-      <!-- Thresholds -->
-      <div class="settings-column">
-        <h3 style="color:var(--accent); margin-bottom: 1rem;">Thresholds</h3>
-        
-        <div class="settings-row">
-          <label>PR Green (&ge;) %<input type="number" id="cfg-pr-green" step="0.1"></label>
-          <label>PR Yellow (&ge;) %<input type="number" id="cfg-pr-yellow" step="0.1"></label>
+  <footer class="site-reference-footer">
+    <div class="footer-header-accent"></div>
+    <div class="footer-grid">
+      <!-- Technical Specification Card -->
+      <div class="footer-card">
+        <div class="footer-card-header">
+          <div class="header-icon-box blue">📊</div>
+          <h3>Technical Reference</h3>
         </div>
-        
-        <div class="settings-row">
-          <label>Temp Yellow (&gt;) °C<input type="number" id="cfg-temp-yellow" step="0.1"></label>
-          <label>Temp Red (&gt;) °C<input type="number" id="cfg-temp-red" step="0.1"></label>
-        </div>
-        
-
-        <h4 style="margin-top:1rem; margin-bottom:0.5rem; color:var(--muted); font-size:0.8rem;">Downtime Tracker</h4>
-        <div class="settings-row">
-          <label>Min Downtime (minutes)<input type="number" id="cfg-min-downtime" step="1"></label>
-        </div>
-
-        <h4 style="margin-top:1rem; margin-bottom:0.5rem; color:var(--muted); font-size:0.8rem;">Extraction Cycle</h4>
-        <div class="settings-row">
-          <label>Data Collection Interval (minutes)<input type="number" id="cfg-collection-interval" step="1"></label>
-        </div>
-        
-        <h4 style="margin-top:1rem; margin-bottom:0.5rem; color:var(--muted); font-size:0.8rem;">DC Current (Morning)</h4>
-        <div class="settings-row">
-          <label>Green (&ge;) A<input type="number" id="cfg-dcm-green" step="0.1"></label>
-          <label>Yellow (&ge;) A<input type="number" id="cfg-dcm-yellow" step="0.1"></label>
-        </div>
-
-        <h4 style="margin-top:1rem; margin-bottom:0.5rem; color:var(--muted); font-size:0.8rem;">DC Current (Afternoon)</h4>
-        <div class="settings-row">
-          <label>Green (&ge;) A<input type="number" id="cfg-dca-green" step="0.1"></label>
-          <label>Yellow (&ge;) A<input type="number" id="cfg-dca-yellow" step="0.1"></label>
+        <div class="spec-list">
+          <div class="spec-row"><span>System ID</span> <b>2144635</b></div>
+          <div class="spec-row"><span>Nominal Power</span> <b>12.625 MWp</b></div>
+          <div class="spec-row"><span>Groups</span> <b>3 TX Stations</b></div>
+          <div class="spec-row"><span>TX1 Mapping</span> <b>INV 01-12</b></div>
+          <div class="spec-row"><span>TX2 Mapping</span> <b>INV 13-24</b></div>
+          <div class="spec-row"><span>TX3 Mapping</span> <b>INV 25-36</b></div>
+          <div class="spec-row"><span>Configuration</span> <b>808 Strings · 12 MPPT</b></div>
         </div>
       </div>
 
-      <!-- Telegram -->
-      <div class="settings-column">
-        <h3 style="color:var(--accent); margin-bottom: 1rem;">Telegram Alerts</h3>
-        <div class="settings-row" style="margin-bottom: 0.5rem; grid-template-columns: 1fr;">
-          <label style="display:flex; flex-direction: row; align-items:center; gap:0.5rem; cursor:pointer; font-size: 0.85rem;">
-            <input type="checkbox" id="cfg-tg-enabled" style="width: auto;"> Enable Notifications
-          </label>
+      <!-- Health Guidance Card -->
+      <div class="footer-card">
+        <div class="footer-card-header">
+          <div class="header-icon-box green">🛡️</div>
+          <h3>SCADA Health Guide</h3>
         </div>
-        
-        <label style="font-size: 0.75rem; color: var(--muted); margin-bottom: 0.2rem; display: block;">Bot Token</label>
-        <input type="password" id="cfg-tg-token" placeholder="8679...">
-        
-        <label style="font-size: 0.75rem; color: var(--muted); margin-top: 0.75rem; margin-bottom: 0.2rem; display: block;">Group ID (Alarms)</label>
-        <input type="text" id="cfg-tg-chat" placeholder="186675376">
-        
-        <label style="font-size: 0.75rem; color: var(--muted); margin-top: 0.75rem; margin-bottom: 0.2rem; display: block;">Personal ID (Credentials)</label>
-        <input type="text" id="cfg-tg-personal" placeholder="5682...">
-        
-        <button id="test-tg-btn" style="margin-top: 1rem; width: 100%; font-size: 0.75rem; padding: 0.5rem; background: var(--border); color: var(--text); border: none; border-radius: 0.25rem; cursor: pointer; transition: background 0.2s;">
-          TEST CONNECTION
-        </button>
+        <div class="legend-multi-row">
+          <div class="legend-group">
+            <label>Performance (PR)</label>
+            <div class="pill-row">
+              <div class="status-pill"><span class="dot green"></span> <b>NOMINAL</b> <span>&ge;85%</span></div>
+              <div class="status-pill"><span class="dot yellow"></span> <b>WARNING</b> <span>&ge;80%</span></div>
+            <div class="status-pill"><span class="dot red"></span> <b>CRITICAL</b> <span>&lt;80%</span></div>
+            </div>
+          </div>
+          <div class="legend-group">
+            <label>Temperature (C)</label>
+            <div class="pill-row">
+            <div class="status-pill"><span class="dot green"></span> <b>SAFE</b> <span>(&lt;45°)</span></div>
+            <div class="status-pill"><span class="dot yellow"></span> <b>WARN</b> <span>&ge;45°</span></div>
+            <div class="status-pill"><span class="dot red"></span> <b>CRIT</b> <span>&ge;55°</span></div>
+            </div>
+          </div>
+          <div class="legend-group">
+            <label>Connectivity</label>
+            <div class="pill-row">
+              <div class="status-pill"><span class="dot grey"></span> <b>OFFLINE</b></div>
+              <div class="status-pill"><span class="dot black"></span> <b>NO DATA</b></div>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <!-- Colors -->
-      <div class="settings-column">
-        <h3 style="color:var(--accent); margin-bottom: 1rem;">LED Colors</h3>
-        <label class="color-label">Green Status<input type="color" id="cfg-color-green"></label>
-        <label class="color-label">Yellow Status<input type="color" id="cfg-color-yellow"></label>
-        <label class="color-label">Red Status<input type="color" id="cfg-color-red"></label>
-        <label class="color-label">Grey (Off) Status<input type="color" id="cfg-color-grey"></label>
+      <!-- System Pipeline Card -->
+      <div class="footer-card">
+        <div class="footer-card-header">
+          <div class="header-icon-box orange">ℹ️</div>
+          <h3>System Pipeline</h3>
+        </div>
+        <div class="sys-meta">
+          <div class="sys-meta-item">
+            <div class="meta-icon">🔍</div>
+            <div class="meta-content">
+              <div class="meta-label">Forensic Engine</div>
+              <div class="meta-value">Watchdog v4.2 Production</div>
+            </div>
+          </div>
+          <div class="sys-meta-item">
+            <div class="meta-icon">🤖</div>
+            <div class="meta-content">
+              <div class="meta-label">AI Diagnostic Model</div>
+              <div class="meta-value">Qwen 2.5 Coder 7B</div>
+            </div>
+          </div>
+          <div class="sys-meta-item">
+            <div class="meta-icon">⚡</div>
+            <div class="meta-content">
+              <div class="meta-label">Data Refresh</div>
+              <div class="meta-value">Active every 10 Minutes</div>
+            </div>
+          </div>
+          <div class="sys-meta-item">
+            <div class="meta-icon">👨‍💻</div>
+            <div class="meta-content">
+              <div class="meta-label">Plant Maintenance</div>
+              <div class="meta-value">Marcello Lombardo - Photon Monitoring</div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
-
-    <div style="margin-top: 2rem; text-align: right; border-top: 1px solid var(--border); padding-top: 1rem;">
-      <button id="save-settings-btn" class="btn-rescan">SAVE & APPLY</button>
+    <div class="footer-legal">
+      Mazara 01 SCADA Intelligence Platform &nbsp;&bull;&nbsp; All Systems Functional &nbsp;&bull;&nbsp; &copy; 2026
     </div>
-  </div>
-</div>
+  </footer>
 
-<script src="/static/app.js"></script>
+  <script src="/static/app.js"></script>
 </body>
+
 </html>

@@ -70,6 +70,19 @@ DEFAULT_SETTINGS = {
         "bot_token": "",
         "chat_id": "",
         "personal_id": ""
+    },
+    "alert_preferences": {
+        "comm_lost": { "dashboard": True, "telegram": True },
+        "plant_drop": { "dashboard": True, "telegram": True },
+        "inverter_trip": { "dashboard": True, "telegram": True },
+        "ac_drop": { "dashboard": True, "telegram": True },
+        "low_pr": { "dashboard": True, "telegram": True },
+        "crit_pr": { "dashboard": True, "telegram": True },
+        "high_temp": { "dashboard": True, "telegram": True },
+        "crit_temp": { "dashboard": True, "telegram": True },
+        "dc_warning": { "dashboard": True, "telegram": True },
+        "dc_critical": { "dashboard": True, "telegram": True },
+        "recovery": { "telegram": True }
     }
 }
 
@@ -106,17 +119,24 @@ logger = logging.getLogger("watchdog_final")
 
 
 class NumpyEncoder(json.JSONEncoder):
-    """JSON encoder that handles numpy int64/float64 and NaN values."""
+    """JSON encoder that handles numpy types and Pandas objects."""
     def default(self, obj):
-        if isinstance(obj, (np.integer,)):
+        if isinstance(obj, (np.integer, np.int64, np.int32)):
             return int(obj)
-        if isinstance(obj, (np.floating,)):
-            if np.isnan(obj):
+        if isinstance(obj, (np.floating, np.float64, np.float32)):
+            if np.isnan(obj) or np.isinf(obj):
                 return None
             return float(obj)
         if isinstance(obj, np.ndarray):
             return obj.tolist()
-        return super().default(obj)
+        if isinstance(obj, (pd.Timestamp, datetime)):
+            return obj.isoformat()
+        if hasattr(obj, 'to_dict'):
+            return obj.to_dict()
+        try:
+            return super().default(obj)
+        except TypeError:
+            return str(obj)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -977,12 +997,26 @@ def analyze_site(date_str: str) -> None:
         prev_alarm_map = {a.get("id"): a for a in active_anomalies_prev}
         
         tg_messages = []
+        
+        # --- USER ALARM PREFERENCES ---
+        prefs = settings.get("alert_preferences", {})
+        def should_alert(category, target):
+            # Default to True if preference is missing
+            return prefs.get(category, {}).get(target, True)
+
+        # Track ALL evaluated IDs to prevent filtered alerts from leaking back in via cleanup loop
+        checked_ids = set()
 
         # --- Site-Wide Data Drop Alarms ---
         active_site_drop_ids = set()
+        # Handle site data drop alerts with preferences
+        site_comm_db = should_alert("plant_drop", "dashboard")
+        site_comm_tg = should_alert("plant_drop", "telegram")
+
         for idx, gap in enumerate(plant_drop_history):
             drop_alarm_id = f"SITE_DATA_GAP_{gap['start'].replace(':', '')}"
             active_site_drop_ids.add(drop_alarm_id)
+            checked_ids.add(drop_alarm_id)
             
             if drop_alarm_id not in prev_alarm_map:
                 message = f"Data outage detected from {gap['start']} to {gap['end']} ({gap['duration']} min)."
@@ -997,25 +1031,32 @@ def analyze_site(date_str: str) -> None:
                     "trip_time": gap['start'],
                     "message": message
                 }
-                current_active.append(alarm)
-                tg_messages.append(f"📡 *{alarm['type']}*\nSystem: {alarm['inverter']}\nTime: {alarm['trip_time']}\n{alarm['message']}")
+                if site_comm_db:
+                    current_active.append(alarm)
+                if site_comm_tg:
+                    tg_messages.append(f"📡 *{alarm['type']}*\nSystem: {alarm['inverter']}\nTime: {alarm['trip_time']}\n{alarm['message']}")
             else:
-                current_active.append(prev_alarm_map[drop_alarm_id])
+                if site_comm_db:
+                    current_active.append(prev_alarm_map[drop_alarm_id])
 
         # Recover resolved site drops
         for past_alarm_id, past_alarm in prev_alarm_map.items():
             if past_alarm_id.startswith("SITE_DATA_GAP_") and past_alarm_id not in active_site_drop_ids:
                 past_alarm["recovery_time"] = timestamp
                 historical_trail.append(past_alarm)
-                tg_messages.append(f"✅ *RECOVERED*: {past_alarm['type']}\nSystem: SITE\nTime: {timestamp}")
+                if should_alert("recovery", "telegram"):
+                    tg_messages.append(f"✅ *RECOVERED*: {past_alarm['type']}\nSystem: SITE\nTime: {timestamp}")
                 
         # Handle the legacy SITE_DATA_DROP id for backward compatibility/cleanup
-        if "SITE_DATA_DROP" in prev_alarm_map and "SITE_DATA_DROP" not in active_site_drop_ids:
-             prev_alarm = prev_alarm_map["SITE_DATA_DROP"]
-             prev_alarm["recovery_time"] = timestamp
-             historical_trail.append(prev_alarm)
-             tg_messages.append(f"✅ *LEGACY ALERT CLEANUP*: SITE_DATA_DROP recovered.")
-        
+        if "SITE_DATA_DROP" in prev_alarm_map:
+             checked_ids.add("SITE_DATA_DROP")
+             if "SITE_DATA_DROP" not in active_site_drop_ids:
+                 prev_alarm = prev_alarm_map["SITE_DATA_DROP"]
+                 prev_alarm["recovery_time"] = timestamp
+                 historical_trail.append(prev_alarm)
+                 if should_alert("recovery", "telegram"):
+                    tg_messages.append(f"✅ *LEGACY ALERT CLEANUP*: SITE_DATA_DROP recovered.")
+
         for inv_id in INVERTER_IDS:
             inv_label = f"INV {inv_id}"
             h = inverter_health.get(inv_label, {})
@@ -1023,6 +1064,7 @@ def analyze_site(date_str: str) -> None:
             # --- 1. COMMS LOST Alarm ---
             is_comms_lost = h.get("comms_lost_flag", False)
             comms_alarm_id = f"{inv_id}_COMMS_LOST"
+            checked_ids.add(comms_alarm_id)
             
             was_comms_lost = comms_alarm_id in prev_alarm_map
             
@@ -1037,56 +1079,70 @@ def analyze_site(date_str: str) -> None:
                         "trip_time": timestamp,
                         "message": "Missing data for this component."
                     }
-                    current_active.append(alarm)
-                    tg_messages.append(f"⚠️ *{alarm['type']}*\nInverter: {alarm['inverter']}\nTime: {alarm['trip_time']}\n{alarm['message']}")
+                    if should_alert("comm_lost", "dashboard"):
+                        current_active.append(alarm)
+                    if should_alert("comm_lost", "telegram"):
+                        tg_messages.append(f"⚠️ *{alarm['type']}*\nInverter: {alarm['inverter']}\nTime: {alarm['trip_time']}\n{alarm['message']}")
                 else:
                     # Carry over existing
-                    current_active.append(prev_alarm_map[comms_alarm_id])
+                    if should_alert("comm_lost", "dashboard"):
+                        current_active.append(prev_alarm_map[comms_alarm_id])
             else:
                 # Recovered?
                 if was_comms_lost:
                     prev_alarm = prev_alarm_map[comms_alarm_id]
                     prev_alarm["recovery_time"] = timestamp
                     historical_trail.append(prev_alarm)
-                    tg_messages.append(f"✅ *RECOVERED*: {prev_alarm['type']}\nInverter: {prev_alarm['inverter']}\nTime: {timestamp}")
+                    if should_alert("recovery", "telegram"):
+                        tg_messages.append(f"✅ *RECOVERED*: {prev_alarm['type']}\nInverter: {prev_alarm['inverter']}\nTime: {timestamp}")
 
             # --- 2. PR Alarm ---
             pr_val = h.get("raw_pr")
             pr_alarm_id = f"{inv_id}_LOW_PR"
-            data_time_str = h.get("data_time", "Unknown")
+            checked_ids.add(pr_alarm_id)
             is_stabilized = h.get("is_stabilized", True)
-            
             was_low_pr = pr_alarm_id in prev_alarm_map
             
-            # Trigger alarm only if PR < Yellow threshold and system is stabilized (30m after production start)
-            pr_yellow_thresh = settings.get("thresholds", DEFAULT_SETTINGS["thresholds"])["pr"].get("yellow", 75.0)
-            if pr_val is not None and pr_val < pr_yellow_thresh and is_stabilized:
+            thresh = settings.get("thresholds", DEFAULT_SETTINGS["thresholds"])
+            pr_yellow_thresh = thresh["pr"].get("yellow", 75.0)
+            pr_green = thresh["pr"].get("green", 85.0)
+            
+            if pr_val is not None and is_stabilized and pr_val < pr_green:
+                is_critical_pr = pr_val < pr_yellow_thresh
+                pr_cat = "crit_pr" if is_critical_pr else "low_pr"
+                pr_severity = "red" if is_critical_pr else "yellow"
+                
                 if not was_low_pr:
+                    # New alarm
                     alarm = {
                         "id": pr_alarm_id,
                         "inverter": inv_label,
-                        "type": "LOW PR",
-                        "severity": "red",
-                        "trip_time": data_time_str, # Use ACTUAL time from data
-                        "message": f"Performance Ratio dropped to {pr_val:.1f}%"
+                        "type": "CRITICAL PR" if is_critical_pr else "LOW PR",
+                        "severity": pr_severity,
+                        "trip_time": timestamp,
+                        "message": f"PR drop detected: {pr_val}% (Thresh: {pr_yellow_thresh}%)"
                     }
-                    current_active.append(alarm)
-                    tg_messages.append(f"🔴 *{alarm['type']}*\nInverter: {alarm['inverter']}\nTime: {alarm['trip_time']}\n{alarm['message']}")
+                    if should_alert(pr_cat, "dashboard"):
+                        current_active.append(alarm)
+                    if should_alert(pr_cat, "telegram"):
+                        icon = "🚨" if is_critical_pr else "⚡"
+                        tg_messages.append(f"{icon} *{alarm['type']}*\nInverter: {inv_label}\nPR: {pr_val}%\nTime: {timestamp}")
                 else:
-                    # Carry over
-                    prev_alarm = prev_alarm_map[pr_alarm_id]
-                    prev_alarm["message"] = f"Performance Ratio is {pr_val:.1f}%"
-                    current_active.append(prev_alarm)
+                    # Carry over existing
+                    if should_alert(pr_cat, "dashboard"):
+                        current_active.append(prev_alarm_map[pr_alarm_id])
             else:
-                # Recovered
+                # Recovered?
                 if was_low_pr:
                     prev_alarm = prev_alarm_map[pr_alarm_id]
                     prev_alarm["recovery_time"] = timestamp
                     historical_trail.append(prev_alarm)
-                    tg_messages.append(f"✅ *RECOVERED*: {prev_alarm['type']}\nInverter: {prev_alarm['inverter']}\nTime: {timestamp}")
+                    if should_alert("recovery", "telegram"):
+                        tg_messages.append(f"✅ *RECOVERED*: {prev_alarm['type']}\nInverter: {inv_label}\nTime: {timestamp}")
                     
             # --- 3. AC Power Alarm ---
             ac_alarm_id = f"{inv_id}_LOW_AC"
+            checked_ids.add(ac_alarm_id)
             was_low_ac = ac_alarm_id in prev_alarm_map
             
             ac_status = h.get("ac_power")
@@ -1100,55 +1156,108 @@ def analyze_site(date_str: str) -> None:
                         "trip_time": timestamp,
                         "message": "Power is critically below plant average." if ac_status == "yellow" else "Failed to produce >5% of plant average."
                     }
-                    current_active.append(alarm)
-                    icon = "🟡" if ac_status == "yellow" else "🔴"
-                    tg_messages.append(f"{icon} *{alarm['type']}*\nInverter: {alarm['inverter']}\nTime: {alarm['trip_time']}\n{alarm['message']}")
+                    
+                    # For filtering: use inverter_trip pref
+                    if should_alert("inverter_trip" if ac_status != "yellow" else "ac_drop", "dashboard"):
+                        current_active.append(alarm)
+                    if should_alert("inverter_trip" if ac_status != "yellow" else "ac_drop", "telegram"):
+                        icon = "🟡" if ac_status == "yellow" else "🔴"
+                        tg_messages.append(f"{icon} *{alarm['type']}*\nInverter: {alarm['inverter']}\nTime: {alarm['trip_time']}\n{alarm['message']}")
                 else:
-                    current_active.append(prev_alarm_map[ac_alarm_id])
+                    if should_alert("inverter_trip" if ac_status != "yellow" else "ac_drop", "dashboard"):
+                        current_active.append(prev_alarm_map[ac_alarm_id])
             else:
                 if was_low_ac:
                     prev_alarm = prev_alarm_map[ac_alarm_id]
                     prev_alarm["recovery_time"] = timestamp
                     historical_trail.append(prev_alarm)
-                    tg_messages.append(f"✅ *RECOVERED*: {prev_alarm['type']}\nInverter: {prev_alarm['inverter']}\nTime: {timestamp}")
+                    if should_alert("recovery", "telegram"):
+                        tg_messages.append(f"✅ *RECOVERED*: {prev_alarm['type']}\nInverter: {prev_alarm['inverter']}\nTime: {timestamp}")
+                    
+            # --- 4. High Temperature Alarm ---
+            temp_alarm_id = f"TEMP_{inv_id}"
+            checked_ids.add(temp_alarm_id)
+            temp_status = h.get("temp")
+            temp_val = h.get("temp_v")
+            
+            if temp_status in ["red", "yellow"]:
+                temp_cat = "crit_temp" if temp_status == "red" else "high_temp"
+                if temp_alarm_id not in prev_alarm_map:
+                    # New alarm
+                    alarm = {
+                        "id": temp_alarm_id,
+                        "inverter": inv_label,
+                        "type": "CRITICAL TEMP" if temp_status == "red" else "HIGH TEMP",
+                        "severity": temp_status,
+                        "trip_time": timestamp,
+                        "message": f"Inverter temperature {temp_status} alert: {temp_val}°C"
+                    }
+                    if should_alert(temp_cat, "dashboard"):
+                        current_active.append(alarm)
+                    if should_alert(temp_cat, "telegram"):
+                        icon = "🔥" if temp_status == "red" else "🌡️"
+                        tg_messages.append(f"{icon} *{alarm['type']}*\nInverter: {inv_label}\nTemp: {temp_val}°C\nTime: {timestamp}")
+                else:
+                    # Carry over
+                    if should_alert(temp_cat, "dashboard"):
+                        current_active.append(prev_alarm_map[temp_alarm_id])
+            else:
+                # Check for recovery
+                if temp_alarm_id in prev_alarm_map:
+                    prev_alarm = prev_alarm_map[temp_alarm_id]
+                    prev_alarm["recovery_time"] = timestamp
+                    historical_trail.append(prev_alarm)
+                    if should_alert("recovery", "telegram"):
+                        tg_messages.append(f"✅ *RECOVERED*: {prev_alarm['type']}\nInverter: {inv_label}\nTime: {timestamp}")
                     
         # --- 4. DC MPPT Faults ---
         active_dc_fault_ids = set()
         for f in dc_faults:
-            alarm_id = f"DC_{f['Inverter']}_MPPT_{f['MPPT']}"
-            active_dc_fault_ids.add(alarm_id)
-            is_new = alarm_id not in prev_alarm_map
+            inv_id_f = f["Inverter"]
+            inv_label_f = f"INV {inv_id_f}"
+            dc_alarm_id = f"DC_{inv_id_f}_MPPT_{f['MPPT']}"
+            active_dc_fault_ids.add(dc_alarm_id)
+            checked_ids.add(dc_alarm_id)
             
-            if is_new:
+            is_crit = f['Severity'] == "CRITICAL"
+            dc_cat = "dc_critical" if is_crit else "dc_warning"
+            
+            if dc_alarm_id not in prev_alarm_map:
                 alarm = {
-                    "id": alarm_id,
-                    "inverter": f"INV {f['Inverter']}",
-                    "type": f['Type'],
-                    "severity": "red" if f['Severity'] == "CRITICAL" else "yellow",
+                    "id": dc_alarm_id,
+                    "inverter": inv_label_f,
+                    "type": "DC CRITICAL" if is_crit else "DC WARNING",
+                    "severity": "red" if is_crit else "yellow",
                     "trip_time": timestamp,
-                    "message": f"MPPT {f['MPPT']} Measured: {f['Measured']}A (Expected: {f['Expected']}A) for {format_duration(f['Duration'])}."
+                    "message": f"MPPT {f['MPPT']} {f['Type']}: {f['Measured']}A (Expected: {f['Expected']}A) for {format_duration(f['Duration'])}."
                 }
-                current_active.append(alarm)
-                icon = "🔴" if f['Severity'] == "CRITICAL" else "🟡"
-                tg_messages.append(f"{icon} *{alarm['type']}*\nInverter: {alarm['inverter']}\nTime: {alarm['trip_time']}\n{alarm['message']}")
+                
+                if should_alert(dc_cat, "dashboard"):
+                    current_active.append(alarm)
+                if should_alert(dc_cat, "telegram"):
+                    icon = "⚡" if is_crit else "🔌"
+                    tg_messages.append(f"{icon} *{alarm['type']}*\nInv: {inv_label_f} | MPPT: {f['MPPT']}\n{f['Measured']}A (Exp: {f['Expected']}A) for {format_duration(f['Duration'])}.")
             else:
-                current_active.append(prev_alarm_map[alarm_id])
+                if should_alert(dc_cat, "dashboard"):
+                    current_active.append(prev_alarm_map[dc_alarm_id])
                 
         # Recover resolved DC faults
         for past_alarm_id, past_alarm in prev_alarm_map.items():
             if past_alarm_id.startswith("DC_") and past_alarm_id not in active_dc_fault_ids:
                 past_alarm["recovery_time"] = timestamp
                 historical_trail.append(past_alarm)
-                tg_messages.append(f"✅ *RECOVERED*: {past_alarm['type']}\nInverter: {past_alarm['inverter']}\nTime: {timestamp}")
+                if should_alert("recovery", "telegram"):
+                    tg_messages.append(f"✅ *RECOVERED*: {past_alarm['type']}\nInverter: {past_alarm['inverter']}\nTime: {timestamp}")
 
         # Send Telegram updates if any
         for msg in tg_messages:
             send_telegram_notification(msg, settings)
 
         # Preserve any other active anomalies that we didn't handle in this loop
-        handled_ids = set([a["id"] for a in current_active] + [a["id"] for a in historical_trail if "recovery_time" in a])
+        # (e.g. manually added alerts or categories not yet in the forensic loop)
         for a in active_anomalies_prev:
-            if a.get("id") not in handled_ids:
+            aid = a.get("id")
+            if aid not in checked_ids:
                 current_active.append(a)
                 
         # Load extraction status for dashboard ingestion cards

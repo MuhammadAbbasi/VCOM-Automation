@@ -64,15 +64,25 @@ def _load_csv(filename):
     if not path.exists():
         return pd.DataFrame()
     try:
-        df = pd.read_csv(path)
+        # Force comma separator and handle whitespace
+        df = pd.read_csv(path, sep=',', skipinitialspace=True)
         df.columns = [str(c).strip() for c in df.columns]
+        
+        # KEY FIX: Drop rows that are entirely NaN (except maybe Ora)
+        # VCOM often writes empty rows for the future part of the day.
+        df = df.dropna(how='all', subset=[c for c in df.columns if c not in ("Ora", "Timestamp Fetch")])
+        
         for col in df.columns:
             if col in ("Ora", "Timestamp Fetch"):
                 continue
             try:
-                df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', '.'), errors='coerce')
+                # Handle Italian decimal commas and strip any non-numeric junk
+                df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', '.').str.strip(), errors='coerce')
             except:
                 pass
+        
+        if not df.empty:
+            logger.info(f"Loaded {filename}: {len(df)} rows, {len(df.columns)} columns")
         return df
     except Exception as e:
         logger.error(f"load_csv error for {filename}: {e}")
@@ -194,9 +204,17 @@ def get_transformer_comparison(date_str=None):
     for tx in ["TX1", "TX2", "TX3"]:
         cols = [c for c in df.columns if f"(INV {tx}-" in c]
         if cols:
-            df[cols] = df[cols].fillna(0)
-            total_mwh = round(float(df[cols].sum().sum() * (1/60)) / 1_000_000, 3)
-            latest_mw = round(float(df[cols].iloc[-1].sum()) / 1_000_000, 3) if not df[cols].dropna(how='all').empty else 0
+            # sum() skips NaNs. Filling with 0 to be explicit.
+            tx_data = df[cols].fillna(0)
+            total_mwh = round(float(tx_data.sum().sum() * (1/60)) / 1_000_000, 3)
+            
+            # Latest MW should be from the last row that ACTUALLY had data
+            valid_rows = df[cols].dropna(how='all')
+            if not valid_rows.empty:
+                latest_mw = round(float(valid_rows.iloc[-1].fillna(0).sum()) / 1_000_000, 3)
+            else:
+                latest_mw = 0.0
+                
             result[tx] = {"total_mwh": total_mwh, "latest_mw": latest_mw, "inverter_count": len(cols)}
     return {"date": date_str, "transformers": result}
 

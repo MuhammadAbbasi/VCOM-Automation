@@ -187,3 +187,10 @@ scratch/
 temp_analysis_*.py
 llm_agent.log
 system_prompt_backups/
+
+# ============================================================================
+# EXPERIMENT & RESEARCH FILES
+# ============================================================================
+experiment_*/
+experiment_*.zip
+temp_llm_codes/
