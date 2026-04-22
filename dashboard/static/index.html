@@ -487,22 +487,24 @@
   <section style="display: flex; flex-direction: column; height: 100%; width: 100%;">
     <div class="detail-header">
       <div>
-        <h2>💬 Forensic AI Chat (Remote Qwen 2.5 7B)</h2>
-        <p class="detail-desc">Ask questions about the current plant status. Answers are generated totally offline.</p>
+        <h2>🧠 Plant Intelligence</h2>
+        <p class="detail-desc">Ask any question about the plant — temperatures, production, alerts, comparisons, and more.</p>
       </div>
     </div>
     
     <div class="chat-container">
       <div id="chat-messages" class="chat-messages">
         <div class="chat-message bot">
-          <div class="msg-content">Hello! I am the Mazara Solar Plant AI (Qwen 2.5 7B). How can I help you today?</div>
+          <div class="msg-content">Welcome! I'm the Mazara 01 Plant AI. I have access to all live and historical plant data — temperatures, AC power, DC currents, irradiance, PR, and anomalies. Ask me anything.</div>
         </div>
       </div>
       <div class="chat-suggestions">
-        <button class="chat-suggestion" onclick="sendSuggestion('Are there any active alerts right now?')">🚨 Active Alerts</button>
-        <button class="chat-suggestion" onclick="sendSuggestion('Check for zero power inverters in early hours (07:00-09:00)')">☀️ Early Hours Analysis</button>
-        <button class="chat-suggestion" onclick="sendSuggestion('Compare TX1 vs TX2 production levels for today')">📊 Domain Comparison</button>
-        <button class="chat-suggestion" onclick="sendSuggestion('Which inverters have the highest temperature?')">🌡️ Thermal Audit</button>
+        <button class="chat-suggestion" onclick="sendSuggestion('Are there any active alerts?')">🚨 Active Alerts</button>
+        <button class="chat-suggestion" onclick="sendSuggestion('Which inverters have temperature above 50°C?')">🌡️ High Temp</button>
+        <button class="chat-suggestion" onclick="sendSuggestion('Compare TX1 vs TX2 vs TX3 production today')">📊 TX Comparison</button>
+        <button class="chat-suggestion" onclick="sendSuggestion('What is the total production today in MWh?')">⚡ Total Energy</button>
+        <button class="chat-suggestion" onclick="sendSuggestion('Any inverters offline right now?')">🔴 Offline Check</button>
+        <button class="chat-suggestion" onclick="sendSuggestion('What is the current irradiance?')">☀️ Irradiance</button>
       </div>
       <div class="chat-input-area">
         <input type="text" id="chat-input" placeholder="Type a question (e.g. Are there any active alerts?)" />

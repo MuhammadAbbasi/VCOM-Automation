@@ -299,7 +299,7 @@ async def chat_endpoint(request: Request, user: str = Depends(verify_credentials
                     latest_data = data[latest_key]
         
         # Call the LLM
-        answer = ask_llm(question, latest_data)
+        answer = ask_llm(question, latest_data, user_id="DASHBOARD_USER")
         return JSONResponse({"status": "success", "answer": answer})
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)

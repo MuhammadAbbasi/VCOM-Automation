@@ -1,16 +1,15 @@
 """
-telegram_bot.py — Telegram command bot for Mazara PV plant status queries.
+telegram_bot.py — Mazara 01 Solar Plant Monitoring Bot
 
-Polls the Telegram Bot API for incoming messages every ~5 seconds.
-Responds to any message containing trigger keywords with live plant data
-read from the latest dashboard_data_<date>.json snapshot.
+Real-time SCADA intelligence delivered via Telegram.
+Polls the Telegram Bot API for incoming commands and responds
+with live plant data from the latest dashboard snapshot.
 
-Supported triggers:
-  /status  |  status           -> Live plant summary
-  /ai <question>               -> Remote AI Forensic Analysis (Qwen 3.5)
-
-Run standalone:
-    python telegram_bot.py
+Commands:
+  /status   — Live AC power, PR, inverter health
+  /alerts   — Active anomalies and fault conditions
+  /daily    — Daily energy production summary
+  /ai <q>   — Natural language plant analysis (Qwen 2.5 + Pre-computed Data Engine)
 
 Launched automatically by run_monitor.py.
 """
@@ -172,23 +171,28 @@ class TelegramBot:
     def set_my_commands(self) -> None:
         """Sets the bot's command list for the '/' menu."""
         commands = [
-            {"command": "status", "description": "Live plant summary"},
-            {"command": "alerts", "description": "List all active site anomalies"},
-            {"command": "daily",  "description": "Daily production report"},
-            {"command": "ai",     "description": "Deep Forensic AI Analysis (add question)"},
+            {"command": "start",  "description": "Welcome & capabilities overview"},
+            {"command": "status", "description": "📊 Live plant power, PR & health"},
+            {"command": "alerts", "description": "🚨 Active faults & anomalies"},
+            {"command": "daily",  "description": "📅 Daily energy production report"},
+            {"command": "ai",     "description": "🧠 AI-powered plant analysis"},
         ]
         try:
             requests.post(f"{self.base}/setMyCommands", json={"commands": commands}, timeout=API_TIMEOUT)
         except Exception: pass
 
     def set_chat_description(self, chat_id: str | int) -> None:
-        """Updates the Telegram group description to match bot capabilities."""
+        """Updates the Telegram group/chat description."""
         desc = (
-            "Mazara Solar Plant Forensic Intelligence. \n\n"
-            "📊 /status - Real-time plant production & health\n"
-            "🚨 /alerts - Active inverter & performance anomalies\n"
-            "📅 /daily  - Daily consolidation report\n"
-            "🤖 /ai <question> - Forensic analysis via Remote high-speed Qwen 3.5"
+            "🌞 Mazara 01 — Solar Plant Intelligence\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n"
+            "12.6 MWp | 36 Inverters | 3 Transformers\n"
+            "Mazara del Vallo, Sicily\n\n"
+            "📊 /status — Real-time power & health\n"
+            "🚨 /alerts — Active anomalies\n"
+            "📅 /daily — Energy production report\n"
+            "🧠 /ai <question> — AI plant analysis\n\n"
+            "Powered by VCOM Automation"
         )
         try:
             requests.post(f"{self.base}/setChatDescription", json={"chat_id": chat_id, "description": desc[:512]}, timeout=API_TIMEOUT)
@@ -232,7 +236,25 @@ def main() -> None:
                     logger.warning(f"Unauthorized access attempt from chat_id {chat_id}")
                     continue
 
-                if text.lower().startswith("/ai"):
+                if text.lower().startswith("/start"):
+                    bot.send_message(chat_id,
+                        "🌞 *Mazara 01 — Solar Plant Intelligence*\n"
+                        "━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        "Welcome! I monitor your 21 MWp solar plant in real time.\n\n"
+                        "*Available Commands:*\n"
+                        "📊 /status — Live AC power, PR & inverter health\n"
+                        "🚨 /alerts — Active faults & anomalies\n"
+                        "📅 /daily — Today's energy production report\n"
+                        "🧠 /ai `<question>` — Ask anything about the plant\n\n"
+                        "*Example AI Questions:*\n"
+                        "• `/ai What was yesterday's total production?`\n"
+                        "• `/ai Which inverters are above 50°C?`\n"
+                        "• `/ai Compare TX1 vs TX2 production`\n"
+                        "• `/ai Any inverters offline today?`"
+                    )
+                    continue
+
+                elif text.lower().startswith("/ai"):
                     question = text[3:].strip()
                     if not question:
                         bot.send_message(chat_id, "🤖 Ask me after /ai")
@@ -247,7 +269,7 @@ def main() -> None:
 
                         def run_and_reply():
                             try:
-                                reply = llm_agent.ask_llm(question, data)
+                                reply = llm_agent.ask_llm(question, data, user_id=f"TG_{chat_id}")
                                 bot.send_message(chat_id, reply)
                             except Exception as ai_e:
                                 logger.error(f"Telegram AI Thread error: {ai_e}")
@@ -293,11 +315,14 @@ def main() -> None:
                     bot.send_message(chat_id, build_status_message(data) if data else "⚠️ No data.")
                 
                 elif chat_id > 0:
-                    bot.send_message(chat_id, "❓ *Mazara Bot Shortcuts:*\n\n"
-                                     "📊 **/status** — Live Plant Summary\n"
-                                     "🚨 **/alerts** — List Active Anomalies\n"
-                                     "📅 **/daily** — Production Report\n"
-                                     "🤖 **/ai <question>** — Deep Analysis")
+                    bot.send_message(chat_id,
+                        "🌞 *Mazara 01 — Commands*\n\n"
+                        "📊 /status — Live plant summary\n"
+                        "🚨 /alerts — Active anomalies\n"
+                        "📅 /daily — Production report\n"
+                        "🧠 /ai `<question>` — AI analysis\n\n"
+                        "_Type /start for a full overview._"
+                    )
 
         except Exception as e:
             logger.error(f"Loop error: {e}")

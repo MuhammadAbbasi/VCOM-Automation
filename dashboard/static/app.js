@@ -1017,18 +1017,33 @@ document.addEventListener("DOMContentLoaded", () => {
   function appendChatMessage(text, sender) {
     if (!chatMessages) return;
     const msgDiv = document.createElement("div");
+    msgDiv.className = `chat-message ${sender}`;
+    if (sender === "user") msgDiv.setAttribute("data-avatar", "ME");
+    else msgDiv.setAttribute("data-avatar", "AI");
+    
     chatMessages.appendChild(msgDiv);
     
-    // XSS fixed by building elements safely
     const contentDiv = document.createElement("div");
     contentDiv.className = "msg-content";
-    if (text.includes("```") || text.includes("**")) {
-      // Very basic markdown formatting if it exists (ideally replace with library)
-      contentDiv.innerHTML = text.replace(/<[^>]*>?/gm, ''); // safe strip tags
+    
+    // Auto-formatting for AI responses
+    if (sender.includes("bot") && (text.includes("```") || text.includes("**"))) {
+        // Very basic markdown formatting (bullet points and bold)
+        let formatted = text
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/^\s*[-*]\s+(.*)/gm, '• $1')
+            .replace(/```python([\s\S]*?)```/g, '<code>$1</code>');
+        contentDiv.innerHTML = formatted;
     } else {
-      contentDiv.textContent = text;
+        contentDiv.textContent = text;
     }
     msgDiv.appendChild(contentDiv);
+
+    const timeDiv = document.createElement("div");
+    timeDiv.className = "msg-time";
+    timeDiv.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    msgDiv.appendChild(timeDiv);
+
     chatMessages.scrollTop = chatMessages.scrollHeight;
   }
 
@@ -1168,10 +1183,6 @@ function sendSuggestion(text) {
   const input = el("chat-input");
   if (input) {
     input.value = text;
-    // Tiny delay to make the click visual before sending
-    setTimeout(() => {
-        const sendBtn = el("chat-send-btn");
-        if (sendBtn) sendBtn.click();
-    }, 100);
+    input.focus();
   }
 }
