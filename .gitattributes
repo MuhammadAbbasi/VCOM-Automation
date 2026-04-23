@@ -1,0 +1,15 @@
+# Handle line endings automatically for all files detected as text 
+# and leave binary files untouched.
+* text=auto
+
+# Explicitly declare text files to use LF in the repository
+# These will be converted to CRLF on Windows checkout automatically
+*.py text eol=lf
+*.js text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.json text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
