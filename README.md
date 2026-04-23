@@ -48,10 +48,17 @@ pip install -r requirements.txt
 # Install Playwright browsers
 playwright install chromium
 
-# Create .env file with credentials
-cp .env.example .env
-# Edit .env and add VCOM_USER, VCOM_PASS, VCOM_SYSTEM_ID
+# Setup Configuration
+cp config.json.example config.json
+cp user_settings.json.example user_settings.json
+# Edit config.json and user_settings.json with your credentials and preferences
 ```
+
+### 📦 Migration Guide (Moving to another system)
+1. **Copy Files**: Transfer the entire project folder to the new system.
+2. **Environment**: Re-run the installation steps above.
+3. **Data Preservation**: If you want to keep your history, ensure you copy the `extracted_data/` folder, specifically the `dashboard_data_*.json` files.
+4. **Hardware**: Ensure the new system has at least 8GB RAM and stable network access for the browser automation.
 
 ### Run the System
 
@@ -81,9 +88,13 @@ Logs into VCOM every 10 minutes and scrapes 6 metrics:
 - **Dynamic Daylight:** Detects plant start time from production data.
 
 ### 3. **Live Dashboard** (`dashboard/static/`)
-- **Health Matrix:** 36-inverters × 4 LEDs.
+- **Health Matrix:** 36-inverters × 4 LEDs (PR | Temp | DC | AC).
 - **Downtime Tracker:** Tracks production interruptions based on user-configured duration limits.
 - **Dynamic Configuration:** Front-end "⚙️ SETTINGS" modal saves configurations to `user_settings.json` across reboots.
+- **Premium Mission Control UI:** A high-fidelity "Plant Reference Manual" footer providing:
+  - **Technical Specifications:** Accurate site metadata (12.625 MWp, 808 strings, 3 TX stations).
+  - **Diagnostic Matrix:** A color-coded SCADA guide with luminous LED status indicators.
+  - **System Metadata:** Real-time visibility into the forensic engine and AI inference nodes.
 
 **Data Push:** FastAPI **WebSockets** stream real-time JSON updates continuously without page reloads.
 
@@ -102,14 +113,14 @@ VCOM Automation/
 │   ├── resistenza_monitor.py
 │   ├── temperatura_monitor.py
 │   └── irraggiamento_monitor.py
-├── processor_watchdog_final.py        ← Forensic analyzer (ACTIVE)
+├── processor_watchdog_final.py        ← Forensic analyzer (ACTIVE v4.2)
 ├── processor_watchdog*.py             ← Legacy versions (reference only)
 ├── dashboard/
 │   ├── app.py                         ← FastAPI server
 │   └── static/
-│       ├── index.html
+│       ├── index.html                 ← Premium Glassmorphism UI
 │       ├── app.js
-│       └── style.css
+│       └── style.css                  ← Outfit Typography & Luminous Accents
 ├── run_monitor.py                     ← Orchestrator (all 3 services)
 ├── extracted_data/                    ← Generated at runtime
 │   ├── PR_YYYY-MM-DD.xlsx
@@ -374,5 +385,5 @@ This project is provided as-is. Adapt and use freely, but ensure compliance with
 
 ---
 
-**Last Updated:** 2026-04-21
-**System Status:** ✅ Production-hardened with session protection, real-time ingestion status tracking, and premium dashboard UI.
+**Last Updated:** 2026-04-22
+**System Status:** ✅ Production-hardened with high-fidelity footer, verified site metadata (12.625 MWp), session protection, and premium dashboard UI.

@@ -16,6 +16,11 @@ auth_token.txt
 .aws/
 .azure/
 .gcp/
+Interfaccia SCADA.zip
+Interfaccia SCADA/
+plant_drawings/
+export_project.ps1
+config.json.example
 
 # ============================================================================
 # GENERATED DATA FILES (Runtime Output)
@@ -25,7 +30,7 @@ extracted_data/
 *.xls
 *.csv
 !plant_configuration_original.csv
-
+user_settings*
 dashboard_data_*.json
 extraction_status.json
 errors/
