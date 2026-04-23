@@ -1,6 +1,6 @@
 # 🌞 Mazara VCOM Automation — AI-Powered SCADA Monitoring Pipeline
 
-[![Remote AI: Qwen 2.5 7B](https://img.shields.io/badge/Remote%20AI-Qwen%202.5%207B-blueviolet)](https://ollama.com)
+[![Local AI: Qwen 3.5 9B](https://img.shields.io/badge/Local%20AI-Qwen%203.5%209B-blueviolet)](https://ollama.com)
 [![Status: Production](https://img.shields.io/badge/Status-Production--Ready-success)](#)
 
 A complete, high-performance automated monitoring system for utility-scale solar photovoltaic (PV) plants. This project integrates **Local LLMs (Qwen 2.5 Coder)** for deep forensic analysis, extracts real-time telemetry from VCOM (meteocontrol.com) every 15 minutes, and serves a reactive, WebSocket-driven dark-mode dashboard.
@@ -14,7 +14,7 @@ A complete, high-performance automated monitoring system for utility-scale solar
 
 ## 🚀 Key Improvements (April 2026 Update)
 
-Seamlessly integrates **Qwen 2.5 7B** via remote Ollama (192.168.10.126) for plant diagnostics:
+Seamlessly integrates **Qwen 3.5 9B** via local Ollama (localhost) for plant diagnostics:
 - **Deep CSV Correlation:** Automatically scans historic CSVs to verify startup behavior (e.g., "Early Hours" production checks).
 - **Hardened Data Loading:** Custom `load_csv` helper with auto-column stripping and encoding detection (UTF-8/Latin-1) to handle SCADA formatting quirks.
 - **Data Collision Shield:** Built-in retries and historical fallbacks to prevent crashes during concurrent file writes by the Watchdog.

@@ -26,7 +26,7 @@ def get_user_settings():
     return {}
 
 _settings = get_user_settings()
-OLLAMA_API_URL = _settings.get("ollama_url", "http://192.168.10.126:11434/api/generate")
+OLLAMA_API_URL = _settings.get("ollama_url", "http://localhost:11434/api/generate")
 MODEL_NAME = "qwen2.5:7b"
 DEBUG_MODE = _settings.get("debug_mode", False)
 
@@ -51,83 +51,114 @@ def get_user_context(user_id):
     return ctx + "\n"
 
 # ---------------------------------------------------------------------------
-# CSV Data Engine — Pre-built analysis functions
+# Database Data Engine
 # ---------------------------------------------------------------------------
 import pandas as pd
 import numpy as np
+from db.db_manager import load_metric, load_latest_snapshot, get_db_stats
 
 INV_IDS = [f"INV TX{tx}-{i:02d}" for tx in range(1, 4) for i in range(1, 13)]
 
 def _load_csv(filename):
-    """Load a CSV from extracted_data, clean it, return DataFrame."""
-    path = DATA_DIR / filename
-    if not path.exists():
-        return pd.DataFrame()
-    try:
-        # Force comma separator and handle whitespace
-        df = pd.read_csv(path, sep=',', skipinitialspace=True)
-        df.columns = [str(c).strip() for c in df.columns]
-        
-        # KEY FIX: Drop rows that are entirely NaN (except maybe Ora)
-        # VCOM often writes empty rows for the future part of the day.
-        df = df.dropna(how='all', subset=[c for c in df.columns if c not in ("Ora", "Timestamp Fetch")])
-        
-        for col in df.columns:
-            if col in ("Ora", "Timestamp Fetch"):
-                continue
-            try:
-                # Handle Italian decimal commas and strip any non-numeric junk
-                df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', '.').str.strip(), errors='coerce')
-            except:
-                pass
-        
-        if not df.empty:
-            logger.info(f"Loaded {filename}: {len(df)} rows, {len(df.columns)} columns")
-        return df
-    except Exception as e:
-        logger.error(f"load_csv error for {filename}: {e}")
-        return pd.DataFrame()
-
-def _get_date_str(offset_days=0):
-    return (datetime.now() - timedelta(days=offset_days)).strftime("%Y-%m-%d")
+    """Deprecated. Use load_metric instead."""
+    # Mapping filename to metric name for backward compatibility if model still tries to call it
+    mapping = {
+        "Potenza_AC.csv": "Potenza AC",
+        "Temperatura.csv": "Temperatura",
+        "Corrente_DC.csv": "Corrente DC",
+        "Irraggiamento.csv": "Irraggiamento",
+        "PR_Inverter.csv": "PR inverter"
+    }
+    metric = mapping.get(filename)
+    if metric:
+        return load_metric(datetime.now().strftime("%Y-%m-%d"), metric)
+    return pd.DataFrame()
 
 def get_available_dates():
-    """List all dates that have AC power data."""
-    dates = set()
-    for f in DATA_DIR.glob("Potenza AC_*.csv"):
-        try:
-            d = f.stem.replace("Potenza AC_", "")
-            dates.add(d)
-        except:
-            pass
-    # Also check old naming
-    for f in DATA_DIR.glob("Potenza_AC_*.csv"):
-        try:
-            d = f.stem.replace("Potenza_AC_", "")
-            dates.add(d)
-        except:
-            pass
-    return sorted(dates, reverse=True)
+    """List all dates that have data in the database."""
+    try:
+        from db.db_manager import _get_data_conn
+        conn = _get_data_conn()
+        # Check available dates across some major tables
+        tables = ["potenza_ac", "corrente_dc", "irraggiamento"]
+        dates = set()
+        for t in tables:
+            try:
+                res = conn.execute(f"SELECT DISTINCT date FROM {t}").fetchall()
+                for r in res:
+                    dates.add(r[0])
+            except:
+                pass
+        return sorted(dates, reverse=True)
+    except Exception:
+        return []
 
 def get_total_production(date_str=None):
     """Total plant energy in MWh for a given date."""
-    date_str = date_str or _get_date_str()
-    df = _load_csv(f"Potenza AC_{date_str}.csv")
-    if df.empty:
-        df = _load_csv(f"Potenza_AC_{date_str}.csv")
+    date_str = date_str or datetime.now().strftime("%Y-%m-%d")
+    df = load_metric(date_str, "Potenza AC")
+    
     if df.empty:
         return {"date": date_str, "total_mwh": None, "error": "No data"}
+        
     ac_cols = [c for c in df.columns if "Potenza AC (INV" in c or "Potenza AC(INV" in c]
     if not ac_cols:
         return {"date": date_str, "total_mwh": None, "error": "No inverter columns"}
+    
     df[ac_cols] = df[ac_cols].fillna(0)
     total_mwh = round(float(df[ac_cols].sum().sum() * (1/60)) / 1_000_000, 3)
     return {"date": date_str, "total_mwh": total_mwh, "inverter_count": len(ac_cols)}
 
+def get_peak_production(date_str=None):
+    """Find peak instantaneous power and its time."""
+    date_str = date_str or datetime.now().strftime("%Y-%m-%d")
+    df = load_metric(date_str, "Potenza AC")
+    if df.empty:
+        return {"date": date_str, "error": "No data"}
+        
+    ac_cols = [c for c in df.columns if "Potenza AC (INV" in c]
+    if not ac_cols:
+        return {"date": date_str, "error": "No inverter columns"}
+        
+    df["total_power"] = df[ac_cols].sum(axis=1)
+    peak_idx = df["total_power"].idxmax()
+    peak_val = df.loc[peak_idx, "total_power"]
+    peak_ora = df.loc[peak_idx, "Ora"] if "Ora" in df.columns else "Unknown"
+    
+    # Format peak_ora (HH.mm -> HH:mm)
+    peak_time = "Unknown"
+    if peak_ora != "Unknown":
+        try:
+            f = float(peak_ora)
+            h = int(f)
+            m = int(round((f - h) * 100))
+            if m >= 60: m = int(round((f - h) * 60))
+            peak_time = f"{h:02d}:{m:02d}"
+        except:
+            peak_time = str(peak_ora)
+
+    # Try to get POA at that time
+    poa_val = None
+    irr_df = load_metric(date_str, "Irraggiamento")
+    if not irr_df.empty and "Ora" in irr_df.columns:
+        # Find matching time in irradiance
+        match = irr_df[irr_df["Ora"] == peak_ora]
+        if not match.empty:
+            poa_cols = [c for c in irr_df.columns if "POA" in c or "Irraggiamento" in c]
+            if poa_cols:
+                poa_val = match.iloc[0][poa_cols[0]]
+
+    return {
+        "date": date_str, 
+        "peak_power_w": round(float(peak_val)), 
+        "peak_time": peak_time,
+        "poa_at_peak": round(float(poa_val)) if poa_val is not None else None
+    }
+
 def get_temperatures(date_str=None, threshold=None):
     """Get latest temperature readings for all inverters."""
-    date_str = date_str or _get_date_str()
-    df = _load_csv(f"Temperatura_{date_str}.csv")
+    date_str = date_str or datetime.now().strftime("%Y-%m-%d")
+    df = load_metric(date_str, "Temperatura")
     if df.empty:
         return {"date": date_str, "error": "No temperature data"}
     temp_cols = [c for c in df.columns if "Temperatura inverter (INV" in c or "Temperatura (INV" in c]
@@ -159,10 +190,8 @@ def get_temperatures(date_str=None, threshold=None):
 
 def get_inverter_status(date_str=None):
     """Get latest power for each inverter, flag zeros/low."""
-    date_str = date_str or _get_date_str()
-    df = _load_csv(f"Potenza AC_{date_str}.csv")
-    if df.empty:
-        df = _load_csv(f"Potenza_AC_{date_str}.csv")
+    date_str = date_str or datetime.now().strftime("%Y-%m-%d")
+    df = load_metric(date_str, "Potenza AC")
     if df.empty:
         return {"date": date_str, "error": "No AC power data"}
     ac_cols = [c for c in df.columns if "Potenza AC (INV" in c]
@@ -193,10 +222,8 @@ def get_inverter_status(date_str=None):
 
 def get_transformer_comparison(date_str=None):
     """Compare TX1, TX2, TX3 production."""
-    date_str = date_str or _get_date_str()
-    df = _load_csv(f"Potenza AC_{date_str}.csv")
-    if df.empty:
-        df = _load_csv(f"Potenza_AC_{date_str}.csv")
+    date_str = date_str or datetime.now().strftime("%Y-%m-%d")
+    df = load_metric(date_str, "Potenza AC")
     if df.empty:
         return {"date": date_str, "error": "No data"}
     
@@ -220,10 +247,8 @@ def get_transformer_comparison(date_str=None):
 
 def get_dc_currents(date_str=None, threshold=None):
     """Get DC current info for strings/MPPTs."""
-    date_str = date_str or _get_date_str()
-    df = _load_csv(f"Corrente DC_{date_str}.csv")
-    if df.empty:
-        df = _load_csv(f"Corrente_DC_{date_str}.csv")
+    date_str = date_str or datetime.now().strftime("%Y-%m-%d")
+    df = load_metric(date_str, "Corrente DC")
     if df.empty:
         return {"date": date_str, "error": "No DC current data"}
     dc_cols = [c for c in df.columns if "Corrente DC" in c and "MPPT" in c]
@@ -252,8 +277,8 @@ def get_dc_currents(date_str=None, threshold=None):
 
 def get_irradiance(date_str=None):
     """Get latest irradiance readings."""
-    date_str = date_str or _get_date_str()
-    df = _load_csv(f"Irraggiamento_{date_str}.csv")
+    date_str = date_str or datetime.now().strftime("%Y-%m-%d")
+    df = load_metric(date_str, "Irraggiamento")
     if df.empty:
         return {"date": date_str, "error": "No irradiance data"}
     irr_cols = [c for c in df.columns if "Irraggiamento" in c and c != "Ora" and c != "Timestamp Fetch"]
@@ -269,10 +294,8 @@ def get_irradiance(date_str=None):
 
 def get_downtime_events(date_str=None):
     """Check which inverters went offline during production hours."""
-    date_str = date_str or _get_date_str()
-    df = _load_csv(f"Potenza AC_{date_str}.csv")
-    if df.empty:
-        df = _load_csv(f"Potenza_AC_{date_str}.csv")
+    date_str = date_str or datetime.now().strftime("%Y-%m-%d")
+    df = load_metric(date_str, "Potenza AC")
     if df.empty:
         return {"date": date_str, "error": "No data"}
     
@@ -302,129 +325,106 @@ def get_downtime_events(date_str=None):
     
     return {"date": date_str, "production_start": prod_start, "production_end": prod_end, "downtime_events": events}
 
+def search_logs(query, limit=10):
+    """Search system logs in scada_logs.db for keywords."""
+    try:
+        from db.db_manager import _get_log_conn
+        conn = _get_log_conn()
+        sql = "SELECT timestamp, source, level, message FROM logs WHERE message LIKE ? ORDER BY timestamp DESC LIMIT ?"
+        res = conn.execute(sql, (f"%{query}%", limit)).fetchall()
+        return [{"timestamp": r[0], "source": r[1], "level": r[2], "message": r[3]} for r in res]
+    except Exception as e:
+        return {"error": str(e)}
+
 # ---------------------------------------------------------------------------
 # Data Snapshot Builder — builds the context the LLM reads
 # ---------------------------------------------------------------------------
 def build_data_snapshot(plant_data, question):
-    """Pre-compute relevant data based on the question keywords."""
+    """Dynamically fetch relevant data based on semantic categories and device mentions."""
     snapshot = []
     q = question.lower()
-    today = _get_date_str()
-    yesterday = _get_date_str(1)
     
-    # Determine target date from question
+    # 1. Semantic Categories & Synonyms (Lite RAG Routing)
+    CATEGORIES = {
+        "TEMPERATURE": ["temperature", "temp", "hot", "°c", "caldo", "thermal", "heat", "warm", "fresco", "freddo", "gradi"],
+        "PRODUCTION": ["production", "energy", "mwh", "kwh", "produzione", "total", "power", "quanto", "generate", "yield", "peak", "massima", "picco", "potenza", "energia"],
+        "TRANSFORMERS": ["tx1", "tx2", "tx3", "transformer", "compare", "comparison", "confronto", "trasformatore", "trafi"],
+        "DOWNTIME": ["off", "down", "zero", "offline", "stopped", "trip", "fault", "spento", "not working", "not producing", "fermo", "anomalia", "allarme"],
+        "DC_STRINGS": ["current", "dc", "string", "mppt", "corrente", "amper", "stringhe"],
+        "IRRADIANCE": ["irradiance", "sun", "irraggiamento", "solar", "radiation", "pyranometer", "sole", "luce"],
+        "HISTORY": ["history", "historical", "trail", "past", "last alarms", "storia", "passato", "ieri", "precedente"]
+    }
+    
+    # Determine active categories
+    active_cats = [cat for cat, synonyms in CATEGORIES.items() if any(s in q for s in synonyms)]
+    
+    # 2. Determine target date
+    today = datetime.now().strftime("%Y-%m-%d")
+    yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
     target_date = today
-    if "yesterday" in q or "ieri" in q:
+    if any(w in q for w in ["yesterday", "ieri", "l'altro ieri"]):
         target_date = yesterday
     else:
-        # Check for explicit date  YYYY-MM-DD
         date_match = re.search(r'(\d{4}-\d{2}-\d{2})', q)
-        if date_match:
-            target_date = date_match.group(1)
+        if date_match: target_date = date_match.group(1)
     
-    # Always include plant state if available
+    # 3. Device Auto-Detection (Always fetch status for mentioned devices)
+    devices = re.findall(r'tx\d-\d{2}', q)
+    if devices:
+        snapshot.append(f"FOCUS DEVICES: {', '.join(d.upper() for d in devices)}")
+        status_data = get_inverter_status(target_date)
+        if "details" in status_data:
+            dev_details = {f"INV {d.upper()}": status_data["details"].get(f"INV {d.upper()}") for d in devices}
+            snapshot.append(f"DEVICE STATUS ({target_date}): {json.dumps(dev_details)}")
+
+    # 4. Global State (Always include)
     if plant_data:
         macro = plant_data.get("macro_health", {})
-        anomalies = plant_data.get("active_anomalies", [])
-        trail = plant_data.get("historical_trail", [])
-        snapshot.append(f"LIVE STATE (from watchdog): MW={macro.get('MW','?')}, PR={macro.get('PR','?')}%")
+        snapshot.append(f"PLANT STATE: MW={macro.get('MW','?')}, Online={macro.get('online','?')}/{macro.get('total','?')}")
+    
+    # 5. Semantic Data Fetching
+    if "TEMPERATURE" in active_cats:
+        data = get_temperatures(target_date, 50)
+        snapshot.append(f"TEMPERATURES: {json.dumps(data, default=str)}")
         
-        if anomalies:
-            snapshot.append(f"ACTIVE ANOMALIES: {json.dumps(anomalies[:10], default=str)}")
-        else:
-            snapshot.append("ACTIVE ANOMALIES: None")
-
-        if any(w in q.lower() for w in ["history", "historical", "trail", "past", "last alarms"]):
-            if trail:
-                # Include the 20 most recent historical records
-                snapshot.append(f"HISTORICAL ALARM TRAIL (Resolved): {json.dumps(trail[-20:], default=str)}")
-            else:
-                snapshot.append("HISTORICAL ALARM TRAIL: None")
-    
-    # Smart routing — compute data relevant to the question
-    if any(w in q for w in ["temperature", "temp", "hot", "°c", "caldo", "thermal", "heat", "highest", "lowest", "max temp", "min temp", "warm"]):
-        threshold = 50  # default
-        t_match = re.search(r'(\d+)\s*°?\s*[cC]', q)
-        if t_match:
-            threshold = float(t_match.group(1))
-        data = get_temperatures(target_date, threshold)
-        snapshot.append(f"TEMPERATURE DATA ({target_date}):\n{json.dumps(data, indent=2, default=str)}")
-    
-    if any(w in q for w in ["production", "energy", "mwh", "kwh", "produzione", "total", "power", "quanto", "generate", "yield"]):
-        data = get_total_production(target_date)
-        snapshot.append(f"PRODUCTION DATA ({target_date}):\n{json.dumps(data, indent=2, default=str)}")
-    
-    if any(w in q for w in ["tx1", "tx2", "tx3", "transformer", "compare", "comparison", "confronto"]):
-        data = get_transformer_comparison(target_date)
-        snapshot.append(f"TRANSFORMER COMPARISON ({target_date}):\n{json.dumps(data, indent=2, default=str)}")
-    
-    if any(w in q for w in ["off", "down", "zero", "offline", "stopped", "trip", "fault", "spento", "not working", "not producing"]):
-        data = get_inverter_status(target_date)
-        snapshot.append(f"INVERTER STATUS ({target_date}):\n{json.dumps(data, indent=2, default=str)}")
-        dt_data = get_downtime_events(target_date)
-        snapshot.append(f"DOWNTIME EVENTS ({target_date}):\n{json.dumps(dt_data, indent=2, default=str)}")
-    
-    if any(w in q.lower() for w in ["current", "dc", "string", "mppt", "corrente"]):
-        threshold = None
-        t_match = re.search(r'(?:less than|below|under|<)\s*(\d+)', q)
-        if t_match:
-            threshold = float(t_match.group(1))
-        
-        # FOCUS OPTIMIZATION: If a specific inverter is mentioned (e.g. TX3-01)
-        # only send that inverter's data to avoid overwhelming the model.
-        target_inv = None
-        inv_match = re.search(r'([tT][xX]\d+-\d+)', q)
-        if inv_match:
-            target_inv = inv_match.group(1).upper().replace("-", "-")
-            
-        data = get_dc_currents(target_date, threshold)
-        if target_inv:
-            # Filter the large DC dict for just the target inverter
-            filtered_data = {k: v for k, v in data.items() if target_inv in k}
-            snapshot.append(f"DC CURRENT DATA (FOCUS: {target_inv} on {target_date}):\n{json.dumps(filtered_data, indent=2, default=str)}")
-        else:
-            snapshot.append(f"DC CURRENT DATA ({target_date}):\n{json.dumps(data, indent=2, default=str)}")
-    
-    if any(w in q for w in ["irradiance", "sun", "irraggiamento", "solar", "radiation", "pyranometer"]):
-        data = get_irradiance(target_date)
-        snapshot.append(f"IRRADIANCE DATA ({target_date}):\n{json.dumps(data, indent=2, default=str)}")
-    
-    if any(w in q for w in ["alert", "alarm", "anomaly", "warning", "problem", "issue"]):
-        data = get_inverter_status(target_date)
-        snapshot.append(f"INVERTER STATUS ({target_date}):\n{json.dumps(data, indent=2, default=str)}")
-        temp_data = get_temperatures(target_date, 50)
-        snapshot.append(f"HIGH TEMP CHECK ({target_date}):\n{json.dumps(temp_data, indent=2, default=str)}")
-    
-    if any(w in q for w in ["early hours", "morning", "mattina"]):
-        data = get_downtime_events(target_date)
-        snapshot.append(f"DOWNTIME DATA ({target_date}):\n{json.dumps(data, indent=2, default=str)}")
-        inv_data = get_inverter_status(target_date)
-        snapshot.append(f"INVERTER STATUS ({target_date}):\n{json.dumps(inv_data, indent=2, default=str)}")
-    
-    if any(w in q for w in ["inverter", "inv ", "inv.", "health", "performance", "pr ", "pr%"]):
-        inv_data = get_inverter_status(target_date)
-        if f"INVERTER STATUS" not in "\n".join(snapshot):
-            snapshot.append(f"INVERTER STATUS ({target_date}):\n{json.dumps(inv_data, indent=2, default=str)}")
-    
-    if any(w in q for w in ["status", "how is", "overview", "summary", "come sta", "plant ok"]):
+    if "PRODUCTION" in active_cats:
         prod = get_total_production(target_date)
-        inv = get_inverter_status(target_date)
-        temp = get_temperatures(target_date, 50)
-        if f"PRODUCTION" not in "\n".join(snapshot):
-            snapshot.append(f"PRODUCTION ({target_date}): {json.dumps(prod, default=str)}")
-        if f"INVERTER STATUS" not in "\n".join(snapshot):
-            snapshot.append(f"INVERTER STATUS ({target_date}): offline={inv.get('off_inverters', [])}, online={inv.get('online_count', '?')}/{inv.get('total', '?')}")
-        if f"TEMPERATURE" not in "\n".join(snapshot):
-            above50 = temp.get('above_threshold', {})
-            snapshot.append(f"TEMP CHECK: {len(above50)} inverters above 50°C: {list(above50.keys()) if above50 else 'None'}")
-    
-    # If nothing was triggered, provide general overview
+        peak = get_peak_production(target_date)
+        snapshot.append(f"PRODUCTION: {json.dumps(prod, default=str)}")
+        snapshot.append(f"PEAK: {json.dumps(peak, default=str)}")
+        
+    if "TRANSFORMERS" in active_cats:
+        data = get_transformer_comparison(target_date)
+        snapshot.append(f"TRANSFORMER COMPARISON: {json.dumps(data, default=str)}")
+        
+    if "DOWNTIME" in active_cats or "HISTORY" in active_cats:
+        dt = get_downtime_events(target_date)
+        snapshot.append(f"DOWNTIME EVENTS: {json.dumps(dt, default=str)}")
+        if plant_data and "historical_trail" in plant_data:
+            snapshot.append(f"RECENT ALARMS: {json.dumps(plant_data['historical_trail'][-10:], default=str)}")
+            
+    if "DC_STRINGS" in active_cats:
+        # If specific device, fetch all DC for them. Otherwise, just fetch offline strings.
+        if devices:
+            data = get_dc_currents(target_date) # all
+            filtered = {k: v for k, v in data.get("readings", {}).items() if any(d.upper() in k for d in devices)}
+            snapshot.append(f"DC READINGS (FOCUS): {json.dumps(filtered)}")
+        else:
+            data = get_dc_currents(target_date, threshold=0.1) # Only offline/low
+            snapshot.append(f"LOW DC STRINGS (<0.1A): {data.get('count_below')}/{data.get('total_strings')} strings. Examples: {json.dumps(dict(list(data.get('below_threshold', {}).items())[:10]))}")
+            
+    if "IRRADIANCE" in active_cats:
+        data = get_irradiance(target_date)
+        snapshot.append(f"IRRADIANCE: {json.dumps(data)}")
+
+    # 6. Fallback (If no categories matched, provide general overview)
     if not snapshot or len(snapshot) <= 2:
         prod = get_total_production(target_date)
         inv = get_inverter_status(target_date)
-        snapshot.append(f"PRODUCTION ({target_date}): {json.dumps(prod, default=str)}")
-        snapshot.append(f"INVERTER STATUS ({target_date}): offline={inv.get('off_inverters', [])}, online={inv.get('online_count', '?')}/{inv.get('total', '?')}")
-    
+        snapshot.append(f"GENERAL OVERVIEW ({target_date}):")
+        snapshot.append(f"- Production: {prod.get('total_mwh')} MWh")
+        snapshot.append(f"- Inverters: {inv.get('online_count')}/{inv.get('total')} online")
+
     return "\n\n".join(snapshot)
 
 # ---------------------------------------------------------------------------
@@ -455,8 +455,11 @@ def run_python_analysis(code: str, plant_data: dict) -> tuple:
         "pd": pd, "np": np, "os": os, "re": re, "json": json,
         "data": plant_data, "DATA": plant_data,
         "datetime": datetime, "timedelta": timedelta,
-        "load_csv": _load_csv, "DATA_DIR": DATA_DIR, "ROOT": ROOT,
+        "load_metric": load_metric,
+        "load_latest_snapshot": load_latest_snapshot,
+        "get_db_stats": get_db_stats,
         "get_total_production": get_total_production,
+        "get_peak_production": get_peak_production,
         "get_temperatures": get_temperatures,
         "get_inverter_status": get_inverter_status,
         "get_transformer_comparison": get_transformer_comparison,
@@ -464,9 +467,11 @@ def run_python_analysis(code: str, plant_data: dict) -> tuple:
         "get_irradiance": get_irradiance,
         "get_downtime_events": get_downtime_events,
         "get_available_dates": get_available_dates,
+        "search_logs": search_logs,
+        "load_csv": _load_csv, # Kept but hidden from prompt
         "INV_IDS": INV_IDS,
-        "TODAY": _get_date_str(),
-        "YESTERDAY": _get_date_str(1),
+        "TODAY": datetime.now().strftime("%Y-%m-%d"),
+        "YESTERDAY": (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d"),
         "result": None,
     }
     
@@ -537,7 +542,7 @@ def ask_llm(question: str, plant_data: dict = None, attempt: int = 1, last_code:
             "stream": False,
             "options": {"num_ctx": 8192, "temperature": 0.1}
         }
-        resp = requests.post(OLLAMA_API_URL, json=payload, timeout=300)
+        resp = requests.post(OLLAMA_API_URL, json=payload, timeout=120)
         resp.raise_for_status()
         answer = resp.json().get("response", "").strip()
         

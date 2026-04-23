@@ -8,12 +8,14 @@
   <meta name="description" content="AI-powered real-time SCADA monitoring dashboard for Mazara 01 PV solar plant.">
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
 </head>
 
 <body>
 
   <header>
     <div>
+      <p>&copy; 2026 Mazara Solar Plant Monitor | AI Engine: Qwen 2.5 7B | Build 2.1.0</p>
       <h1>Mazara Solar Plant — SCADA Monitor</h1>
       <div class="subtitle">System ID 2144635 &nbsp;·&nbsp; Mazara del Vallo, Sicily &nbsp;·&nbsp; 36 Inverters · 808
         Strings</div>
@@ -36,6 +38,7 @@
     <button class="tab-btn" data-tab="tab-dc"><span class="tab-icon">🔌</span> DC Current</button>
     <button class="tab-btn" data-tab="tab-ac"><span class="tab-icon">⚙️</span> AC Power</button>
     <button class="tab-btn" data-tab="tab-sensors"><span class="tab-icon">📡</span> Sensors</button>
+    <button class="tab-btn" data-tab="tab-analytics"><span class="tab-icon">📈</span> Analytics</button>
     <button class="tab-btn" data-tab="tab-chat"><span class="tab-icon">💬</span> AI Chat</button>
   </nav>
 
@@ -304,6 +307,56 @@
       <div id="sensor-macro-stats" class="detail-stats" style="margin-bottom:1.5rem;"></div>
       <div id="sensor-grid-container" class="sensor-container"></div>
     </section>
+  </main>
+
+  <main id="tab-analytics" class="tab-content">
+    <div class="analytics-layout">
+      <aside class="analytics-sidebar">
+        <div class="card sidebar-card">
+          <h3>Query Filters</h3>
+          <div class="filter-group">
+            <label>Metric</label>
+            <select id="ana-metric-select"></select>
+          </div>
+          <div class="filter-group">
+            <label>Start Date</label>
+            <input type="date" id="ana-start-date">
+          </div>
+          <div class="filter-group">
+            <label>End Date</label>
+            <input type="date" id="ana-end-date">
+          </div>
+          <div class="filter-group">
+            <label>Inverters</label>
+            <div id="ana-inv-list" class="multi-select-list">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+          <button id="ana-run-btn" class="btn-rescan" style="width:100%; margin-top:1rem;">Generate Analysis</button>
+        </div>
+      </aside>
+      
+      <div class="analytics-main">
+        <div class="analytics-header-cards">
+          <div class="card mini-card">
+            <div class="mini-label">Peak Value</div>
+            <div class="mini-value" id="ana-stat-peak">—</div>
+          </div>
+          <div class="card mini-card">
+            <div class="mini-label">Average Value</div>
+            <div class="mini-value" id="ana-stat-avg">—</div>
+          </div>
+          <div class="card mini-card">
+            <div class="mini-label">Data Points</div>
+            <div class="mini-value" id="ana-stat-points">—</div>
+          </div>
+        </div>
+        
+        <div class="card chart-card">
+          <div id="analytics-chart"></div>
+        </div>
+      </div>
+    </div>
   </main>
 
   <main id="tab-chat" class="tab-content">
@@ -589,7 +642,7 @@
             <div class="meta-icon">🤖</div>
             <div class="meta-content">
               <div class="meta-label">AI Diagnostic Model</div>
-              <div class="meta-value">Qwen 2.5 Coder 7B</div>
+              <div class="meta-value">Qwen 2.5 7B</div>
             </div>
           </div>
           <div class="sys-meta-item">

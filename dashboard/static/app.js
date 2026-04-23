@@ -1113,11 +1113,201 @@ async function handleRescan() {
   }
 }
 
+// ─── Analytics Manager ───────────────────────────────────────────────────
+class AnalyticsManager {
+    constructor() {
+        this.chart = null;
+        this.metrics = [];
+        this.inverters = [];
+        this.availableDates = [];
+        this.isInitialized = false;
+    }
+
+    async init() {
+        if (this.isInitialized) return;
+        
+        try {
+            const resp = await fetch("/api/analytics/config");
+            const config = await resp.json();
+            
+            this.metrics = config.metrics;
+            this.inverters = config.inverters;
+            this.availableDates = config.available_dates;
+            
+            this.populateFilters();
+            this.initChart();
+            this.setupListeners();
+            
+            this.isInitialized = true;
+            console.log("Analytics Manager Initialized");
+        } catch (err) {
+            console.error("Failed to init analytics:", err);
+        }
+    }
+
+    populateFilters() {
+        const metricSelect = el("ana-metric-select");
+        metricSelect.innerHTML = this.metrics.map(m => `<option value="${m}">${m}</option>`).join("");
+        
+        const invList = el("ana-inv-list");
+        invList.innerHTML = `
+            <div class="inv-item">
+                <input type="checkbox" id="ana-inv-all" checked>
+                <label for="ana-inv-all">Select All Inverters</label>
+            </div>
+            ${this.inverters.map(inv => `
+                <div class="inv-item">
+                    <input type="checkbox" class="ana-inv-check" value="${inv}" checked>
+                    <label>${inv}</label>
+                </div>
+            `).join("")}
+        `;
+
+        // Set default dates (last 3 days)
+        if (this.availableDates.length > 0) {
+            el("ana-end-date").value = this.availableDates[this.availableDates.length - 1];
+            el("ana-start-date").value = this.availableDates[Math.max(0, this.availableDates.length - 3)];
+        } else {
+            const today = new Date().toISOString().split('T')[0];
+            el("ana-end-date").value = today;
+            el("ana-start-date").value = today;
+        }
+    }
+
+    initChart() {
+        const options = {
+            series: [],
+            chart: {
+                type: 'line',
+                height: 500,
+                background: 'transparent',
+                foreColor: 'var(--muted)',
+                toolbar: { show: true },
+                animations: { enabled: true }
+            },
+            stroke: { curve: 'smooth', width: 2 },
+            colors: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'],
+            xaxis: {
+                type: 'datetime',
+                labels: { datetimeUTC: false }
+            },
+            yaxis: {
+                title: { text: 'Value' }
+            },
+            grid: { borderColor: 'var(--border)' },
+            tooltip: { theme: 'dark', x: { format: 'dd MMM HH:mm' } },
+            legend: { position: 'top', horizontalAlign: 'right' },
+            noData: { text: 'Select filters and run analysis' }
+        };
+
+        this.chart = new ApexCharts(el("analytics-chart"), options);
+        this.chart.render();
+    }
+
+    setupListeners() {
+        el("ana-run-btn").addEventListener("click", () => this.fetchData());
+        
+        el("ana-inv-all").addEventListener("change", (e) => {
+            const checks = document.querySelectorAll(".ana-inv-check");
+            checks.forEach(c => c.checked = e.target.checked);
+        });
+    }
+
+    async fetchData() {
+        const btn = el("ana-run-btn");
+        btn.disabled = true;
+        btn.textContent = "Processing...";
+        
+        const metric = el("ana-metric-select").value;
+        const start = el("ana-start-date").value;
+        const end = el("ana-end-date").value;
+        
+        const selectedInverters = Array.from(document.querySelectorAll(".ana-inv-check:checked")).map(c => c.value);
+        const invParam = el("ana-inv-all").checked ? "" : selectedInverters.join(",");
+        
+        try {
+            const url = `/api/analytics/data?metric=${encodeURIComponent(metric)}&start=${start}&end=${end}&inverters=${invParam}`;
+            const resp = await fetch(url);
+            const data = await resp.json();
+            
+            if (data.error) {
+                alert("Error: " + data.error);
+                return;
+            }
+
+            this.updateChart(data);
+            this.updateStats(data);
+        } catch (err) {
+            alert("Failed to fetch analytics data: " + err);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = "Generate Analysis";
+        }
+    }
+
+    updateChart(data) {
+        // Convert timestamps to JS Date objects or numbers
+        const timestamps = data.timestamps.map(ts => new Date(ts).getTime());
+        
+        const series = data.series.map(s => ({
+            name: s.name,
+            data: s.data.map((val, i) => [timestamps[i], val])
+        }));
+        
+        this.chart.updateSeries(series);
+    }
+
+    updateStats(data) {
+        let allVals = [];
+        data.series.forEach(s => allVals = allVals.concat(s.data));
+        
+        if (allVals.length === 0) {
+            el("ana-stat-peak").textContent = "—";
+            el("ana-stat-avg").textContent = "—";
+            el("ana-stat-points").textContent = "0";
+            return;
+        }
+
+        let peak = -Infinity;
+        let sum = 0;
+        let count = 0;
+        
+        for (let i = 0; i < allVals.length; i++) {
+            const v = allVals[i];
+            if (v !== null && v !== undefined && !isNaN(v)) {
+                if (v > peak) peak = v;
+                sum += v;
+                count++;
+            }
+        }
+        
+        if (count === 0) {
+            el("ana-stat-peak").textContent = "—";
+            el("ana-stat-avg").textContent = "—";
+            el("ana-stat-points").textContent = "0";
+            return;
+        }
+
+        const avg = sum / count;
+        
+        el("ana-stat-peak").textContent = peak === -Infinity ? "—" : peak.toFixed(1);
+        el("ana-stat-avg").textContent = avg.toFixed(1);
+        el("ana-stat-points").textContent = count.toLocaleString();
+    }
+}
+
+const analyticsManager = new AnalyticsManager();
+
 document.addEventListener("DOMContentLoaded", () => {
   // Initialize tabs
   initTabs();
   initSortableHeaders();
   initAlertFilters();
+
+  // Initialize Analytics if tab is switched to
+  document.querySelector('[data-tab="tab-analytics"]').addEventListener('click', () => {
+      analyticsManager.init();
+  });
 
   // Settings Modal Tabs
   const modalTabBtns = document.querySelectorAll(".m-tab-btn");
@@ -1166,7 +1356,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // History Filter
   const filterEl = el("history-filter");
   if (filterEl) {
-    filterEl.addEventListener("change", renderHistoryTable);
+    filterEl.addEventListener("change", renderHistoryTiles);
   }
 
   // AI Chatbot logic

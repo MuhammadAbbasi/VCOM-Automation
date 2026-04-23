@@ -26,6 +26,13 @@ from datetime import datetime
 from pathlib import Path
 from logging.handlers import RotatingFileHandler
 
+# Fix for Windows console encoding issues with emojis/special characters
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except:
+        pass
+
 from playwright.sync_api import sync_playwright
 
 # ---------------------------------------------------------------------------
@@ -44,6 +51,15 @@ logging.basicConfig(
     ],
 )
 logger = logging.getLogger("vcom_monitor")
+
+# Add SQLite log handler for extraction logs
+try:
+    from db.db_manager import SQLiteLogHandler
+    _sqlite_handler = SQLiteLogHandler(source_name="extraction")
+    _sqlite_handler.setFormatter(logging.Formatter("%(asctime)s [EXTRACTION] %(levelname)s %(message)s"))
+    logger.addHandler(_sqlite_handler)
+except Exception:
+    pass  # DB module may not be initialized yet
 
 # ---------------------------------------------------------------------------
 # Metric extractors
@@ -70,6 +86,7 @@ METRICS = [
 # ---------------------------------------------------------------------------
 
 def run_extraction_cycle(page, cycle_count: int):
+    cycle_start = time.time()
     logger.info(f"=== Starting Extraction Cycle #{cycle_count} ===")
     
     # 0. Quick session check
@@ -89,7 +106,9 @@ def run_extraction_cycle(page, cycle_count: int):
     select_inverters(page)
 
     # 2. Extract metrics
+    metric_timings = {}
     for name, extractor in METRICS:
+        metric_start = time.time()
         logger.info(f"Extracting: {name}")
         success = False
         for attempt in range(1, 4):  # Increased to 3 attempts
@@ -111,12 +130,32 @@ def run_extraction_cycle(page, cycle_count: int):
                 
                 time.sleep(3)
         
-        if not success:
-            logger.error(f"  {name} failed after all attempts.")
+        duration = time.time() - metric_start
+        metric_timings[name] = duration
+        if success:
+            logger.info(f"  [OK] {name} extracted in {duration:.2f}s")
+        else:
+            logger.error(f"  [FAIL] {name} failed after {duration:.2f}s")
+
+    total_duration = time.time() - cycle_start
+    logger.info(f"=== Cycle #{cycle_count} Finished in {total_duration:.2f}s ===")
+    
+    # Optional: Detailed summary
+    summary = " | ".join([f"{n}: {d:.1f}s" for n, d in metric_timings.items()])
+    logger.info(f"Summary: {summary}")
 
 def main() -> None:
     print("[EXTRACTION] Script started.", flush=True)
     ERRORS_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Initialize databases
+    try:
+        from db.db_manager import init_databases
+        init_databases()
+        logger.info("Databases initialized.")
+    except Exception as e:
+        logger.warning(f"Could not initialize databases: {e}")
+
     logger.info("VCOM monitor starting...")
 
     trigger_path = ROOT / ".trigger_extraction"

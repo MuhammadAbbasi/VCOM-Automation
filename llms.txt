@@ -9,7 +9,7 @@ A real-time SCADA monitoring and forensic analysis pipeline for the Mazara 01 PV
 ## 🛠️ Tech Stack
 - **Backend:** Python 3.10+, FastAPI
 - **Automation:** Playwright (Chromium)
-- **Intelligence:** Qwen 2.5 7B (Remote via Ollama @ 192.168.10.126)
+- **Intelligence:** Qwen 3.5 9B (Local via Ollama @ localhost:11434)
 - **Frontend:** Vanilla JS, CSS3 (Dark Mode, WebSocket-driven)
 - **Messaging:** Telegram Bot API
 

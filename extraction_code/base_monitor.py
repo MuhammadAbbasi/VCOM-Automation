@@ -72,53 +72,36 @@ def write_df_to_csv(filename: str, df: pd.DataFrame) -> None:
 
 
 def export_metric(df: pd.DataFrame, prefix: str) -> None:
-    """Stamp with current time and overwrite the daily CSV file with latest data."""
+    """Stamp with current time and save to the SQLite database."""
     if df is None or df.empty:
         logger.warning(f"[{prefix}] Empty DataFrame — skipping export.")
         return
 
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
     current_time = get_timestamp_fetch()
 
     if "Timestamp Fetch" not in df.columns:
         df.insert(0, "Timestamp Fetch", current_time)
 
-    filepath = str(DATA_DIR / f"{prefix}_{today_str()}.csv")
-    write_df_to_csv(filepath, df)
-    logger.info(f"[OK] Overwritten with {len(df)} rows -> {filepath}")
-
-    # Update extraction_status.json for dashboard ingestion visualization
+    # Save to database
     try:
-        import json
-        from datetime import datetime
-        status_file = DATA_DIR / "extraction_status.json"
-        
-        status_data = {}
-        if status_file.exists():
-            with open(status_file, "r", encoding="utf-8") as f:
-                try:
-                    status_data = json.load(f)
-                except json.JSONDecodeError:
-                    pass
-                    
-        date_key = today_str()
-        if date_key not in status_data:
-            status_data[date_key] = {}
-            
-        # Map the naming convention seamlessly
+        from db.db_manager import save_metric, save_extraction_status
+        date_str = today_str()
+        save_metric(df, prefix, date_str)
+        logger.info(f"[OK] Saved {len(df)} rows -> DB ({prefix}, {date_str})")
+
+        # Map the naming convention for extraction status tracking
         key_name = prefix.replace(" ", "_") if prefix in ["PR inverter", "Potenza AC", "Corrente DC", "Resistenza di isolamento"] else prefix
         if prefix == "Resistenza di isolamento": key_name = "Resistenza_Isolamento"
         if prefix == "PR inverter": key_name = "PR"
-        
-        status_data[date_key][key_name] = {
-            "status": "success",
-            "timestamp": datetime.now().isoformat(timespec="seconds")
-        }
-        
-        with open(status_file, "w", encoding="utf-8") as f:
-            json.dump(status_data, f, indent=2)
+
+        save_extraction_status(date_str, key_name, "success")
     except Exception as e:
-        logger.warning(f"Failed to update extraction_status.json: {e}")
+        logger.error(f"[DB] Failed to save {prefix} to database: {e}")
+        # Fallback: write to CSV so data isn't lost
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        filepath = str(DATA_DIR / f"{prefix}_{today_str()}.csv")
+        write_df_to_csv(filepath, df)
+        logger.warning(f"[FALLBACK] Wrote CSV: {filepath}")
 
 
 # ---------------------------------------------------------------------------
@@ -295,8 +278,8 @@ def select_inverters(page) -> None:
         if sungrow_cb.is_visible() and sungrow_cb.is_checked():
             sungrow_cb.uncheck()
 
-        # Refresh chart after selection
-        btn = page.locator('button:has-text("Aggiorna grafico"), button:has-text("Update chart")')
+        # Refresh chart after selection - Use a specific selector to avoid strict mode violation
+        btn = page.locator('#chartComponentSelection button:has-text("Aggiorna grafico"), #chartComponentSelection button:has-text("Update chart")').first
         if btn.is_visible():
             btn.click()
             time.sleep(2)

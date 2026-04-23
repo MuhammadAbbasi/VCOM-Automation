@@ -9,3 +9,4 @@ jinja2
 python-multipart
 pyngrok
 requests
+# sqlite3 — included in Python stdlib, no install needed

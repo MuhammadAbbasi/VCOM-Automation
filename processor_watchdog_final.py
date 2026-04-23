@@ -117,6 +117,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger("watchdog_final")
 
+# Add SQLite log handler
+try:
+    from db.db_manager import SQLiteLogHandler
+    _sqlite_handler = SQLiteLogHandler(source_name="watchdog")
+    _sqlite_handler.setFormatter(logging.Formatter("%(asctime)s [WATCHDOG] %(levelname)s %(message)s"))
+    logger.addHandler(_sqlite_handler)
+except Exception:
+    pass  # DB module may not be ready yet
+
 
 class NumpyEncoder(json.JSONEncoder):
     """JSON encoder that handles numpy types and Pandas objects."""
@@ -298,8 +307,18 @@ def send_telegram_notification(text: str, settings: dict, use_personal: bool = F
 # ---------------------------------------------------------------------------
 
 def load_metric(date_str: str, metric_prefix: str) -> pd.DataFrame:
-    """Load metric from CSV and deduplicate. Handles space/underscore prefixes."""
-    # Try both underscore and space versions
+    """Load metric from the SQLite database. Falls back to CSV if DB has no data."""
+    # Try database first
+    try:
+        from db.db_manager import load_metric as db_load_metric
+        df = db_load_metric(date_str, metric_prefix)
+        if df is not None and not df.empty:
+            logger.info(f"[DB] Loaded {metric_prefix} for {date_str} ({len(df)} rows)")
+            return df
+    except Exception as e:
+        logger.debug(f"[DB] Failed to load {metric_prefix} from DB: {e}")
+
+    # Fallback: try CSV files (backward compatibility)
     paths = [
         DATA_DIR / f"{metric_prefix}_{date_str}.csv",
         DATA_DIR / f"{metric_prefix.replace('_', ' ')}_{date_str}.csv"
@@ -313,21 +332,18 @@ def load_metric(date_str: str, metric_prefix: str) -> pd.DataFrame:
 
     if csv_path:
         try:
-            # Load with auto-separator detection
             df = pd.read_csv(str(csv_path), sep=None, engine='python', encoding="utf-8")
             
-            # Critical: Data cleaning and deduplication
             if not df.empty and "Ora" in df.columns:
-                # Keep the last occurrence (most recent scrape) for each timestamp
                 df = df.drop_duplicates(subset=["Ora"], keep="last").reset_index(drop=True)
                 
-            logger.info(f"Loaded {csv_path.name} ({len(df)} unique rows)")
+            logger.info(f"[CSV Fallback] Loaded {csv_path.name} ({len(df)} unique rows)")
             return df
         except Exception as e:
             logger.error(f"Failed to load {csv_path.name}: {e}")
             pass
 
-    logger.warning(f"{metric_prefix}_{date_str}.csv not found")
+    logger.warning(f"{metric_prefix}_{date_str} not found in DB or CSV")
     return None
 
 
@@ -934,18 +950,15 @@ def analyze_site(date_str: str) -> None:
         macro_health["sunset_time"] = format_ora(theory_sunset)
         
         # Latest sync from extraction status if available
-        status_path = DATA_DIR / "extraction_status.json"
-        if status_path.exists():
-            try:
-                with open(status_path, "r", encoding="utf-8") as f:
-                    estatus = json.load(f)
-                    if date_str in estatus:
-                        # Find the latest timestamp across all metrics for that day
-                        ts_list = [v["timestamp"] for v in estatus[date_str].values() if "timestamp" in v]
-                        if ts_list:
-                            macro_health["last_data_fetch"] = max(ts_list)
-            except:
-                pass
+        try:
+            from db.db_manager import get_extraction_status
+            estatus = get_extraction_status(date_str)
+            if estatus:
+                ts_list = [v["timestamp"] for v in estatus.values() if "timestamp" in v]
+                if ts_list:
+                    macro_health["last_data_fetch"] = max(ts_list)
+        except Exception:
+            pass
 
         logger.info("Evaluating MPPT DC Data...")
         md_report_path = DATA_DIR / f"mppt_analysis_report_{date_str}.md"
@@ -971,23 +984,18 @@ def analyze_site(date_str: str) -> None:
 
         # Build JSON snapshot and process anomalies
         timestamp = datetime.now().isoformat(timespec="seconds")
-        json_path = DATA_DIR / f"dashboard_data_{date_str}.json"
         
-        # Load previous state
-        existing_data = {}
-        if json_path.exists():
-            try:
-                with open(json_path, "r", encoding="utf-8") as f:
-                    existing_data = json.load(f)
-            except:
-                pass
+        # Load previous state from database
+        try:
+            from db.db_manager import load_latest_snapshot
+            last_snap = load_latest_snapshot(date_str)
+        except Exception:
+            last_snap = None
                 
         historical_trail = []
         active_anomalies_prev = []
         
-        if existing_data:
-            last_ts = sorted(existing_data.keys())[-1]
-            last_snap = existing_data[last_ts]
+        if last_snap:
             historical_trail = last_snap.get("historical_trail", [])
             active_anomalies_prev = last_snap.get("active_anomalies", [])
             
@@ -1262,13 +1270,11 @@ def analyze_site(date_str: str) -> None:
                 
         # Load extraction status for dashboard ingestion cards
         file_status = {}
-        if status_path.exists():
-            try:
-                with open(status_path, "r", encoding="utf-8") as f:
-                    estatus = json.load(f)
-                    file_status = estatus.get(date_str, {})
-            except Exception:
-                pass
+        try:
+            from db.db_manager import get_extraction_status
+            file_status = get_extraction_status(date_str)
+        except Exception:
+            pass
 
         snapshot = {
             "macro_health": macro_health,
@@ -1280,18 +1286,30 @@ def analyze_site(date_str: str) -> None:
             "sensor_data": sensor_data
         }
 
-
-        # Save merged data (keep last 50 timestamps)
-        existing_data[timestamp] = snapshot
-        timestamps = sorted(existing_data.keys())
-        if len(timestamps) > 50:
-            for old_ts in timestamps[:-50]:
-                del existing_data[old_ts]
-        
-        # Write JSON
-        with open(json_path, "w", encoding="utf-8") as f:
-            json.dump(existing_data, f, indent=2, cls=NumpyEncoder)
-        logger.info(f"Wrote JSON: {json_path}")
+        # Save snapshot to database
+        try:
+            from db.db_manager import save_analysis_snapshot
+            save_analysis_snapshot(date_str, timestamp, snapshot)
+            logger.info(f"Saved analysis snapshot to DB for {date_str} at {timestamp}")
+        except Exception as e:
+            logger.error(f"Failed to save snapshot to DB: {e}")
+            # Fallback: write JSON file
+            json_path = DATA_DIR / f"dashboard_data_{date_str}.json"
+            existing_data = {}
+            if json_path.exists():
+                try:
+                    with open(json_path, "r", encoding="utf-8") as f:
+                        existing_data = json.load(f)
+                except Exception:
+                    pass
+            existing_data[timestamp] = snapshot
+            timestamps_sorted = sorted(existing_data.keys())
+            if len(timestamps_sorted) > 50:
+                for old_ts in timestamps_sorted[:-50]:
+                    del existing_data[old_ts]
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(existing_data, f, indent=2, cls=NumpyEncoder)
+            logger.warning(f"[FALLBACK] Wrote JSON: {json_path}")
 
         # Log summary
         logger.info(f"Health: {macro_health['online']} online, {macro_health['tripped']} tripped, "
@@ -1306,21 +1324,35 @@ def analyze_site(date_str: str) -> None:
 # ---------------------------------------------------------------------------
 
 class MetricFileHandler(FileSystemEventHandler):
+    """Watches for database or CSV file changes and triggers analysis."""
     def on_created(self, event):
-        if event.is_directory or not event.src_path.endswith(".csv"):
+        if event.is_directory:
             return
-        time.sleep(1)
-        self._check_and_analyze()
+        if event.src_path.endswith(".csv") or event.src_path.endswith(".db"):
+            time.sleep(1)
+            self._check_and_analyze()
 
     def on_modified(self, event):
-        if event.is_directory or not event.src_path.endswith(".csv"):
+        if event.is_directory:
             return
-        self._check_and_analyze()
+        if event.src_path.endswith(".csv") or event.src_path.endswith(".db"):
+            self._check_and_analyze()
 
     def _check_and_analyze(self):
         today = datetime.now().strftime("%Y-%m-%d")
         
-        # Updated to match extractor naming conventions (spaces vs underscores)
+        # Check the database for available metrics first
+        try:
+            from db.db_manager import get_extraction_status
+            estatus = get_extraction_status(today)
+            if len(estatus) >= 5:  # At least 5 of 6 metrics extracted
+                logger.info(f"DB has {len(estatus)} metrics for {today}. Analyzing...")
+                analyze_site(today)
+                return
+        except Exception:
+            pass
+
+        # Fallback: check CSV files
         required_prefixes = [
             "PR inverter", "Potenza AC", "Corrente DC",
             "Resistenza di isolamento", "Temperatura", "Irraggiamento"
@@ -1328,27 +1360,37 @@ class MetricFileHandler(FileSystemEventHandler):
 
         missing = []
         for prefix in required_prefixes:
-            # Check both space and underscore versions
             p1 = DATA_DIR / f"{prefix}_{today}.csv"
             p2 = DATA_DIR / f"{prefix.replace(' ', '_')}_{today}.csv"
             if not p1.exists() and not p2.exists():
                 missing.append(prefix)
 
         if not missing:
-            logger.info(f"Complete set for {today}. Analyzing...")
+            logger.info(f"Complete CSV set for {today}. Analyzing...")
             analyze_site(today)
-        else:
-            # Optional: log what's missing every once in a while
-            pass
 
 
 def main():
+    # Initialize databases on startup
+    try:
+        from db.db_manager import init_databases
+        init_databases()
+        logger.info("Databases initialized.")
+    except Exception as e:
+        logger.warning(f"Could not initialize databases: {e}")
+
     logger.info("Starting VCOM Watchdog (Final)...")
     logger.info(f"Monitoring: {DATA_DIR}")
 
     handler = MetricFileHandler()
     observer = Observer()
     observer.schedule(handler, str(DATA_DIR), recursive=False)
+    
+    # Also watch the DB directory for changes
+    db_dir = ROOT / "db"
+    db_dir.mkdir(parents=True, exist_ok=True)
+    observer.schedule(handler, str(db_dir), recursive=False)
+    
     observer.start()
 
     try:

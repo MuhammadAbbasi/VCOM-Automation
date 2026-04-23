@@ -102,11 +102,10 @@ manager = ConnectionManager()
 
 # Background Task for Data Push
 async def data_broadcaster():
-    last_mtime = 0
+    last_snapshot_ts = ""
     while True:
         try:
             today = datetime.now().strftime("%Y-%m-%d")
-            json_path = DATA_DIR / f"dashboard_data_{today}.json"
             busy_path = ROOT / ".extraction_busy"
             if not hasattr(manager, "_logged_path"):
                 print(f"[DASHBOARD] Monitoring busy flag at: {busy_path.absolute()}")
@@ -120,16 +119,29 @@ async def data_broadcaster():
                 "is_extracting": is_extracting
             })
 
-            if json_path.exists():
-                mtime = json_path.stat().st_mtime
-                if mtime > last_mtime:
-                    last_mtime = mtime
+            # Try loading from database first
+            try:
+                from db.db_manager import load_latest_snapshot
+                latest_data = load_latest_snapshot(today)
+                if latest_data:
+                    # Use last_sync as a change-detection key
+                    snap_ts = latest_data.get("macro_health", {}).get("last_sync", "")
+                    if snap_ts != last_snapshot_ts:
+                        last_snapshot_ts = snap_ts
+                        await manager.broadcast({"type": "data_update", "data": latest_data})
+            except Exception:
+                # Fallback: read from JSON file
+                json_path = DATA_DIR / f"dashboard_data_{today}.json"
+                if json_path.exists():
                     with open(json_path, "r", encoding="utf-8") as f:
                         data = json.load(f)
                     if data:
                         latest_key = sorted(data.keys())[-1]
                         latest_data = data[latest_key]
-                        await manager.broadcast({"type": "data_update", "data": latest_data})
+                        snap_ts = latest_data.get("macro_health", {}).get("last_sync", "")
+                        if snap_ts != last_snapshot_ts:
+                            last_snapshot_ts = snap_ts
+                            await manager.broadcast({"type": "data_update", "data": latest_data})
         except Exception:
             pass
         await asyncio.sleep(2)
@@ -160,15 +172,22 @@ async def index():
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
-        # Send initial data immediately
+        # Send initial data immediately from database
         today = datetime.now().strftime("%Y-%m-%d")
-        json_path = DATA_DIR / f"dashboard_data_{today}.json"
-        if json_path.exists():
-            with open(json_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if data:
-                latest_key = sorted(data.keys())[-1]
-                await websocket.send_json({"type": "data_update", "data": data[latest_key]})
+        try:
+            from db.db_manager import load_latest_snapshot
+            latest_data = load_latest_snapshot(today)
+            if latest_data:
+                await websocket.send_json({"type": "data_update", "data": latest_data})
+        except Exception:
+            # Fallback: read from JSON file
+            json_path = DATA_DIR / f"dashboard_data_{today}.json"
+            if json_path.exists():
+                with open(json_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if data:
+                    latest_key = sorted(data.keys())[-1]
+                    await websocket.send_json({"type": "data_update", "data": data[latest_key]})
                 
         # Send initial settings
         from processor_watchdog_final import load_user_settings
@@ -220,18 +239,25 @@ async def update_settings(request: Request, background_tasks: BackgroundTasks, u
 
 @app.post("/api/forensic/rescan")
 async def rescan(user: str = Depends(verify_credentials)):
-    """Delete current today's JSON, clear error folders, and re-trigger analyze_site."""
+    """Delete current today's snapshots, clear error folders, and re-trigger analyze_site."""
     today = datetime.now().strftime("%Y-%m-%d")
-    json_path = DATA_DIR / f"dashboard_data_{today}.json"
     root_errors = ROOT / "errors"
     vcom_screenshots = ROOT / "VCOM_Screenshots"
 
     try:
-        # 1. Delete JSON if exists to force a fresh start
+        # 1. Delete DB snapshots for today
+        try:
+            from db.db_manager import delete_snapshots
+            delete_snapshots(today)
+        except Exception:
+            pass
+
+        # 2. Also delete JSON file if it exists (legacy cleanup)
+        json_path = DATA_DIR / f"dashboard_data_{today}.json"
         if json_path.exists():
             json_path.unlink()
         
-        # 2. Clear error screenshots
+        # 3. Clear error screenshots
         for folder in [root_errors, vcom_screenshots]:
             if folder.exists():
                 for f in folder.glob("*.png"):
@@ -240,7 +266,7 @@ async def rescan(user: str = Depends(verify_credentials)):
                     except Exception:
                         pass
 
-        # 3. Run analysis
+        # 4. Run analysis
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, analyze_site, today)
         
@@ -287,20 +313,63 @@ async def chat_endpoint(request: Request, user: str = Depends(verify_credentials
         if not question:
             return JSONResponse({"status": "error", "message": "No question provided."}, status_code=400)
         
-        # Load the latest state to pass as context
+        # Load the latest state from database
         today = datetime.now().strftime("%Y-%m-%d")
-        json_path = DATA_DIR / f"dashboard_data_{today}.json"
         latest_data = None
-        if json_path.exists():
-            with open(json_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                if data:
-                    latest_key = sorted(data.keys())[-1]
-                    latest_data = data[latest_key]
+        try:
+            from db.db_manager import load_latest_snapshot
+            latest_data = load_latest_snapshot(today)
+        except Exception:
+            # Fallback: read from JSON
+            json_path = DATA_DIR / f"dashboard_data_{today}.json"
+            if json_path.exists():
+                with open(json_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if data:
+                        latest_key = sorted(data.keys())[-1]
+                        latest_data = data[latest_key]
         
         # Call the LLM
         answer = ask_llm(question, latest_data, user_id="DASHBOARD_USER")
         return JSONResponse({"status": "success", "answer": answer})
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+
+
+# ---------------------------------------------------------------------------
+# Analytics Endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/api/analytics/config")
+async def get_analytics_config(user: str = Depends(verify_credentials)):
+    """Return available metrics and inverters for the analytics UI."""
+    try:
+        from db.db_manager import METRIC_TABLE_MAP, get_available_inverters, get_available_dates
+        return JSONResponse({
+            "metrics": list(METRIC_TABLE_MAP.keys()),
+            "inverters": get_available_inverters(),
+            "available_dates": get_available_dates()
+        })
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+
+
+@app.get("/api/analytics/data")
+async def get_analytics_data(
+    metric: str, 
+    start: str, 
+    end: str, 
+    inverters: str = None, 
+    user: str = Depends(verify_credentials)
+):
+    """Fetch historical data for charting."""
+    try:
+        from db.db_manager import get_metric_history
+        
+        inv_list = [i.strip() for i in inverters.split(",") if i and i.strip()] if inverters else None
+        data = get_metric_history(metric, start, end, inv_list)
+        
+        return JSONResponse(data)
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
 
@@ -360,8 +429,8 @@ if __name__ == "__main__":
     print("\n" + "="*60)
     print("    MAZARA DASHBOARD STARTING")
     print("="*60)
-    print(f"[*] Local:   http://localhost:{port}")
-    print(f"[*] Network: http://{local_ip}:{port}")
+    print(f"[*] Local:   http://localhost:{port}", flush=True)
+    print(f"[*] Network: http://{local_ip}:{port}\n", flush=True)
     
     # Try to start Ngrok
     ngrok_token = cfg.get("NGROK_AUTH_TOKEN")
@@ -372,14 +441,14 @@ if __name__ == "__main__":
         
         public_url = setup_ngrok(ngrok_token, port, ng_user, ng_pass)
         if public_url:
-            print(f"[*] Remote Access (Public): {public_url}")
+            print(f"[*] Remote Access (Public): {public_url}\n", flush=True)
             print(f"[*] Security Policy: Basic Auth (User: {ng_user})")
         else:
             print("[!] Ngrok failed: Is 'pyngrok' installed? Run: pip install pyngrok")
     else:
         print("[!] No NGROK_AUTH_TOKEN found in config.json. Remote access via Ngrok is disabled.")
     
-    print("="*60 + "\n")
+    print("="*60 + "\n", flush=True)
 
     uvicorn.run(
         app,

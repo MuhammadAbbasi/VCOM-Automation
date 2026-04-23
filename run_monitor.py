@@ -23,6 +23,13 @@ import time
 import signal
 from pathlib import Path
 
+# Fix for Windows console encoding issues
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except:
+        pass
+
 ROOT = Path(__file__).resolve().parent
 
 RESTART_COOLDOWN = 5
@@ -102,6 +109,12 @@ def launch_service(svc: dict) -> subprocess.Popen:
     env["PYTHONUNBUFFERED"] = "1"
     
     if svc.get("new_console"):
+        # DASHBOARD specific: resolve port conflict if any
+        if name == "DASHBOARD":
+            port = 8080 # Default for Mazara Dashboard
+            if _port_in_use(port):
+                kill_port_process(port)
+
         # Dashboard → separate console window
         creationflags = CREATE_NEW_CONSOLE if os.name == "nt" else 0
         proc = subprocess.Popen(
@@ -141,6 +154,23 @@ def launch_service(svc: dict) -> subprocess.Popen:
 def _port_in_use(port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex(("127.0.0.1", port)) == 0
+
+
+def kill_port_process(port: int):
+    """Find and kill the process using the specified port on Windows."""
+    if os.name != "nt": return
+    try:
+        # Find PID using netstat
+        output = subprocess.check_output(f"netstat -ano | findstr :{port}", shell=True).decode()
+        for line in output.splitlines():
+            if "LISTENING" in line:
+                parts = line.split()
+                pid = parts[-1]
+                print(f"[ORCHESTRATOR] Conflict: Port {port} is used by PID {pid}. Killing it...", flush=True)
+                subprocess.run(["taskkill", "/F", "/PID", pid], capture_output=True)
+                time.sleep(1) # Give OS time to release the socket
+    except Exception:
+        pass
 
 
 def monitor_services() -> None:

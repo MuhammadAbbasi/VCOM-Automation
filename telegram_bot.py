@@ -68,29 +68,22 @@ def load_settings() -> dict:
         return {}
 
 def get_latest_dashboard_json() -> dict | None:
-    # Try multiple times in case of file lock
-    for _ in range(3):
-        try:
-            # 1. Try today's file first
-            today = datetime.now().strftime("%Y-%m-%d")
-            path = DATA_DIR / f"dashboard_data_{today}.json"
-            
-            # 2. Fallback to any dashboard file if today's is missing
-            if not path.exists():
-                json_files = sorted(DATA_DIR.glob("dashboard_data_*.json"))
-                if not json_files: return None
-                path = json_files[-1]
-
-            with open(path, "r", encoding="utf-8") as f:
-                full_history = json.load(f)
-                if not full_history: 
-                    time.sleep(0.5)
-                    continue
-                latest_ts = sorted(full_history.keys())[-1]
-                return full_history[latest_ts]
-        except Exception as e:
-            logger.warning(f"Dashboard JSON read attempt failed: {e}")
-            time.sleep(0.5)
+    """Retrieve the latest analysis snapshot from the database."""
+    try:
+        from db.db_manager import load_latest_snapshot
+        today = datetime.now().strftime("%Y-%m-%d")
+        latest_data = load_latest_snapshot(today)
+        if latest_data:
+            return latest_data
+        
+        # Fallback: check recent dates if today is empty
+        from db.db_manager import _get_data_conn
+        conn = _get_data_conn()
+        res = conn.execute("SELECT date FROM analysis_snapshots ORDER BY date DESC, timestamp DESC LIMIT 1").fetchone()
+        if res:
+            return load_latest_snapshot(res[0])
+    except Exception as e:
+        logger.warning(f"Database snapshot read failed: {e}")
     return None
 
 def build_status_message(data: dict) -> str:
@@ -152,17 +145,29 @@ class TelegramBot:
             return r.json().get("result", []) if r.ok else []
         except Exception: return []
 
-    def send_message(self, chat_id: str | int, text: str, markdown: bool = True) -> None:
+    def delete_message(self, chat_id: str | int, message_id: int) -> None:
+        try:
+            requests.post(f"{self.base}/deleteMessage", json={"chat_id": chat_id, "message_id": message_id}, timeout=API_TIMEOUT)
+        except Exception: pass
+
+    def send_message(self, chat_id: str | int, text: str, markdown: bool = True, force_reply: bool = False) -> int | None:
         payload = {"chat_id": chat_id, "text": text}
         if markdown: payload["parse_mode"] = "Markdown"
+        if force_reply:
+            payload["reply_markup"] = {"force_reply": True, "selective": True}
+            
         try:
             resp = requests.post(f"{self.base}/sendMessage", json=payload, timeout=API_TIMEOUT)
             if not resp.ok and markdown:
                 # Retry without markdown if it failed (parsing errors)
                 payload.pop("parse_mode")
-                requests.post(f"{self.base}/sendMessage", json=payload, timeout=API_TIMEOUT)
+                resp = requests.post(f"{self.base}/sendMessage", json=payload, timeout=API_TIMEOUT)
+            
+            if resp.ok:
+                return resp.json().get("result", {}).get("message_id")
         except Exception as e:
             logger.warning(f"Failed to send: {e}")
+        return None
 
     def is_trigger(self, text: str) -> bool:
         lower = text.strip().lower()
@@ -217,7 +222,9 @@ def main() -> None:
     
     ALLOWED_IDS = [str(tg.get("chat_id")), str(tg.get("personal_id"))]
     ai_semaphore = threading.Semaphore(20)
-        
+    
+    # State for handling /ai question waiting
+    waiting_for_ai = {} # {chat_id: {"prompt_msg_id": int}}
     while True:
         try:
             updates = bot.get_updates()
@@ -236,7 +243,14 @@ def main() -> None:
                     logger.warning(f"Unauthorized access attempt from chat_id {chat_id}")
                     continue
 
+                # Check if this is a reply to the AI prompt or if we are waiting for one
+                reply_to = msg.get("reply_to_message")
+                is_ai_reply = reply_to and "What would you like to know" in reply_to.get("text", "")
+                is_waiting_state = chat_id in waiting_for_ai
+                
                 if text.lower().startswith("/start"):
+                    # Clear waiting state on /start
+                    waiting_for_ai.pop(chat_id, None)
                     bot.send_message(chat_id,
                         "🌞 *Mazara 01 — Solar Plant Intelligence*\n"
                         "━━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -254,11 +268,18 @@ def main() -> None:
                     )
                     continue
 
-                elif text.lower().startswith("/ai"):
-                    question = text[3:].strip()
-                    if not question:
-                        bot.send_message(chat_id, "🤖 Ask me after /ai")
-                        continue
+                elif text.lower().startswith("/ai") or is_ai_reply or is_waiting_state:
+                    question = text.strip()
+                    
+                    if text.lower().startswith("/ai"):
+                        question = text[3:].strip()
+                        if not question:
+                            msg_id = bot.send_message(chat_id, "🤖 *I'm listening!* What would you like to know about the plant?", force_reply=True)
+                            waiting_for_ai[chat_id] = {"prompt_msg_id": msg_id}
+                            continue
+                    
+                    # If we got here and were waiting, clear the state
+                    state = waiting_for_ai.pop(chat_id, None)
                     
                     bot.send_message(chat_id, "⏳ _Thinking..._")
                     data = get_latest_dashboard_json()
@@ -273,7 +294,8 @@ def main() -> None:
                                 bot.send_message(chat_id, reply)
                             except Exception as ai_e:
                                 logger.error(f"Telegram AI Thread error: {ai_e}")
-                                bot.send_message(chat_id, "⚠️ AI Agent connection failed.")
+                                error_msg = "⚠️ AI Agent failed to respond (Timeout)." if "timeout" in str(ai_e).lower() else f"⚠️ AI Agent error: {str(ai_e)[:50]}"
+                                bot.send_message(chat_id, error_msg)
                             finally:
                                 ai_semaphore.release()
 
@@ -282,6 +304,7 @@ def main() -> None:
                         bot.send_message(chat_id, "❌ AI agent not found.")
 
                 elif text.lower().startswith("/alerts") or "alert" in text.lower():
+                    waiting_for_ai.pop(chat_id, None)
                     data = get_latest_dashboard_json()
                     if data and data.get("active_anomalies"):
                         alert_lines = []
@@ -298,6 +321,7 @@ def main() -> None:
                         bot.send_message(chat_id, "✅ No active alerts.")
 
                 elif text.lower().startswith("/daily") or "daily" in text.lower():
+                    waiting_for_ai.pop(chat_id, None)
                     data = get_latest_dashboard_json()
                     if data:
                         h = data.get("macro_health", {})
@@ -311,6 +335,7 @@ def main() -> None:
                         bot.send_message(chat_id, "⚠️ Data not found.")
 
                 elif bot.is_trigger(text) or text.lower().startswith("/status"):
+                    waiting_for_ai.pop(chat_id, None)
                     data = get_latest_dashboard_json()
                     bot.send_message(chat_id, build_status_message(data) if data else "⚠️ No data.")
                 

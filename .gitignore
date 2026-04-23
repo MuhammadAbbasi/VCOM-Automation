@@ -26,6 +26,9 @@ config.json.example
 # GENERATED DATA FILES (Runtime Output)
 # ============================================================================
 extracted_data/
+db/*.db
+db/*.db-wal
+db/*.db-shm
 *.xlsx
 *.xls
 *.csv
