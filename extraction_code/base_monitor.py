@@ -271,12 +271,12 @@ def select_inverters(page) -> None:
         for inv_id in cfg.get("INVERTER_IDS", []):
             cb = page.locator(f"input#checkbox-{inv_id}")
             if cb.is_visible():
-                cb.check()
+                cb.check(force=True) # Use force=True as labels often intercept clicks
 
         # Ensure SunGrow is NOT checked
         sungrow_cb = page.locator('input[id*="Id27848313"]')
         if sungrow_cb.is_visible() and sungrow_cb.is_checked():
-            sungrow_cb.uncheck()
+            sungrow_cb.uncheck(force=True)
 
         # Refresh chart after selection - Use a specific selector to avoid strict mode violation
         btn = page.locator('#chartComponentSelection button:has-text("Aggiorna grafico"), #chartComponentSelection button:has-text("Update chart")').first
@@ -347,17 +347,18 @@ def click_dati_tab(page, extra_wait: float = 0) -> None:
             time.sleep(0.5)  # brief settle after scroll
             
             # Re-query the locator each attempt to avoid stale references
-            tab = page.get_by_text("Dati", exact=True).last
+            # Robust exact-match regex locator for Dati/Data tab
+            tab = page.locator('text=/^\\s*(Dati|Data)\\s*$/i').last
             
             # Use wait_for first (doesn't require attached), then scroll
-            tab.wait_for(state="visible", timeout=20_000)
+            tab.wait_for(state="visible", timeout=15_000)
             
             try:
                 tab.scroll_into_view_if_needed()
             except Exception:
                 # If scroll fails (detached DOM), wait and re-query
                 time.sleep(1)
-                tab = page.get_by_text("Dati", exact=True).last
+                tab = page.locator('text=/^\\s*(Dati|Data)\\s*$/i').last
                 tab.wait_for(state="visible", timeout=10_000)
             
             # Check if already active
@@ -380,7 +381,12 @@ def click_dati_tab(page, extra_wait: float = 0) -> None:
         except Exception as e:
             last_err = e
             if attempt < max_attempts:
-                logger.warning(f"click_dati_tab attempt {attempt} failed ({type(e).__name__}), retrying...")
+                logger.warning(f"click_dati_tab attempt {attempt} failed ({type(e).__name__}). Reloading page...")
+                try:
+                    page.reload()
+                    time.sleep(5)
+                except Exception:
+                    pass
                 time.sleep(2)
             else:
                 logger.error(f"Failed to click 'Dati' tab button after {max_attempts} attempts: {e}")

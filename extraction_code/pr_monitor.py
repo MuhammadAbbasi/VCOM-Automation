@@ -11,7 +11,7 @@ def extract_pr(page) -> pd.DataFrame:
     logger.info("--- Extracting PR Inverter Data ---")
 
     logger.info("Clicking 'PR inverter' tab...")
-    page.locator('text="PR inverter"').first.click()
+    page.locator('text=/^\\s*PR inverter\\s*$/i').first.click(force=True)
     time.sleep(2)
     dismiss_popup(page)
 

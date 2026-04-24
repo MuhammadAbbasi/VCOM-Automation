@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 def extract_potenza_ac(page) -> pd.DataFrame:
     """Extract Potenza AC data from the VCOM Evaluation dashboard."""
     logger.info("Clicking 'Potenza AC' tab...")
-    page.locator('text="Potenza AC"').first.click()
+    page.locator('text=/^\\s*Potenza AC\\s*$/i').first.click(force=True)
     time.sleep(2)
     dismiss_popup(page)
 

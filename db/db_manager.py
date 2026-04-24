@@ -45,7 +45,7 @@ _thread_local = thread_local()
 # Connection Management
 # ---------------------------------------------------------------------------
 
-def _get_data_conn() -> sqlite3.Connection:
+def get_data_conn() -> sqlite3.Connection:
     """Get or create a thread-local connection to the data database."""
     conn = getattr(_thread_local, "data_conn", None)
     if conn is None:
@@ -58,7 +58,7 @@ def _get_data_conn() -> sqlite3.Connection:
     return conn
 
 
-def _get_logs_conn() -> sqlite3.Connection:
+def get_logs_conn() -> sqlite3.Connection:
     """Get or create a thread-local connection to the logs database."""
     conn = getattr(_thread_local, "logs_conn", None)
     if conn is None:
@@ -83,7 +83,7 @@ def init_databases() -> None:
 
 def _init_data_db() -> None:
     """Create the data database tables."""
-    conn = _get_data_conn()
+    conn = get_data_conn()
 
     # Corrente DC — normalized (one row per inverter/MPPT/timestamp)
     conn.execute("""
@@ -128,7 +128,7 @@ def _init_data_db() -> None:
 
 def _init_logs_db() -> None:
     """Create the logs database table."""
-    conn = _get_logs_conn()
+    conn = get_logs_conn()
 
     conn.execute("""
         CREATE TABLE IF NOT EXISTS logs (
@@ -229,7 +229,7 @@ def save_metric(df: pd.DataFrame, metric_name: str, date_str: str = None) -> Non
 
 def _save_wide_metric(df: pd.DataFrame, table_name: str, date_str: str) -> None:
     """Save a wide-format metric DataFrame to its table."""
-    conn = _get_data_conn()
+    conn = get_data_conn()
 
     # Add a _date column for partitioning by day
     df_out = df.copy()
@@ -248,7 +248,7 @@ def _save_wide_metric(df: pd.DataFrame, table_name: str, date_str: str) -> None:
 
 def _save_corrente_dc(df: pd.DataFrame, date_str: str) -> None:
     """Normalize the wide Corrente DC DataFrame and save to the normalized table."""
-    conn = _get_data_conn()
+    conn = get_data_conn()
 
     # Identify the Ora and Timestamp Fetch columns
     id_cols = [c for c in df.columns if c in ("Ora", "Timestamp Fetch")]
@@ -318,7 +318,7 @@ def load_metric(date_str: str, metric_name: str) -> pd.DataFrame | None:
 
 def _load_wide_metric(table_name: str, date_str: str) -> pd.DataFrame | None:
     """Load a wide-format metric from its table."""
-    conn = _get_data_conn()
+    conn = get_data_conn()
 
     try:
         df = pd.read_sql_query(
@@ -345,7 +345,7 @@ def _load_wide_metric(table_name: str, date_str: str) -> pd.DataFrame | None:
 
 def _load_corrente_dc(date_str: str) -> pd.DataFrame | None:
     """Load normalized DC data and pivot it back to wide format."""
-    conn = _get_data_conn()
+    conn = get_data_conn()
 
     try:
         df = pd.read_sql_query(
@@ -422,7 +422,7 @@ class NumpyEncoder(json.JSONEncoder):
 
 def save_analysis_snapshot(date_str: str, timestamp_str: str, snapshot_data: dict) -> None:
     """Save an analysis snapshot to the database."""
-    conn = _get_data_conn()
+    conn = get_data_conn()
 
     snapshot_json = json.dumps(snapshot_data, cls=NumpyEncoder)
     conn.execute(
@@ -446,7 +446,7 @@ def save_analysis_snapshot(date_str: str, timestamp_str: str, snapshot_data: dic
 
 def load_latest_snapshot(date_str: str) -> dict | None:
     """Load the most recent analysis snapshot for a given date."""
-    conn = _get_data_conn()
+    conn = get_data_conn()
 
     try:
         row = conn.execute(
@@ -465,7 +465,7 @@ def load_latest_snapshot(date_str: str) -> dict | None:
 
 def load_all_snapshots(date_str: str) -> dict:
     """Load all analysis snapshots for a given date as {timestamp: data}."""
-    conn = _get_data_conn()
+    conn =  get_data_conn()
 
     try:
         rows = conn.execute(
@@ -484,7 +484,7 @@ def load_all_snapshots(date_str: str) -> dict:
 
 def delete_snapshots(date_str: str) -> None:
     """Delete all analysis snapshots for a given date (used by rescan)."""
-    conn = _get_data_conn()
+    conn = get_data_conn()
     conn.execute("DELETE FROM analysis_snapshots WHERE date = ?", (date_str,))
     conn.commit()
 
@@ -495,7 +495,7 @@ def delete_snapshots(date_str: str) -> None:
 
 def save_extraction_status(date_str: str, metric_type: str, status: str = "success") -> None:
     """Record that a metric was extracted successfully."""
-    conn = _get_data_conn()
+    conn = get_data_conn()
 
     timestamp = datetime.now().isoformat(timespec="seconds")
 
@@ -516,7 +516,7 @@ def get_extraction_status(date_str: str) -> dict:
 
     Returns dict like: {"PR": {"status": "success", "timestamp": "..."}, ...}
     """
-    conn = _get_data_conn()
+    conn = get_data_conn()
 
     try:
         rows = conn.execute(
@@ -617,7 +617,7 @@ class SQLiteLogHandler(logging.Handler):
 
 def get_available_dates() -> list[str]:
     """Return a sorted list of all dates that have data in the DB."""
-    conn = _get_data_conn()
+    conn = get_data_conn()
 
     dates = set()
     try:
@@ -643,7 +643,7 @@ def get_available_dates() -> list[str]:
 def get_db_stats() -> dict:
     """Return basic statistics about the databases."""
     stats = {}
-    conn = _get_data_conn()
+    conn = get_data_conn()      
 
     try:
         tables = conn.execute(
@@ -657,7 +657,7 @@ def get_db_stats() -> dict:
 
     # Logs DB
     try:
-        logs_conn = _get_logs_conn()
+        logs_conn =     get_logs_conn()
         count = logs_conn.execute("SELECT COUNT(*) FROM logs").fetchone()[0]
         stats["logs"] = count
     except Exception:
@@ -683,7 +683,7 @@ def get_metric_history(metric_name: str, date_start: str, date_end: str, inverte
     Optimized for charting: returns a dict with timestamps and per-inverter data series.
     """
     table_name = _resolve_table_name(metric_name)
-    conn = _get_data_conn()
+    conn = get_data_conn()
     
     # We'll return a structure optimized for ApexCharts:
     # {
@@ -708,7 +708,7 @@ def get_metric_history(metric_name: str, date_start: str, date_end: str, inverte
                 query += f" AND inverter_id IN ({placeholders})"
                 params.extend(inverter_ids)
             
-            query += " GROUP BY date, ora, inverter_id ORDER BY date ASC, ora ASC"
+            query += " GROUP BY date, ora, inverter_id ORDER BY date ASC, CAST(ora AS REAL) ASC"
             df = pd.read_sql_query(query, conn, params=params)
             
             if df.empty: return {"timestamps": [], "series": []}
@@ -717,14 +717,13 @@ def get_metric_history(metric_name: str, date_start: str, date_end: str, inverte
             def format_ora(o):
                 try:
                     o_str = str(o)
+                    if ":" in o_str: return o_str
                     if "." in o_str:
                         h, m = o_str.split(".")
                         m = m.ljust(2, "0")[:2]
                         return f"{int(h):02d}:{int(m):02d}:00"
-                    else:
-                        return f"{int(o):02d}:00:00"
-                except:
-                    return str(o)
+                    return f"{int(o):02d}:00:00"
+                except: return str(o)
             
             df["ora"] = df["ora"].apply(format_ora)
             
@@ -734,8 +733,12 @@ def get_metric_history(metric_name: str, date_start: str, date_end: str, inverte
             
         else:
             # Wide table query
-            # NOTE: Wide tables use _date for partitioning
-            query = f'SELECT * FROM "{table_name}" WHERE _date >= ? AND _date <= ? ORDER BY _date ASC, Ora ASC'
+            cols_info = conn.execute(f'PRAGMA table_info("{table_name}")').fetchall()
+            col_names = [c[1] for c in cols_info]
+            has_ora = "Ora" in col_names
+            
+            order_clause = "ORDER BY _date ASC, Ora ASC" if has_ora else "ORDER BY _date ASC"
+            query = f'SELECT * FROM "{table_name}" WHERE _date >= ? AND _date <= ? {order_clause}'
             df = pd.read_sql_query(query, conn, params=(date_start, date_end))
             
             if df.empty: return {"timestamps": [], "series": []}
@@ -754,23 +757,23 @@ def get_metric_history(metric_name: str, date_start: str, date_end: str, inverte
             else:
                 cols_to_keep = [c for c in df.columns if c not in ["_date", "Ora", "Timestamp Fetch"]]
             
-            # Format Ora (HH.mm -> HH:mm)
-            def format_ora(o):
-                try:
-                    o_str = str(o)
-                    if "." in o_str:
-                        h, m = o_str.split(".")
-                        m = m.ljust(2, "0")[:2]
-                        return f"{int(h):02d}:{int(m):02d}:00"
-                    else:
-                        return f"{int(o):02d}:00:00"
-                except:
-                    return str(o)
-            
-            df["Ora"] = df["Ora"].apply(format_ora)
-            
             # Construct timestamps
-            df["ts"] = df["_date"] + "T" + df["Ora"].astype(str)
+            if has_ora:
+                def format_ora(o):
+                    try:
+                        o_str = str(o)
+                        if ":" in o_str: return o_str
+                        if "." in o_str:
+                            h, m = o_str.split(".")
+                            m = m.ljust(2, "0")[:2]
+                            return f"{int(h):02d}:{int(m):02d}:00"
+                        return f"{int(o):02d}:00:00"
+                    except: return str(o)
+                df["Ora"] = df["Ora"].apply(format_ora)
+                df["ts"] = df["_date"] + "T" + df["Ora"].astype(str)
+            else:
+                df["ts"] = df["_date"]
+            
             df = df.set_index("ts")
             
             pivoted = df[cols_to_keep]
@@ -799,3 +802,39 @@ def get_metric_history(metric_name: str, date_start: str, date_end: str, inverte
     except Exception as e:
         logger.error(f"Error fetching metric history: {e}")
         return {"timestamps": [], "series": [], "error": str(e)}
+
+
+def get_daily_sensor_history(date_str: str) -> dict:
+    """
+    Fetch all historical data for environmental sensors (irraggiamento table)
+    for a specific day, returning it in a format suitable for sparkline lookups.
+    """
+    conn = get_data_conn()
+    try:
+        # Irraggiamento table contains irradiance + JB temperatures
+        df = pd.read_sql_query(
+            'SELECT * FROM irraggiamento WHERE _date = ? ORDER BY CAST(Ora AS REAL) ASC',
+            conn,
+            params=(date_str,)
+        )
+        if df.empty:
+            return {}
+
+        # Deduplicate by Ora to ensure clean series
+        df = df.drop_duplicates(subset=["Ora"], keep="last").reset_index(drop=True)
+
+        # Handle numeric conversion for all sensor columns
+        for col in df.columns:
+            if col not in ["_date", "Ora", "Timestamp Fetch"]:
+                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+
+        # Convert to dict of lists: { "Ora": [8.0, 8.1, ...], "Sensor A": [100, 105, ...], ... }
+        result = df.to_dict(orient="list")
+        
+        # Cleanup internal columns from the payload
+        if "_date" in result: del result["_date"]
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error fetching daily sensor history: {e}")
+        return {}

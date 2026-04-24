@@ -3,6 +3,7 @@ import logging
 import requests
 import os
 import re
+import socket
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -55,7 +56,7 @@ def get_user_context(user_id):
 # ---------------------------------------------------------------------------
 import pandas as pd
 import numpy as np
-from db.db_manager import load_metric, load_latest_snapshot, get_db_stats
+from db.db_manager import load_metric, load_latest_snapshot, get_db_stats, get_data_conn, get_logs_conn
 
 INV_IDS = [f"INV TX{tx}-{i:02d}" for tx in range(1, 4) for i in range(1, 13)]
 
@@ -74,11 +75,22 @@ def _load_csv(filename):
         return load_metric(datetime.now().strftime("%Y-%m-%d"), metric)
     return pd.DataFrame()
 
+def get_public_url():
+    """Try to fetch ngrok public URL from local ngrok API."""
+    try:
+        resp = requests.get("http://localhost:4040/api/tunnels", timeout=1)
+        if resp.ok:
+            tunnels = resp.json().get("tunnels", [])
+            if tunnels:
+                return tunnels[0].get("public_url")
+    except:
+        pass
+    return None
+
 def get_available_dates():
     """List all dates that have data in the database."""
     try:
-        from db.db_manager import _get_data_conn
-        conn = _get_data_conn()
+        conn = get_data_conn()
         # Check available dates across some major tables
         tables = ["potenza_ac", "corrente_dc", "irraggiamento"]
         dates = set()
@@ -220,6 +232,25 @@ def get_inverter_status(date_str=None):
     ok = [k for k, v in status.items() if v["status"] == "OK"]
     return {"date": date_str, "off_inverters": off, "low_inverters": low, "online_count": len(ok), "total": len(status), "details": status}
 
+def get_inverter_production_detail(inv_id, date_str=None):
+    """Get today's energy production in kWh for a specific inverter (e.g. TX1-01)."""
+    date_str = date_str or datetime.now().strftime("%Y-%m-%d")
+    df = load_metric(date_str, "Potenza AC")
+    if df is None or df.empty:
+        return 0.0
+    
+    # Standard format in DB: "Potenza AC (INV TX1-01) [W]"
+    col = next((c for c in df.columns if inv_id.upper() in c and "Potenza AC" in c), None)
+    if not col:
+        return 0.0
+        
+    # Integration: Sum of Watts * (1 minute / 60 minutes/hour) = Watt-hours
+    try:
+        energy_wh = float(df[col].apply(pd.to_numeric, errors='coerce').fillna(0).sum()) / 60.0
+        return round(energy_wh / 1000.0, 2) # Convert to kWh
+    except:
+        return 0.0
+
 def get_transformer_comparison(date_str=None):
     """Compare TX1, TX2, TX3 production."""
     date_str = date_str or datetime.now().strftime("%Y-%m-%d")
@@ -265,7 +296,15 @@ def get_dc_currents(date_str=None, threshold=None):
         val = float(latest[col]) if pd.notna(latest[col]) else 0
         readings[col] = round(val, 2)
     
-    output = {"date": date_str, "total_strings": len(dc_cols)}
+    vals = list(readings.values())
+    output = {
+        "date": date_str, 
+        "total_strings": len(dc_cols),
+        "avg": round(sum(vals)/len(vals), 2) if vals else 0,
+        "max": max(vals) if vals else 0,
+        "min": min(vals) if vals else 0
+    }
+    
     if threshold is not None:
         below = {k: v for k, v in readings.items() if v < threshold}
         output["below_threshold"] = below
@@ -328,8 +367,7 @@ def get_downtime_events(date_str=None):
 def search_logs(query, limit=10):
     """Search system logs in scada_logs.db for keywords."""
     try:
-        from db.db_manager import _get_log_conn
-        conn = _get_log_conn()
+        conn = get_logs_conn()
         sql = "SELECT timestamp, source, level, message FROM logs WHERE message LIKE ? ORDER BY timestamp DESC LIMIT ?"
         res = conn.execute(sql, (f"%{query}%", limit)).fetchall()
         return [{"timestamp": r[0], "source": r[1], "level": r[2], "message": r[3]} for r in res]
@@ -374,13 +412,24 @@ def build_data_snapshot(plant_data, question):
         snapshot.append(f"FOCUS DEVICES: {', '.join(d.upper() for d in devices)}")
         status_data = get_inverter_status(target_date)
         if "details" in status_data:
-            dev_details = {f"INV {d.upper()}": status_data["details"].get(f"INV {d.upper()}") for d in devices}
+            dev_details = {}
+            for d in devices:
+                did = d.upper()
+                info = status_data["details"].get(f"INV {did}", {})
+                # ADD ENERGY to prevent hallucination (current power != energy)
+                info["today_energy_kwh"] = get_inverter_production_detail(did, target_date)
+                dev_details[f"INV {did}"] = info
             snapshot.append(f"DEVICE STATUS ({target_date}): {json.dumps(dev_details)}")
 
     # 4. Global State (Always include)
     if plant_data:
         macro = plant_data.get("macro_health", {})
-        snapshot.append(f"PLANT STATE: MW={macro.get('MW','?')}, Online={macro.get('online','?')}/{macro.get('total','?')}")
+        poa = macro.get("poa", "?")
+        pr = macro.get("avg_pr", "?")
+        snapshot.append(f"PLANT STATE: MW={macro.get('MW','?')}, Online={macro.get('online','?')}/{macro.get('total','?')}, POA={poa} W/m², Avg PR={pr}%")
+        
+    pub = get_public_url() or "https://carl-perkiest-paniculately.ngrok-free.dev/"
+    snapshot.append(f"DASHBOARD URL: {pub} (Local: http://localhost:8080)")
     
     # 5. Semantic Data Fetching
     if "TEMPERATURE" in active_cats:
@@ -410,7 +459,8 @@ def build_data_snapshot(plant_data, question):
             filtered = {k: v for k, v in data.get("readings", {}).items() if any(d.upper() in k for d in devices)}
             snapshot.append(f"DC READINGS (FOCUS): {json.dumps(filtered)}")
         else:
-            data = get_dc_currents(target_date, threshold=0.1) # Only offline/low
+            data = get_dc_currents(target_date, threshold=0.1) 
+            snapshot.append(f"DC CURRENT STATS: Avg={data.get('avg')}A, Max={data.get('max')}A, Min={data.get('min')}A.")
             snapshot.append(f"LOW DC STRINGS (<0.1A): {data.get('count_below')}/{data.get('total_strings')} strings. Examples: {json.dumps(dict(list(data.get('below_threshold', {}).items())[:10]))}")
             
     if "IRRADIANCE" in active_cats:
@@ -452,7 +502,8 @@ def run_python_analysis(code: str, plant_data: dict) -> tuple:
         plant_data = {}
     
     namespace = {
-        "pd": pd, "np": np, "os": os, "re": re, "json": json,
+        "pd": pd, "np": np, "os": os, "re": re, "json": json, "socket": socket,
+        "Path": Path, "glob": __import__("glob"),
         "data": plant_data, "DATA": plant_data,
         "datetime": datetime, "timedelta": timedelta,
         "load_metric": load_metric,
@@ -463,6 +514,7 @@ def run_python_analysis(code: str, plant_data: dict) -> tuple:
         "get_temperatures": get_temperatures,
         "get_inverter_status": get_inverter_status,
         "get_transformer_comparison": get_transformer_comparison,
+        "get_inverter_production_detail": get_inverter_production_detail,
         "get_dc_currents": get_dc_currents,
         "get_irradiance": get_irradiance,
         "get_downtime_events": get_downtime_events,

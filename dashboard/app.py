@@ -74,7 +74,7 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 @app.middleware("http")
 async def add_security_headers(request, call_next):
     response = await call_next(request)
-    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' fonts.googleapis.com; font-src 'self' fonts.gstatic.com;"
+    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline' cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' fonts.googleapis.com cdn.jsdelivr.net; font-src 'self' fonts.gstatic.com; img-src 'self' data:; connect-src 'self' ws: wss:;"
     response.headers["X-Frame-Options"] = "DENY"
     return response
 
@@ -121,9 +121,12 @@ async def data_broadcaster():
 
             # Try loading from database first
             try:
-                from db.db_manager import load_latest_snapshot
+                from db.db_manager import load_latest_snapshot, get_daily_sensor_history
                 latest_data = load_latest_snapshot(today)
                 if latest_data:
+                    # Enrich with sensor history for sparklines
+                    latest_data["sensor_history"] = get_daily_sensor_history(today)
+                    
                     # Use last_sync as a change-detection key
                     snap_ts = latest_data.get("macro_health", {}).get("last_sync", "")
                     if snap_ts != last_snapshot_ts:
@@ -175,9 +178,11 @@ async def websocket_endpoint(websocket: WebSocket):
         # Send initial data immediately from database
         today = datetime.now().strftime("%Y-%m-%d")
         try:
-            from db.db_manager import load_latest_snapshot
+            from db.db_manager import load_latest_snapshot, get_daily_sensor_history
             latest_data = load_latest_snapshot(today)
             if latest_data:
+                # Enrich with sensor history
+                latest_data["sensor_history"] = get_daily_sensor_history(today)
                 await websocket.send_json({"type": "data_update", "data": latest_data})
         except Exception:
             # Fallback: read from JSON file

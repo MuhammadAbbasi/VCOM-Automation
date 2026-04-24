@@ -66,6 +66,16 @@ function updateMacro(data) {
   el("val-tripped").textContent = safeNum(m.tripped, "—");
   el("val-comms").textContent   = safeNum(m.comms_lost, "—");
   
+  // Update New Macro Metrics
+  if (el("val-total-power")) {
+      const pMw = m.total_ac_power_mw || 0;
+      el("val-total-power").textContent = `${pMw.toFixed(2)} MW`;
+  }
+  if (el("val-daily-energy")) {
+      const eMwh = m.total_energy_mwh || 0;
+      el("val-daily-energy").textContent = `${eMwh.toFixed(2)} MWh`;
+  }
+  
   // Update Sensor Macro
   const sData = data.sensor_data || {};
   // Try to find a POA value to show on overview
@@ -125,6 +135,9 @@ function ledHtml(color, label, value) {
       else if (label === "AC") {
           displayVal = (value >= 1000) ? `: ${(value/1000).toFixed(1)}kW` : `: ${Math.round(value)}W`;
       }
+      else if (label === "ISO") {
+          displayVal = `: ${value.toFixed(0)} kΩ`;
+      }
       else displayVal = `: ${value}`;
     } else {
       displayVal = `: ${value}`;
@@ -144,6 +157,7 @@ function updateInverterGrid(data) {
     const temp    = flags.temp         || "grey";
     const dc      = flags.dc_current   || "grey";
     const ac      = flags.ac_power     || "grey";
+    const iso     = flags.iso          || "grey";
     const overall = flags.overall_status || "grey";
 
     // Short label: TX1-01
@@ -158,6 +172,7 @@ function updateInverterGrid(data) {
     const tempT = ledHtml(temp, "Temp", flags.temp_v);
     const dcT   = ledHtml(dc,   "DC",   flags.dc_v);
     const acT   = ledHtml(ac,   "AC",   flags.ac_v);
+    const isoT  = ledHtml(iso,  "ISO",  flags.iso_v);
     
     // Extract titles for labels
     const getTitle = (html) => {
@@ -168,13 +183,14 @@ function updateInverterGrid(data) {
     card.innerHTML = `
       <div class="inv-name">${shortName}</div>
       <div class="led-row">
-        ${prT} ${tempT} ${dcT} ${acT}
+        ${prT} ${tempT} ${dcT} ${acT} ${isoT}
       </div>
       <div class="led-labels">
         <span class="led-label" title="${getTitle(prT)}">PR</span>
         <span class="led-label" title="${getTitle(tempT)}">T</span>
         <span class="led-label" title="${getTitle(dcT)}">DC</span>
         <span class="led-label" title="${getTitle(acT)}">AC</span>
+        <span class="led-label" title="${getTitle(isoT)}">ISO</span>
       </div>
     `;
     grid.appendChild(card);
@@ -647,43 +663,72 @@ function updateSensorsTab(data) {
     }
 
     container.innerHTML = "";
-    const grid = document.createElement("div");
-    grid.className = "sensor-container";
-
+    
     // Macro stats for sensor tab
     const macroStats = el("sensor-macro-stats");
     if (macroStats) {
         let poaTotal = 0, poaCount = 0;
         Object.entries(sData).forEach(([k, v]) => {
-            if (k.includes("POA")) { poaTotal += v; poaCount++; }
+            if (k.toUpperCase().includes("POA") && typeof v === 'number') { 
+                poaTotal += v; poaCount++; 
+            }
         });
         const avgPoa = poaCount > 0 ? (poaTotal / poaCount).toFixed(1) : "—";
         macroStats.innerHTML = `
             <div class="stat-card">
               <div class="stat-value">${avgPoa}</div>
-              <div class="stat-label">Avg Plant POA</div>
+              <div class="stat-label">Avg Plant POA (W/m²)</div>
             </div>
         `;
     }
 
+    // Find the site-wide last acquisition index (the last point where ANY sensor has data)
+    const history = data.sensor_history || {};
+    const oraList = history.Ora || [];
+    let lastAcqIdx = -1;
+    
+    Object.entries(history).forEach(([k, series]) => {
+        if (k === "Ora" || k === "Timestamp Fetch") return;
+        if (!Array.isArray(series)) return;
+        for (let i = series.length - 1; i > lastAcqIdx; i--) {
+            if (series[i] !== 0 && series[i] !== null) {
+                lastAcqIdx = i;
+                break;
+            }
+        }
+    });
+
     Object.entries(sData).forEach(([key, val]) => {
+        const keyUpper = key.toUpperCase();
+        if (keyUpper === "TIMESTAMP FETCH" || keyUpper === "ORA") return;
+        
         const box = document.createElement("div");
         let type = "other";
         let icon = "📊";
         let unit = "—";
         let label = key;
 
-        if (key.includes("POA")) { type = "poa"; icon = "☀️"; unit = "W/m²"; label = "Plane of Array"; }
-        else if (key.includes("GHI")) { type = "ghi"; icon = "🌍"; unit = "W/m²"; label = "Global Horiz. Irrad."; }
-        else if (key.includes("Temp") || key.includes("JB") && (key.includes("IT") || key.includes("AL"))) {
-             type = "temp"; icon = "🌡️"; unit = "°C"; label = "Ambient/Module Temp";
+        if (keyUpper.includes("IRRAGGIAMENTO") || keyUpper.includes("POA") || keyUpper.includes("GHI")) {
+            unit = "W/m²";
+            type = keyUpper.includes("GHI") ? "ghi" : "poa";
+            icon = keyUpper.includes("GHI") ? "🌍" : "☀️";
+            label = keyUpper.includes("GHI") ? "Global Horiz. Irrad." : "Plane of Array Irradiance";
+        } else if (keyUpper.includes("TEMP") || keyUpper.includes("°C") || (key.includes("JB") && (key.includes("IT") || key.includes("AL")))) {
+            type = "temp"; 
+            icon = "🌡️"; 
+            unit = "°C"; 
+            label = "Ambient/Module Temperature";
         }
         
         if (key.includes("-DOWN")) label = "Module Temp (Lower)";
         if (key.includes("-UP")) label = "Module Temp (Upper)";
-        if (key.includes("AL-")) { type = "al"; icon = "📏"; unit = "°C"; label = "Irradiance Sensor Temp"; }
+        if (key.includes("AL-") && !keyUpper.includes("IRRAGGIAMENTO")) { 
+            type = "al"; icon = "📏"; unit = "°C"; label = "Irradiance Sensor Temp"; 
+        }
 
         box.className = `sensor-box ${type}`;
+        const chartId = `sensor-chart-${key.replace(/[^a-z0-9]/gi, '_')}`;
+        
         box.innerHTML = `
             <div class="sensor-header">
                 <span class="sensor-id">${key}</span>
@@ -694,10 +739,79 @@ function updateSensorsTab(data) {
                 <span class="sensor-unit">${unit}</span>
             </div>
             <div class="sensor-label">${label}</div>
+            <div id="${chartId}" class="sensor-sparkline-container"></div>
         `;
-        grid.appendChild(box);
+        container.appendChild(box);
+
+        // Render the sparkline if we have history
+        if (history[key] && history[key].length > 1) {
+            // Process series: cut off precisely at the last site-wide acquisition point
+            const processedSeries = history[key].map((v, idx) => (idx > lastAcqIdx) ? null : v);
+
+            setTimeout(() => {
+                renderSensorSparkline(chartId, key, processedSeries, type);
+            }, 0);
+        }
     });
-    container.appendChild(grid);
+}
+
+/**
+ * Render a subtle background sparkline for a sensor box.
+ */
+function renderSensorSparkline(chartId, name, seriesData, type) {
+    const container = document.getElementById(chartId);
+    if (!container) return;
+
+    let color = '#3b82f6'; // default blue
+    if (type === 'poa') color = '#f59e0b'; // yellow/orange for sun
+    if (type === 'ghi') color = '#60a5fa'; // bright blue for sky
+    if (type === 'temp') color = '#f97316'; // orange/red for heat
+    if (type === 'al') color = '#8b5cf6'; // purple for specific electronics
+    
+    const options = {
+        series: [{
+            name: name,
+            data: seriesData
+        }],
+        chart: {
+            type: 'area',
+            height: 60,
+            width: 140,
+            sparkline: { enabled: true },
+            animations: { enabled: true, easing: 'easeinout', speed: 1000 },
+            toolbar: { show: false }
+        },
+        stroke: {
+            curve: 'smooth',
+            width: 1.8,
+            colors: [color],
+            lineCap: 'round'
+        },
+        fill: {
+            type: 'gradient',
+            gradient: {
+                shadeIntensity: 1,
+                opacityFrom: 0.15,
+                opacityTo: 0.0,
+                stops: [0, 90, 100]
+            }
+        },
+        colors: [color],
+        tooltip: {
+            enabled: false // Disabled for pure background aesthetics
+        },
+        grid: {
+            padding: {
+                left: 0,
+                right: 0,
+                top: 0,
+                bottom: 0
+            }
+        }
+    };
+
+    const chart = new ApexCharts(container, options);
+    chart.render();
 }
 
 
@@ -788,7 +902,10 @@ function connectWebSocket() {
   socket = new WebSocket(wsUrl);
   
   socket.onopen = () => {
-    el("last-updated").textContent = `Connected: ${now()}`;
+    const statusEl = el("last-updated");
+    statusEl.textContent = `Real-time: Connected`;
+    statusEl.style.color = "var(--green)";
+    statusEl.style.opacity = "1";
     reconnectInterval = 2000;
   };
   
@@ -826,7 +943,10 @@ function connectWebSocket() {
   };
   
   socket.onclose = () => {
-    el("last-updated").textContent = `Disconnected. Reconnecting...`;
+    const statusEl = el("last-updated");
+    statusEl.textContent = `Offline: Reconnecting...`;
+    statusEl.style.color = "var(--yellow)";
+    statusEl.style.opacity = "0.7";
     setTimeout(connectWebSocket, reconnectInterval);
     reconnectInterval = Math.min(reconnectInterval * 1.5, 30000);
   };

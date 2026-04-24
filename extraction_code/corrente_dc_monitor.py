@@ -183,7 +183,7 @@ def extract_corrente_dc(page) -> pd.DataFrame:
 
     # ── Step 1: Navigate to tab ──────────────────────────────────────────────
     logger.info("Clicking 'Corrente DC' tab...")
-    page.locator('text="Corrente DC"').first.click()
+    page.locator('text=/^\\s*Corrente DC\\s*$/i').first.click(force=True)
     time.sleep(3)
     dismiss_popup(page)
 
@@ -217,7 +217,7 @@ def extract_corrente_dc(page) -> pd.DataFrame:
         if attempt < 2:
             # Go back to the chart view for the second attempt
             logger.info("Clicking Corrente DC tab again for retry...")
-            page.locator('text="Corrente DC"').first.click()
+            page.locator('text=/^\\s*Corrente DC\\s*$/i').first.click(force=True)
             time.sleep(2)
             dismiss_popup(page)
             _wait_for_chart(page, "Corrente DC retry")
@@ -227,7 +227,7 @@ def extract_corrente_dc(page) -> pd.DataFrame:
     logger.warning("[DC] Both table extraction attempts failed. Switching to CSV download fallback...")
 
     # Go back to chart view before downloading
-    page.locator('text="Corrente DC"').first.click()
+    page.locator('text=/^\\s*Corrente DC\\s*$/i').first.click(force=True)
     time.sleep(2)
     dismiss_popup(page)
     _wait_for_chart(page, "Corrente DC (fallback)")

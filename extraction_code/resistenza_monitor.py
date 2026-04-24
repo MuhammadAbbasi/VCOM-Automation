@@ -10,7 +10,7 @@ def extract_resistenza(page) -> pd.DataFrame:
     """Extract Resistenza di isolamento data from the VCOM Evaluation dashboard."""
     logger.info("--- Extracting Resistenza di isolamento Data ---")
     logger.info("Clicking 'Resistenza di isolamento' tab...")
-    page.locator('text="Resistenza di isolamento"').first.click()
+    page.locator('text=/^\\s*Resistenza di isolamento\\s*$/i').first.click(force=True)
     time.sleep(2)
     dismiss_popup(page)
 

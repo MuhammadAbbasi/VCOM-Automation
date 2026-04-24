@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 def extract_temperatura(page) -> pd.DataFrame:
     """Extract Temperatura data from the VCOM Evaluation dashboard."""
     logger.info("Clicking 'Temperatura' tab...")
-    page.locator('text="Temperatura"').first.click()
+    page.locator('text=/^\\s*Temperatura\\s*$/i').first.click(force=True)
     time.sleep(2)
     dismiss_popup(page)
 

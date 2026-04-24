@@ -17,7 +17,7 @@ def extract_irraggiamento(page) -> pd.DataFrame:
     logger.info("--- Extracting Irraggiamento Data ---")
 
     logger.info("Clicking 'Irraggiamento' tab...")
-    page.locator('text="Irraggiamento"').first.click()
+    page.locator('text=/^\\s*Irraggiamento\\s*$/i').first.click(force=True)
     time.sleep(2)
     dismiss_popup(page)
 
@@ -26,6 +26,7 @@ def extract_irraggiamento(page) -> pd.DataFrame:
     refresh_chart(page)
 
     logger.info("Switching to Dati tab for Irraggiamento...")
+    dismiss_popup(page)
     click_dati_tab(page, extra_wait=1)
 
     logger.info("Extracting Irraggiamento table via JS...")

@@ -71,6 +71,21 @@ DEFAULT_SETTINGS = {
         "chat_id": "",
         "personal_id": ""
     },
+    "odoo": {
+        "enabled": False,
+        "url": "http://localhost:8069",
+        "db": "odoo_db",
+        "user": "admin",
+        "password": "api_password_or_key",
+        "ticket_model": "helpdesk.ticket",
+        "min_duration_minutes": 60,
+        "assignments": {
+            "TX1": 1,
+            "TX2": 2,
+            "TX3": 3,
+            "DEFAULT": 1
+        }
+    },
     "alert_preferences": {
         "comm_lost": { "dashboard": True, "telegram": True },
         "plant_drop": { "dashboard": True, "telegram": True },
@@ -196,10 +211,19 @@ def calculate_sunrise(date_str: str) -> float:
         if sunrise < 4.0: sunrise = 6.0
         if sunset < 16.0: sunset = 19.5
         
-        return float(sunrise), float(sunset)
+        return to_hhmm(sunrise), to_hhmm(sunset)
     except Exception as e:
         logger.error(f"Sun calculation failed: {e}")
-        return 6.5, 19.5
+        return 6.30, 19.30
+
+def to_hhmm(val: float) -> float:
+    """Convert decimal hours (6.5) to HH.mm format (6.30)."""
+    h = int(val)
+    m = int(round((val - h) * 60))
+    if m >= 60:
+        h += 1
+        m = 0
+    return h + (m / 100.0)
 
 def is_floatable(val):
     if pd.isna(val) or val == "" or val is None:
@@ -211,11 +235,14 @@ def is_floatable(val):
         return False
 
 def format_ora(val):
-    """Convert float like 9.25 to '09:25'"""
+    """Convert float like 9.25 (HH.mm) to '09:25'"""
     if pd.isna(val): return "Unknown"
     try:
         h = int(val)
         m = int(round((val % 1) * 100))
+        if m >= 60: # Handle cases like 9.60 or floating errors
+            h += 1
+            m = 0
         return f"{h:02d}:{m:02d}"
     except:
         return "Unknown"
@@ -313,7 +340,6 @@ def load_metric(date_str: str, metric_prefix: str) -> pd.DataFrame:
         from db.db_manager import load_metric as db_load_metric
         df = db_load_metric(date_str, metric_prefix)
         if df is not None and not df.empty:
-            logger.info(f"[DB] Loaded {metric_prefix} for {date_str} ({len(df)} rows)")
             return df
     except Exception as e:
         logger.debug(f"[DB] Failed to load {metric_prefix} from DB: {e}")
@@ -364,7 +390,9 @@ def normalize_pr(val):
 # ---------------------------------------------------------------------------
 
 def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFrame,
-                         dc_df: pd.DataFrame, pr_df: pd.DataFrame, irrad_df: pd.DataFrame, daylight_start: float = 7.0, daylight_end: float = 19.5, settings: dict = None) -> dict:
+                         dc_df: pd.DataFrame, pr_df: pd.DataFrame, irrad_df: pd.DataFrame, 
+                         iso_df: pd.DataFrame = None,
+                         daylight_start: float = 7.0, daylight_end: float = 19.5, settings: dict = None) -> dict:
     """
     Compute health flags from the latest available NON-NAN values in each metric file.
     """
@@ -449,27 +477,26 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
                 if v_count < 2:
                     potential_blocks.append({"ora": row.get("Ora_num"), "time": format_ora(row.get("Ora_num"))})
                 else:
-                    if len(potential_blocks) >= 3:
+                    if len(potential_blocks) >= 5: # Increased threshold to 5 mins
                         # Internal gap closed by valid data
                         start_time = potential_blocks[0]["time"]
                         end_time = format_ora(row.get("Ora_num"))
-                        duration = len(potential_blocks) * 5 # Approx 5m intervals
+                        duration = len(potential_blocks)
                         plant_drop_history.append({
                             "type": "INTERNAL GAP",
                             "start": start_time,
                             "end": end_time,
                             "duration": duration,
-                            "time": start_time, # Fallback
+                            "time": start_time,
                             "ora": potential_blocks[0]["ora"]
                         })
                     potential_blocks = []
             
             # Check for trailing drop
-            if len(potential_blocks) >= 3:
+            if len(potential_blocks) >= 5:
                 start_time = potential_blocks[0]["time"]
-                duration = len(potential_blocks) * 5
+                duration = len(potential_blocks)
                 # Only report trailing drop if it starts before 18:00 (prime hours)
-                # Otherwise it's likely just end-of-day shutdown.
                 if potential_blocks[0]["ora"] < 18.0:
                     plant_drop_history.append({
                         "type": "POST-PRODUCTION DROP",
@@ -522,6 +549,26 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
                 break
         if dc_row is None and len(dc_df) > 0:
             dc_row = dc_df.iloc[-1]
+
+    # Get latest ISO row (deduplicated by Ora)
+    iso_row = None
+    if iso_df is not None and len(iso_df) > 0:
+        iso_cols = [c for c in iso_df.columns if "Resistenza" in c]
+        if "Ora" in iso_df.columns:
+            iso_dedup = iso_df.drop_duplicates(subset=["Ora"], keep="last").copy()
+            iso_dedup["Ora_num"] = pd.to_numeric(iso_dedup["Ora"], errors="coerce")
+            iso_dedup = iso_dedup.sort_values("Ora_num", ascending=False)
+        else:
+            iso_dedup = iso_df.copy()
+        
+        for _, row in iso_dedup.iterrows():
+            iso_values = [row.get(c) for c in iso_cols]
+            non_nan_count = sum(1 for v in iso_values if v is not None and not pd.isna(v) and str(v).strip().lower() not in ['x',''])
+            if non_nan_count > 10:
+                iso_row = row
+                break
+        if iso_row is None and len(iso_df) > 0:
+            iso_row = iso_df.iloc[-1]
 
     # -------------------------------------------------------------------
     # NEW AC LOGIC (Dynamic POA + Plant Average)
@@ -678,16 +725,34 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
                     else:
                         health["ac_power"] = "grey"  # Off-hours is OK
 
-        ac_col = f"Potenza AC (INV {inv_id}) [W]"
         if ac_col in latest_ac_missing:
             health["comms_lost_flag"] = True
         else:
             health["comms_lost_flag"] = False
 
+        # ISO LED (Insulation Resistance)
+        iso_col = next((c for c in iso_row.index if inv_id in c and "Resistenza" in c), None) if iso_row is not None else None
+        iso_val = None
+        if iso_row is not None and iso_col:
+            raw_val = iso_row[iso_col]
+            if pd.notna(raw_val) and str(raw_val).strip().lower() not in ['x', '']:
+                try:
+                    iso_val = float(str(raw_val).replace(",", "."))
+                except:
+                    iso_val = None
+        
+        health["iso_v"] = iso_val
+        if iso_val is None:
+            health["iso"] = "grey"
+        elif iso_val < 50:
+            health["iso"] = "red"
+        else:
+            health["iso"] = "green"
+
         # Overall = worst of 4 LEDs
         scores = []
         score_map = {"green": 0, "yellow": 1, "red": 2, "grey": -1}
-        for k in ["pr", "temp", "dc_current", "ac_power"]:
+        for k in ["pr", "temp", "dc_current", "ac_power", "iso"]:
             score = score_map.get(health[k], -1)
             if score >= 0:
                 scores.append(score)
@@ -888,7 +953,7 @@ def format_duration(minutes):
     except:
         return f"{minutes}m"
 
-def compute_macro_health(inverter_health: dict, daylight_start: float = 7.0) -> dict:
+def compute_macro_health(inverter_health: dict, daylight_start: float = 7.0, ac_df: pd.DataFrame = None) -> dict:
     """Compute plant-wide health summary."""
     total = len(inverter_health)
     online = sum(1 for h in inverter_health.values() if h["ac_power"] in ["green", "yellow"])
@@ -901,12 +966,25 @@ def compute_macro_health(inverter_health: dict, daylight_start: float = 7.0) -> 
     pr_values = [h.get("pr_v") for h in inverter_health.values() if h.get("pr_v") is not None]
     avg_pr = sum(pr_values) / len(pr_values) if pr_values else 0.0
 
+    total_energy_mwh = 0.0
+    if ac_df is not None:
+        try:
+            ac_cols = [c for c in ac_df.columns if "Potenza AC" in c]
+            if ac_cols:
+                # Calculate total power at each 1-min interval
+                total_power_curve = ac_df[ac_cols].apply(pd.to_numeric, errors='coerce').fillna(0).sum(axis=1)
+                # Integration (summing minute-by-minute W and dividing by 60 to get Wh)
+                total_energy_mwh = total_power_curve.sum() / 60 / 1_000_000
+        except Exception as e:
+            logger.error(f"Error computing total energy: {e}")
+
     return {
         "total_inverters": total,
         "online": online,
         "tripped": tripped,
         "comms_lost": comms_lost,
         "total_ac_power_mw": total_ac_power_mw,
+        "total_energy_mwh": total_energy_mwh,
         "avg_pr": avg_pr,
         "plant_start_time": format_ora(daylight_start),
         "last_sync": datetime.now().isoformat(timespec="seconds"),
@@ -930,6 +1008,7 @@ def analyze_site(date_str: str) -> None:
         temp_df = load_metric(date_str, "Temperatura")
         dc_df = load_metric(date_str, "Corrente_DC")
         irrad_df = load_metric(date_str, "Irraggiamento")
+        iso_df = load_metric(date_str, "Resistenza di isolamento")
 
         if ac_df is None:
             logger.warning(f"Potenza_AC not found for {date_str}")
@@ -944,9 +1023,9 @@ def analyze_site(date_str: str) -> None:
 
         # Compute health from latest values (use actual_sunset and theory_sunset for context)
         logger.info("Computing health flags...")
-        inverter_health, plant_drop_history, sensor_data = compute_latest_health(date_str, ac_df, temp_df, dc_df, pr_df, irrad_df=irrad_df, daylight_start=daylight_start, daylight_end=actual_sunset, settings=settings)
+        inverter_health, plant_drop_history, sensor_data = compute_latest_health(date_str, ac_df, temp_df, dc_df, pr_df, irrad_df=irrad_df, iso_df=iso_df, daylight_start=daylight_start, daylight_end=actual_sunset, settings=settings)
 
-        macro_health = compute_macro_health(inverter_health, daylight_start=daylight_start)
+        macro_health = compute_macro_health(inverter_health, daylight_start=daylight_start, ac_df=ac_df)
         macro_health["sunset_time"] = format_ora(theory_sunset)
         
         # Latest sync from extraction status if available
@@ -1004,8 +1083,12 @@ def analyze_site(date_str: str) -> None:
         # We need a quick lookup of previous alarms
         prev_alarm_map = {a.get("id"): a for a in active_anomalies_prev}
         
-        tg_messages = []
+        tg_groups = {} # { "Category": [ "Message line 1", "Message line 2" ] }
         
+        def add_tg_msg(category, line):
+            if category not in tg_groups: tg_groups[category] = []
+            tg_groups[category].append(line)
+
         # --- USER ALARM PREFERENCES ---
         prefs = settings.get("alert_preferences", {})
         def should_alert(category, target):
@@ -1042,7 +1125,7 @@ def analyze_site(date_str: str) -> None:
                 if site_comm_db:
                     current_active.append(alarm)
                 if site_comm_tg:
-                    tg_messages.append(f"📡 *{alarm['type']}*\nSystem: {alarm['inverter']}\nTime: {alarm['trip_time']}\n{alarm['message']}")
+                    add_tg_msg(alarm['type'], f"📡 *{alarm['type']}* (SITE)\n{alarm['message']}")
             else:
                 if site_comm_db:
                     current_active.append(prev_alarm_map[drop_alarm_id])
@@ -1053,7 +1136,7 @@ def analyze_site(date_str: str) -> None:
                 past_alarm["recovery_time"] = timestamp
                 historical_trail.append(past_alarm)
                 if should_alert("recovery", "telegram"):
-                    tg_messages.append(f"✅ *RECOVERED*: {past_alarm['type']}\nSystem: SITE\nTime: {timestamp}")
+                    add_tg_msg("RECOVERED", f"✅ {past_alarm['type']} (SITE)")
                 
         # Handle the legacy SITE_DATA_DROP id for backward compatibility/cleanup
         if "SITE_DATA_DROP" in prev_alarm_map:
@@ -1090,7 +1173,7 @@ def analyze_site(date_str: str) -> None:
                     if should_alert("comm_lost", "dashboard"):
                         current_active.append(alarm)
                     if should_alert("comm_lost", "telegram"):
-                        tg_messages.append(f"⚠️ *{alarm['type']}*\nInverter: {alarm['inverter']}\nTime: {alarm['trip_time']}\n{alarm['message']}")
+                        add_tg_msg("COMMS LOST", f"⚠️ {alarm['inverter']}")
                 else:
                     # Carry over existing
                     if should_alert("comm_lost", "dashboard"):
@@ -1102,7 +1185,7 @@ def analyze_site(date_str: str) -> None:
                     prev_alarm["recovery_time"] = timestamp
                     historical_trail.append(prev_alarm)
                     if should_alert("recovery", "telegram"):
-                        tg_messages.append(f"✅ *RECOVERED*: {prev_alarm['type']}\nInverter: {prev_alarm['inverter']}\nTime: {timestamp}")
+                        add_tg_msg("RECOVERED", f"✅ {prev_alarm['type']} ({prev_alarm['inverter']})")
 
             # --- 2. PR Alarm ---
             pr_val = h.get("raw_pr")
@@ -1134,7 +1217,7 @@ def analyze_site(date_str: str) -> None:
                         current_active.append(alarm)
                     if should_alert(pr_cat, "telegram"):
                         icon = "🚨" if is_critical_pr else "⚡"
-                        tg_messages.append(f"{icon} *{alarm['type']}*\nInverter: {inv_label}\nPR: {pr_val}%\nTime: {timestamp}")
+                        add_tg_msg(alarm['type'], f"{icon} {inv_label} (*{pr_val}%*)")
                 else:
                     # Carry over existing
                     if should_alert(pr_cat, "dashboard"):
@@ -1146,7 +1229,7 @@ def analyze_site(date_str: str) -> None:
                     prev_alarm["recovery_time"] = timestamp
                     historical_trail.append(prev_alarm)
                     if should_alert("recovery", "telegram"):
-                        tg_messages.append(f"✅ *RECOVERED*: {prev_alarm['type']}\nInverter: {inv_label}\nTime: {timestamp}")
+                        add_tg_msg("RECOVERED", f"✅ {prev_alarm['type']} ({inv_label})")
                     
             # --- 3. AC Power Alarm ---
             ac_alarm_id = f"{inv_id}_LOW_AC"
@@ -1170,7 +1253,7 @@ def analyze_site(date_str: str) -> None:
                         current_active.append(alarm)
                     if should_alert("inverter_trip" if ac_status != "yellow" else "ac_drop", "telegram"):
                         icon = "🟡" if ac_status == "yellow" else "🔴"
-                        tg_messages.append(f"{icon} *{alarm['type']}*\nInverter: {alarm['inverter']}\nTime: {alarm['trip_time']}\n{alarm['message']}")
+                        add_tg_msg(alarm['type'], f"{icon} {alarm['inverter']}")
                 else:
                     if should_alert("inverter_trip" if ac_status != "yellow" else "ac_drop", "dashboard"):
                         current_active.append(prev_alarm_map[ac_alarm_id])
@@ -1180,7 +1263,7 @@ def analyze_site(date_str: str) -> None:
                     prev_alarm["recovery_time"] = timestamp
                     historical_trail.append(prev_alarm)
                     if should_alert("recovery", "telegram"):
-                        tg_messages.append(f"✅ *RECOVERED*: {prev_alarm['type']}\nInverter: {prev_alarm['inverter']}\nTime: {timestamp}")
+                        add_tg_msg("RECOVERED", f"✅ {prev_alarm['type']} ({prev_alarm['inverter']})")
                     
             # --- 4. High Temperature Alarm ---
             temp_alarm_id = f"TEMP_{inv_id}"
@@ -1204,7 +1287,7 @@ def analyze_site(date_str: str) -> None:
                         current_active.append(alarm)
                     if should_alert(temp_cat, "telegram"):
                         icon = "🔥" if temp_status == "red" else "🌡️"
-                        tg_messages.append(f"{icon} *{alarm['type']}*\nInverter: {inv_label}\nTemp: {temp_val}°C\nTime: {timestamp}")
+                        add_tg_msg(alarm['type'], f"{icon} {inv_label} (*{temp_val}°C*)")
                 else:
                     # Carry over
                     if should_alert(temp_cat, "dashboard"):
@@ -1216,7 +1299,42 @@ def analyze_site(date_str: str) -> None:
                     prev_alarm["recovery_time"] = timestamp
                     historical_trail.append(prev_alarm)
                     if should_alert("recovery", "telegram"):
-                        tg_messages.append(f"✅ *RECOVERED*: {prev_alarm['type']}\nInverter: {inv_label}\nTime: {timestamp}")
+                        add_tg_msg("RECOVERED", f"✅ {prev_alarm['type']} ({inv_label})")
+
+            # --- 5. Insulation Resistance (ISO) Alarm ---
+            iso_alarm_id = f"ISO_{inv_id}"
+            checked_ids.add(iso_alarm_id)
+            iso_status = h.get("iso")
+            iso_val = h.get("iso_v")
+            
+            if iso_status == "red":
+                if iso_alarm_id not in prev_alarm_map:
+                    # New alarm
+                    alarm = {
+                        "id": iso_alarm_id,
+                        "inverter": inv_label,
+                        "type": "INSULATION FAULT",
+                        "severity": "red",
+                        "trip_time": timestamp,
+                        "message": f"ISO resistance critically low: {iso_val} kOhm (Thresh: 50 kOhm)"
+                    }
+                    # Map to a sensible preference category (e.g., crit_temp or new iso_fault)
+                    if should_alert("crit_temp", "dashboard"):
+                         current_active.append(alarm)
+                    if should_alert("crit_temp", "telegram"):
+                         add_tg_msg(alarm['type'], f"🔌 *{alarm['type']}* ({inv_label})\nValue: *{iso_val} kΩ*")
+                else:
+                    # Carry over
+                    if should_alert("crit_temp", "dashboard"):
+                         current_active.append(prev_alarm_map[iso_alarm_id])
+            else:
+                # Check for recovery
+                if iso_alarm_id in prev_alarm_map:
+                    prev_alarm = prev_alarm_map[iso_alarm_id]
+                    prev_alarm["recovery_time"] = timestamp
+                    historical_trail.append(prev_alarm)
+                    if should_alert("recovery", "telegram"):
+                        add_tg_msg("RECOVERED", f"✅ {prev_alarm['type']} ({inv_label})")
                     
         # --- 4. DC MPPT Faults ---
         active_dc_fault_ids = set()
@@ -1244,7 +1362,7 @@ def analyze_site(date_str: str) -> None:
                     current_active.append(alarm)
                 if should_alert(dc_cat, "telegram"):
                     icon = "⚡" if is_crit else "🔌"
-                    tg_messages.append(f"{icon} *{alarm['type']}*\nInv: {inv_label_f} | MPPT: {f['MPPT']}\n{f['Measured']}A (Exp: {f['Expected']}A) for {format_duration(f['Duration'])}.")
+                    add_tg_msg(alarm['type'], f"{icon} {inv_label_f} (MPPT {f['MPPT']}) - {f['Measured']}A")
             else:
                 if should_alert(dc_cat, "dashboard"):
                     current_active.append(prev_alarm_map[dc_alarm_id])
@@ -1255,11 +1373,12 @@ def analyze_site(date_str: str) -> None:
                 past_alarm["recovery_time"] = timestamp
                 historical_trail.append(past_alarm)
                 if should_alert("recovery", "telegram"):
-                    tg_messages.append(f"✅ *RECOVERED*: {past_alarm['type']}\nInverter: {past_alarm['inverter']}\nTime: {timestamp}")
+                    add_tg_msg("RECOVERED", f"✅ {past_alarm['type']} ({past_alarm['inverter']})")
 
-        # Send Telegram updates if any
-        for msg in tg_messages:
-            send_telegram_notification(msg, settings)
+        # Send Telegram updates grouped by type
+        for category, lines in tg_groups.items():
+            combined_msg = f"🔔 *{category}* ({timestamp})\n\n" + "\n".join(lines)
+            send_telegram_notification(combined_msg, settings)
 
         # Preserve any other active anomalies that we didn't handle in this loop
         # (e.g. manually added alerts or categories not yet in the forensic loop)
@@ -1275,6 +1394,61 @@ def analyze_site(date_str: str) -> None:
             file_status = get_extraction_status(date_str)
         except Exception:
             pass
+
+        # --- Odoo Integration ---
+        odoo_cfg = settings.get("odoo", {})
+        if odoo_cfg.get("enabled"):
+            try:
+                from db.odoo_client import OdooClient
+                client = OdooClient(odoo_cfg["url"], odoo_cfg["db"], odoo_cfg["user"], odoo_cfg["password"])
+                min_dur = odoo_cfg.get("min_duration_minutes", 60)
+                
+                for alarm in current_active:
+                    if alarm.get("odoo_ticket_id"):
+                        continue
+                    
+                    trip_time_str = alarm.get("trip_time", "")
+                    if not trip_time_str: continue
+                    
+                    try:
+                        if "T" in trip_time_str:
+                            trip_dt = datetime.fromisoformat(trip_time_str)
+                        else:
+                            trip_dt = datetime.strptime(f"{date_str} {trip_time_str}", "%Y-%m-%d %H:%M")
+                        
+                        duration = (datetime.now() - trip_dt).total_seconds() / 60
+                        if duration >= min_dur:
+                            inv = alarm.get("inverter", "DEFAULT")
+                            assignee_id = odoo_cfg.get("assignments", {}).get("DEFAULT", 1)
+                            for key, uid in odoo_cfg.get("assignments", {}).items():
+                                if key in inv:
+                                    assignee_id = uid
+                                    break
+                            
+                            ticket_vals = {
+                                "name": f"[{alarm['type']}] {alarm['inverter']} - {alarm['message'][:50]}",
+                                "description": (f"SCADA ALERT\n-----------\n"
+                                               f"Inverter: {alarm['inverter']}\n"
+                                               f"Type: {alarm['type']}\n"
+                                               f"Severity: {alarm['severity']}\n"
+                                               f"Message: {alarm['message']}\n"
+                                               f"Duration: {int(duration)} minutes"),
+                                "user_id": assignee_id,
+                                "team_id": 1 # Optional: Helpdesk team
+                            }
+                            
+                            # Add priority mapping
+                            if "priority" in [c[0] for c in client.models.execute_kw(odoo_cfg["db"], 1, odoo_cfg["password"], odoo_cfg["ticket_model"], 'fields_get', [], {'attributes': ['name']})]:
+                                ticket_vals["priority"] = "3" if alarm['severity'] == "red" else "1"
+
+                            ticket_id = client.create_ticket(odoo_cfg["ticket_model"], ticket_vals)
+                            if ticket_id:
+                                alarm["odoo_ticket_id"] = ticket_id
+                                logger.info(f"Created Odoo ticket #{ticket_id} for {alarm['id']}")
+                    except Exception as ex:
+                        logger.debug(f"Duration check failed for {alarm['id']}: {ex}")
+            except Exception as e:
+                logger.error(f"Odoo integration error: {e}")
 
         snapshot = {
             "macro_health": macro_health,
