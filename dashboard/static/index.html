@@ -14,19 +14,26 @@
 <body>
 
   <header>
-    <div>
-      <p>&copy; 2026 Mazara Solar Plant Monitor | AI Engine: Qwen 2.5 7B | Build 2.1.0</p>
-      <h1>Mazara Solar Plant — SCADA Monitor</h1>
-      <div class="subtitle">System ID 2144635 &nbsp;·&nbsp; Mazara del Vallo, Sicily &nbsp;·&nbsp; 36 Inverters · 808
-        Strings</div>
-      <div class="plant-meta" style="margin-top:0.5rem; font-size:0.8rem; color:var(--text); opacity:0.8;">
-        <span id="meta-start-time">Plant Start: --:--</span> &nbsp;·&nbsp;
-        <span id="meta-last-fetch">Latest Data: --:--</span>
+    <div style="display:flex; align-items:center; gap:2rem">
+      <div class="logo-box">
+        <h1 style="margin:0; font-size:1.5rem; letter-spacing:-0.03em">MAZARA <span style="color:var(--accent); font-weight:300">SCADA</span></h1>
+        <div class="header-refresh-timer">
+          <span class="dot green"></span> SYSTEM ONLINE • LAST PULSE: <span id="global-last-update">--:--:--</span>
+        </div>
+      </div>
+      <div class="plant-meta-header">
+        <div class="meta-row">
+          <span class="meta-label">ID:</span> <span class="meta-val">2144635</span> &bull; 
+          <span class="meta-label">UNITS:</span> <span class="meta-val">36 Inverters</span>
+        </div>
+        <div class="meta-row">
+          <span id="meta-start-time">Plant Start: --:--</span> &bull; 
+          <span id="meta-last-fetch">Last Fetch: --:--</span>
+        </div>
       </div>
     </div>
     <div class="header-actions">
-      <div id="last-updated" style="color:var(--muted);font-size:0.75rem;">Connecting…</div>
-      <button id="settings-btn" class="btn-rescan" style="margin-right: 0.5rem;">⚙️ SETTINGS</button>
+      <button id="settings-btn" class="btn-rescan" style="margin-right: 0.5rem; background:rgba(255,255,255,0.05)">⚙️ SETTINGS</button>
       <button id="rescan-btn" class="btn-rescan">FORENSIC RE-SCAN</button>
     </div>
   </header>
@@ -39,6 +46,7 @@
     <button class="tab-btn" data-tab="tab-ac"><span class="tab-icon">⚙️</span> AC Power</button>
     <button class="tab-btn" data-tab="tab-sensors"><span class="tab-icon">📡</span> Sensors</button>
     <button class="tab-btn" data-tab="tab-analytics"><span class="tab-icon">📈</span> Analytics</button>
+    <button class="tab-btn" data-tab="tab-trackers"><span class="tab-icon">🛰️</span> Tracker Field</button>
     <button class="tab-btn" data-tab="tab-chat"><span class="tab-icon">💬</span> AI Chat</button>
   </nav>
 
@@ -46,21 +54,14 @@
     <section>
       <h2>Macro Health Pulse</h2>
       <div id="metrics-grid">
-        <div class="card metric-card">
-          <div class="metric-value" id="val-total">36</div>
-          <div class="metric-label">Total Inverters</div>
-        </div>
-        <div class="card metric-card online">
-          <div class="metric-value" id="val-online">—</div>
-          <div class="metric-label">Online</div>
-        </div>
-        <div class="card metric-card tripped">
-          <div class="metric-value" id="val-tripped">—</div>
-          <div class="metric-label">Tripped</div>
-        </div>
-        <div class="card metric-card comms">
-          <div class="metric-value" id="val-comms">—</div>
-          <div class="metric-label">Comms Lost</div>
+        <div class="card metric-card plant-status-card" style="grid-column: span 1;">
+          <div class="metric-value" id="val-online">--</div>
+          <div class="metric-label">Inverters Online</div>
+          <div class="status-breakdown">
+            <span class="breakdown-item"><span class="dot red"></span> <b id="val-tripped">0</b> Tripped</span>
+            <span class="breakdown-item"><span class="dot yellow"></span> <b id="val-comms">0</b> Comms</span>
+            <span class="breakdown-item"><span class="dot blue"></span> <b id="val-total">36</b> Total</span>
+          </div>
         </div>
         <div class="card metric-card total-power">
           <div class="metric-value" id="val-total-power">—</div>
@@ -70,21 +71,42 @@
           <div class="metric-value" id="val-daily-energy">—</div>
           <div class="metric-label">Daily Energy Today</div>
         </div>
+        <div class="card metric-card pr-status">
+          <div class="metric-value" id="val-avg-pr">—</div>
+          <div class="metric-label">Average PR Today</div>
+        </div>
         <div class="card metric-card sensor-status">
           <div class="metric-value" id="val-poa">—</div>
           <div class="metric-label">Plant Irradiance (POA)</div>
         </div>
-        <div class="card metric-card action-card">
+        <div class="card metric-card grid-limit" id="card-grid-limit">
+          <div class="metric-value" id="val-grid-limit">87.6%</div>
+          <div class="metric-label">Grid Production Limit</div>
+        </div>
+        <div class="card metric-card action-card" style="grid-column: span 1; background: var(--glass-glow)">
           <button id="btn-trigger-extraction" onclick="triggerExtraction()">
             <span id="trigger-icon">🚀</span> <span id="trigger-text">Get Data Now</span>
           </button>
-          <div class="metric-label">VCOM Status: <span id="extraction-status-label">Idle</span></div>
+          <div class="metric-label">VCOM: <span id="extraction-status-label" class="status-pulse">IDLE</span></div>
+        </div>
+        <div class="card metric-card tracker-health-card" id="card-tracker-health" style="grid-column: span 1; cursor:pointer" onclick="document.querySelector('[data-tab=tab-trackers]').click()">
+          <div class="metric-value" id="val-tracker-health">0/370</div>
+          <div class="metric-label">Trackers In Auto (AM)</div>
+          <div class="ncu-breakdown-row">
+             <div class="ncu-mini-stat"><b>N1:</b> <span id="val-n1-am">0</span></div>
+             <div class="ncu-mini-stat"><b>N2:</b> <span id="val-n2-am">0</span></div>
+             <div class="ncu-mini-stat"><b>N3:</b> <span id="val-n3-am">0</span></div>
+          </div>
+          <div class="tracker-mini-stats" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 0.4rem; margin-top: 0.4rem">
+             <span id="val-tracker-crit" style="color:var(--red); font-weight:700">0 Dev.</span> &bull; <span id="val-tracker-last-sync">--:--</span>
+          </div>
+        </div>
         </div>
       </div>
     </section>
 
     <section>
-      <h2>Data Ingestion Status</h2>
+      <h2 id="extraction-section-title">Data Extracted Status</h2>
       <div id="ingestion-grid"></div>
     </section>
 
@@ -367,6 +389,48 @@
     </div>
   </main>
 
+  <main id="tab-trackers" class="tab-content">
+    <div class="tracker-header-dashboard">
+       <div class="tracker-main-stat-card">
+          <div class="main-stat-val" id="stat-total-connected">0 / 370</div>
+          <div class="main-stat-label">Total Field Units</div>
+          <div class="ncu-status-pills">
+             <div class="ncu-pill" id="pill-n1">NCU 01: <span class="val">0</span></div>
+             <div class="ncu-pill" id="pill-n2">NCU 02: <span class="val">0</span></div>
+             <div class="ncu-pill" id="pill-n3">NCU 03: <span class="val">0</span></div>
+          </div>
+       </div>
+       <div class="tracker-main-stat-card">
+          <div class="main-stat-val" id="stat-total-auto" style="color:var(--green)">0</div>
+          <div class="main-stat-label">Units in AM Mode</div>
+          <div class="ncu-status-pills">
+             <div class="ncu-pill">N1: <span id="pill-n1-am">0</span></div>
+             <div class="ncu-pill">N2: <span id="pill-n2-am">0</span></div>
+             <div class="ncu-pill">N3: <span id="pill-n3-am">0</span></div>
+          </div>
+       </div>
+       <div class="tracker-main-stat-card">
+          <div class="main-stat-val" id="stat-total-critical" style="color:var(--red)">0</div>
+          <div class="main-stat-label">Active Deviations</div>
+          <div id="tracker-anomalies" class="anomalies-scroll-box"></div>
+       </div>
+    </div>
+
+    <div class="tracker-navigation-bar">
+      <div class="tracker-filters">
+        <button class="filter-btn active" data-ncu="all">All Fields</button>
+        <button class="filter-btn" data-ncu="NCU_01">NCU 01</button>
+        <button class="filter-btn" data-ncu="NCU_02">NCU 02</button>
+        <button class="filter-btn" data-ncu="NCU_03">NCU 03</button>
+      </div>
+      <div id="tracker-anomalies" class="anomalies-mini-list"></div>
+    </div>
+
+    <div id="tracker-sections-container">
+       <!-- NCU Sections will be injected here -->
+    </div>
+  </main>
+
   <main id="tab-chat" class="tab-content">
     <section style="display: flex; flex-direction: column; height: 80vh;">
       <div class="chat-container">
@@ -560,6 +624,26 @@
                   <td style="text-align:center;"><input type="checkbox" id="pref-dc-crit-tg"></td>
                 </tr>
 
+                <tr style="border-top: 1px solid var(--border);">
+                  <td colspan="3"
+                    style="font-size:0.65rem; color:var(--muted); padding:0.25rem 0.75rem; background:rgba(0,0,0,0.2);">
+                    SAFETY &amp; GRID</td>
+                </tr>
+                <tr>
+                  <td style="padding:0.75rem;"><span
+                      style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">🔌</span> Insulation Fault
+                    (ISO &lt;50k&#x2126;)</td>
+                  <td style="text-align:center;"><input type="checkbox" id="pref-iso-db"></td>
+                  <td style="text-align:center;"><input type="checkbox" id="pref-iso-tg"></td>
+                </tr>
+                <tr>
+                  <td style="padding:0.75rem;"><span
+                      style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">⚠️</span> Grid Limit Change
+                    (&ne;87.6%)</td>
+                  <td style="text-align:center;"><input type="checkbox" id="pref-grid-db"></td>
+                  <td style="text-align:center;"><input type="checkbox" id="pref-grid-tg"></td>
+                </tr>
+
                 <tr style="border-top: 2px solid var(--border);">
                   <td style="padding:0.75rem; font-weight:700;"><span
                       style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">✅</span> Event Recoveries
@@ -677,5 +761,4 @@
 
   <script src="/static/app.js"></script>
 </body>
-
 </html>

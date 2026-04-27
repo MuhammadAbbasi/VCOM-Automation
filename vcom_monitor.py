@@ -27,11 +27,13 @@ from pathlib import Path
 from logging.handlers import RotatingFileHandler
 
 # Fix for Windows console encoding issues with emojis/special characters
-if hasattr(sys.stdout, "reconfigure"):
-    try:
-        sys.stdout.reconfigure(encoding='utf-8')
-    except:
-        pass
+if sys.platform == "win32":
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding='utf-8')
+            sys.stderr.reconfigure(encoding='utf-8')
+        except Exception:
+            pass
 
 from playwright.sync_api import sync_playwright
 
@@ -71,6 +73,7 @@ from extraction_code.corrente_dc_monitor import extract_corrente_dc
 from extraction_code.resistenza_monitor import extract_resistenza
 from extraction_code.temperatura_monitor import extract_temperatura
 from extraction_code.irraggiamento_monitor import extract_irraggiamento
+from extraction_code.potenza_attiva_monitor import extract_potenza_attiva
 
 METRICS = [
     ("PR inverter", extract_pr),
@@ -79,6 +82,7 @@ METRICS = [
     ("Resistenza di isolamento", extract_resistenza),
     ("Temperatura", extract_temperatura),
     ("Irraggiamento", extract_irraggiamento),
+    ("Potenza attiva", extract_potenza_attiva),
 ]
 
 # ---------------------------------------------------------------------------
@@ -162,69 +166,63 @@ def main() -> None:
     busy_path = ROOT / ".extraction_busy"
 
     try:
-        # Mark as busy as soon as we start
-        busy_path.touch()
-        logger.info(f"Sync flags: busy={busy_path}, trigger={trigger_path}")
-
-        print("[EXTRACTION] Initializing Playwright...", flush=True)
         with sync_playwright() as p:
             is_headless = os.environ.get("VCOM_HEADLESS", "false").lower() == "true"
-            print(f"[EXTRACTION] Launching Chromium (headless={is_headless})...", flush=True)
+            logger.info(f"Launching persistent browser (headless={is_headless})...")
             browser = p.chromium.launch(headless=is_headless)
             context = browser.new_context(viewport={"width": 1450, "height": 900})
             page = context.new_page()
+            
+            print("[EXTRACTION] Initial VCOM Login...", flush=True)
+            login(page)
+            
+            cycle_count = 1
+            while True:
+                # Mark as busy as soon as we start
+                busy_path.touch()
+                
+                try:
+                    if page.is_closed():
+                        logger.warning("Browser page was closed. Reopening...")
+                        page = context.new_page()
+                        login(page)
 
-            try:
-                print("[EXTRACTION] Attempting VCOM Login...", flush=True)
-                login(page)
-                print("[EXTRACTION] Login successful.", flush=True)
-
-                cycle_count = 1
-                while True:
-                    # Refresh busy flag just in case
-                    busy_path.touch()
+                    run_extraction_cycle(page, cycle_count)
                     
+                except Exception as e:
+                    logger.critical(f"FATAL Exception in cycle #{cycle_count}: {e}\n{traceback.format_exc()}")
+                    print(f"[EXTRACTION] Fatal Error in cycle: {e}", flush=True)
+                    # Simple recovery: try re-login if page is still alive
                     try:
-                        run_extraction_cycle(page, cycle_count)
-                    except Exception:
-                        logger.critical(f"Unhandled error in cycle #{cycle_count}:\n{traceback.format_exc()}")
-                        try:
-                            ss_path = ERRORS_DIR / f"fatal_cycle{cycle_count}.png"
-                            page.screenshot(path=str(ss_path))
-                        except Exception:
-                            pass
+                        if not page.is_closed():
+                            login(page)
+                    except:
+                        pass
 
-                    # Mark as IDLE while sleeping (important for manual trigger to work)
-                    if busy_path.exists(): busy_path.unlink()
+                # Mark as IDLE while sleeping
+                if busy_path.exists(): busy_path.unlink()
 
-                    try:
-                        from processor_watchdog_final import load_user_settings
-                        settings = load_user_settings()
-                        current_interval = settings.get("collection_interval", 15)
-                    except Exception:
-                        current_interval = 15
+                try:
+                    from processor_watchdog_final import load_user_settings
+                    settings = load_user_settings()
+                    current_interval = settings.get("collection_interval", 15)
+                except Exception:
+                    current_interval = 15
 
-                    logger.info(f"Sleeping {current_interval} minutes until next cycle (or manual trigger)...")
-                    
-                    # 3. INTERRUPTIBLE SLEEP
-                    sleep_seconds = int(current_interval * 60)
-                    for _ in range(sleep_seconds):
-                        if trigger_path.exists():
-                            print("[EXTRACTION] Manual trigger detected!", flush=True)
-                            logger.info("Manual trigger detected! Breaking sleep.")
-                            trigger_path.unlink()
-                            break
-                        time.sleep(1)
-                    
-                    cycle_count += 1
+                logger.info(f"Sleeping {current_interval} minutes until next cycle...")
+                
+                # INTERRUPTIBLE SLEEP
+                sleep_seconds = int(current_interval * 60)
+                for _ in range(sleep_seconds):
+                    if trigger_path.exists():
+                        print("[EXTRACTION] Manual trigger detected!", flush=True)
+                        trigger_path.unlink()
+                        break
+                    time.sleep(1)
+                
+                cycle_count += 1
 
-            except KeyboardInterrupt:
-                logger.info("Interrupted by user.")
-            except Exception as e:
-                logger.critical(f"FATAL Exception in main loop: {e}\n{traceback.format_exc()}")
-            finally:
-                print("[EXTRACTION] Closing browser...", flush=True)
-                browser.close()
+            browser.close()
 
     finally:
         # Final cleanup of busy flag
@@ -233,4 +231,7 @@ def main() -> None:
             logger.info("Removed busy flag on exit.")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n[EXTRACTION] Stopped by user.")

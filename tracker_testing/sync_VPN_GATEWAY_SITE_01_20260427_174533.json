@@ -1,0 +1,11 @@
+[
+    {
+        "tcu": "TCU 01",
+        "tracker_no": "Tracker 001",
+        "target_angle": 112.1,
+        "actual_angle": 112.1,
+        "alarm": "unknown",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    }
+]

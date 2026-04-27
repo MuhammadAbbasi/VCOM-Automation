@@ -56,7 +56,7 @@ def get_user_context(user_id):
 # ---------------------------------------------------------------------------
 import pandas as pd
 import numpy as np
-from db.db_manager import load_metric, load_latest_snapshot, get_db_stats, get_data_conn, get_logs_conn
+from db.db_manager import load_metric, load_latest_snapshot, get_db_stats, get_data_conn, get_logs_conn, get_tracker_summary, get_all_tracker_status
 
 INV_IDS = [f"INV TX{tx}-{i:02d}" for tx in range(1, 4) for i in range(1, 13)]
 
@@ -105,6 +105,26 @@ def get_available_dates():
     except Exception:
         return []
 
+def calculate_sun_times(date_str=None):
+    """Approximate sunrise/sunset for Mazara del Vallo."""
+    try:
+        dt = datetime.strptime(date_str, "%Y-%m-%d") if date_str else datetime.now()
+        doy = dt.timetuple().tm_yday
+        lat_rad = np.radians(37.67)
+        decl = 0.409 * np.sin(2 * np.pi * (doy - 81) / 365)
+        cos_h = -np.tan(lat_rad) * np.tan(decl)
+        cos_h = np.clip(cos_h, -1, 1)
+        h = np.arccos(cos_h)
+        sunrise_base = 12.0 - (np.degrees(h) / 15.0)
+        sunset_base = 12.0 + (np.degrees(h) / 15.0)
+        lon_adj = (15.0 - 12.59) * 4 / 60.0
+        dst_adj = 1.0 if (3 <= dt.month <= 10) else 0.0
+        sunrise = sunrise_base + lon_adj + dst_adj
+        sunset = sunset_base + lon_adj + dst_adj
+        return sunrise, sunset
+    except:
+        return 6.5, 19.5
+
 def get_total_production(date_str=None):
     """Total plant energy in MWh for a given date."""
     date_str = date_str or datetime.now().strftime("%Y-%m-%d")
@@ -119,7 +139,19 @@ def get_total_production(date_str=None):
     
     df[ac_cols] = df[ac_cols].fillna(0)
     total_mwh = round(float(df[ac_cols].sum().sum() * (1/60)) / 1_000_000, 3)
-    return {"date": date_str, "total_mwh": total_mwh, "inverter_count": len(ac_cols)}
+    
+    # Calculate average MW during production hours
+    sunrise, sunset = calculate_sun_times(date_str)
+    if "Ora" in df.columns:
+        prod_df = df[(df["Ora"].astype(float) >= sunrise) & (df["Ora"].astype(float) <= sunset)]
+        if not prod_df.empty:
+            avg_mw = round(float(prod_df[ac_cols].sum(axis=1).mean()) / 1_000_000, 3)
+        else:
+            avg_mw = 0.0
+    else:
+        avg_mw = 0.0
+        
+    return {"date": date_str, "total_mwh": total_mwh, "average_mw": avg_mw, "inverter_count": len(ac_cols)}
 
 def get_peak_production(date_str=None):
     """Find peak instantaneous power and its time."""
@@ -329,7 +361,17 @@ def get_irradiance(date_str=None):
         return {"date": date_str, "error": "All rows empty"}
     latest_vals = {col: round(float(df_valid.iloc[-1][col]), 1) for col in irr_cols if pd.notna(df_valid.iloc[-1][col])}
     peak_vals = {col: round(float(df[col].max()), 1) for col in irr_cols}
-    return {"date": date_str, "latest": latest_vals, "peak": peak_vals}
+    
+    # Calculate averages during daylight hours
+    sunrise, sunset = calculate_sun_times(date_str)
+    avg_vals = {}
+    if "Ora" in df.columns:
+        daylight_df = df[(df["Ora"].astype(float) >= sunrise) & (df["Ora"].astype(float) <= sunset)]
+        if not daylight_df.empty:
+            for col in irr_cols:
+                avg_vals[col] = round(float(daylight_df[col].mean()), 1)
+    
+    return {"date": date_str, "latest": latest_vals, "peak": peak_vals, "daylight_average": avg_vals}
 
 def get_downtime_events(date_str=None):
     """Check which inverters went offline during production hours."""
@@ -374,6 +416,20 @@ def search_logs(query, limit=10):
     except Exception as e:
         return {"error": str(e)}
 
+def get_tracker_data_summary():
+    """Get concise summary of tracker field."""
+    try:
+        return get_tracker_summary()
+    except Exception as e:
+        return {"error": str(e)}
+
+def get_tracker_data_all():
+    """Retrieve all tracker statuses from the database."""
+    try:
+        return get_all_tracker_status()
+    except Exception as e:
+        return {"error": str(e)}
+
 # ---------------------------------------------------------------------------
 # Data Snapshot Builder — builds the context the LLM reads
 # ---------------------------------------------------------------------------
@@ -390,7 +446,8 @@ def build_data_snapshot(plant_data, question):
         "DOWNTIME": ["off", "down", "zero", "offline", "stopped", "trip", "fault", "spento", "not working", "not producing", "fermo", "anomalia", "allarme"],
         "DC_STRINGS": ["current", "dc", "string", "mppt", "corrente", "amper", "stringhe"],
         "IRRADIANCE": ["irradiance", "sun", "irraggiamento", "solar", "radiation", "pyranometer", "sole", "luce"],
-        "HISTORY": ["history", "historical", "trail", "past", "last alarms", "storia", "passato", "ieri", "precedente"]
+        "HISTORY": ["history", "historical", "trail", "past", "last alarms", "storia", "passato", "ieri", "precedente"],
+        "TRACKERS": ["tracker", "trackers", "ncu", "tcu", "angle", "position", "tilt", "seguimento", "inclinazione", "angolo", "motore", "motor"]
     }
     
     # Determine active categories
@@ -424,9 +481,21 @@ def build_data_snapshot(plant_data, question):
     # 4. Global State (Always include)
     if plant_data:
         macro = plant_data.get("macro_health", {})
-        poa = macro.get("poa", "?")
+        poa = macro.get("poa", 0)
         pr = macro.get("avg_pr", "?")
-        snapshot.append(f"PLANT STATE: MW={macro.get('MW','?')}, Online={macro.get('online','?')}/{macro.get('total','?')}, POA={poa} W/m², Avg PR={pr}%")
+        mw = macro.get('MW','?')
+        
+        # NIGHT MODE DETECTION
+        now = datetime.now()
+        now_hr = now.hour + (now.minute / 60.0)
+        sunrise, sunset = calculate_sun_times(target_date)
+        is_night = (now_hr > sunset + 0.5 or now_hr < sunrise - 0.5) or (poa < 30 and now_hr > 17)
+        
+        mode = "NIGHT MODE (Offline)" if is_night else "PRODUCTION MODE (Daylight)"
+        
+        snapshot.append(f"CURRENT LOCAL TIME: {now.strftime('%H:%M')}")
+        snapshot.append(f"CURRENT STATUS (Latest Sync): {mode}, MW={mw}, Online={macro.get('online','?')}/{macro.get('total','?')}, POA={poa} W/m², Avg PR={pr}%")
+        snapshot.append(f"SUN SCHEDULE ({target_date}): Sunrise ~{int(sunrise)}:{int((sunrise%1)*60):02d}, Sunset ~{int(sunset)}:{int((sunset%1)*60):02d}")
         
     pub = get_public_url() or "https://carl-perkiest-paniculately.ngrok-free.dev/"
     snapshot.append(f"DASHBOARD URL: {pub} (Local: http://localhost:8080)")
@@ -466,6 +535,18 @@ def build_data_snapshot(plant_data, question):
     if "IRRADIANCE" in active_cats:
         data = get_irradiance(target_date)
         snapshot.append(f"IRRADIANCE: {json.dumps(data)}")
+
+    if "TRACKERS" in active_cats:
+        summary = get_tracker_data_summary()
+        plant_data["tracker_summary"] = summary
+        snapshot.append(f"TRACKER SUMMARY: {json.dumps(summary, default=str)}")
+        # If user mentions a specific TCU or asks for full list, include full data
+        if any(w in q for w in ["list", "tcu", "every", "all trackers"]):
+             data = get_tracker_data_all()
+             plant_data["trackers"] = data
+             # Only show first 5 to keep context manageable in the prompt text
+             snapshot.append(f"TRACKER DATA (Sample of 5): {json.dumps(data[:5], default=str)}")
+             snapshot.append("NOTE: The full 'trackers' list is available in the 'data' variable for analysis.")
 
     # 6. Fallback (If no categories matched, provide general overview)
     if not snapshot or len(snapshot) <= 2:
@@ -519,6 +600,9 @@ def run_python_analysis(code: str, plant_data: dict) -> tuple:
         "get_irradiance": get_irradiance,
         "get_downtime_events": get_downtime_events,
         "get_available_dates": get_available_dates,
+        "get_tracker_summary": get_tracker_summary,
+        "get_tracker_data": get_all_tracker_status,
+        "get_tracker_data_summary": get_tracker_data_summary,
         "search_logs": search_logs,
         "load_csv": _load_csv, # Kept but hidden from prompt
         "INV_IDS": INV_IDS,

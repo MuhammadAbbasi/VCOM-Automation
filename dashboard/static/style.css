@@ -29,6 +29,11 @@
   --high: #f97316;
   --warning: #f59e0b;
   --info: #3b82f6;
+
+  /* NCU Colors */
+  --ncu1: #3b82f6;
+  --ncu2: #8b5cf6;
+  --ncu3: #6366f1;
 }
 
 html,
@@ -598,6 +603,7 @@ main {
   display: flex;
   flex-direction: column;
   gap: 2rem;
+  flex: 1;
 }
 
 section>h2 {
@@ -626,8 +632,34 @@ section>h2 {
 /* ─── Metrics grid (macro health) ────────────────────────── */
 #metrics-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+
+.inverter-group {
+    background: rgba(255,255,255,0.02);
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+    border: 1px solid var(--border);
+    margin-bottom: 1.5rem;
+    width: 100%;
+}
+
+.group-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.group-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 1rem;
 }
 
 .metric-card {
@@ -699,6 +731,16 @@ section>h2 {
   text-shadow: 0 0 15px rgba(245, 158, 11, 0.3);
 }
 
+.metric-card.pr-status {
+  border-color: rgba(16, 185, 129, 0.2);
+  background: rgba(16, 185, 129, 0.03);
+}
+
+.metric-card.pr-status .metric-value {
+  color: #10b981;
+  text-shadow: 0 0 15px rgba(16, 185, 129, 0.3);
+}
+
 .metric-card.sensor-status {
   border-color: rgba(59, 130, 246, 0.2);
   background: rgba(59, 130, 246, 0.03);
@@ -707,6 +749,34 @@ section>h2 {
 .metric-card.sensor-status .metric-value {
   color: #3b82f6;
   text-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
+}
+
+.metric-card.grid-limit {
+  border-color: rgba(59, 130, 246, 0.2);
+  background: rgba(59, 130, 246, 0.03);
+}
+
+.metric-card.grid-limit .metric-value {
+  color: #3b82f6;
+  text-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
+}
+
+.metric-card.grid-limit.alert-red {
+  background: rgba(239, 68, 68, 0.15) !important;
+  border-color: var(--red) !important;
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.3);
+  animation: pulse-red 2s infinite;
+}
+
+.metric-card.grid-limit.alert-red .metric-value {
+  color: var(--red) !important;
+  text-shadow: 0 0 15px rgba(239, 68, 68, 0.5);
+}
+
+@keyframes pulse-red {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.02); box-shadow: 0 0 25px rgba(239, 68, 68, 0.5); }
+  100% { transform: scale(1); }
 }
 
 /* Total Inverters card specifically */
@@ -833,9 +903,10 @@ section>h2 {
 
 /* ─── Inverter health matrix ──────────────────────────────── */
 #inverter-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  gap: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
 }
 
 .inverter-card {
@@ -2300,4 +2371,411 @@ section>h2 {
 .sensor-label {
   position: relative;
   z-index: 1;
+}
+
+/* ─── Tracker Field ────────────────────────────────────────────────────────── */
+.tracker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.tracker-card {
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  padding: 0.75rem;
+  font-size: 0.8rem;
+  transition: transform 0.2s, border-color 0.3s;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.tracker-card:hover {
+  transform: translateY(-3px);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Alarm boundary colors */
+.tracker-card.alarm-green { border-color: var(--green); }
+.tracker-card.alarm-red { border-color: var(--red); }
+.tracker-card.alarm-yellow { border-color: var(--yellow); }
+.tracker-card.alarm-grey { border-color: var(--grey); }
+
+/* No State handling */
+.tracker-card.no-state {
+  opacity: 0.7;
+  border-color: var(--grey);
+}
+
+.tracker-card.no-state .tracker-status-tag {
+  background: var(--grey);
+  color: white;
+}
+
+.tracker-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.tracker-meta-text {
+  font-weight: 700;
+  font-size: 0.75rem;
+  color: var(--text);
+}
+
+.tracker-meta-sub {
+  font-size: 0.65rem;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.angle-label {
+  font-size: 0.6rem;
+  color: var(--muted);
+  display: block;
+}
+
+.angle-val {
+  font-family: 'Outfit', monospace;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.tracker-status-tag {
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.1);
+  display: inline-block;
+  margin-left: auto;
+}
+/* New Data Highlights */
+.new-badge {
+  position: absolute;
+  top: -8px;
+  right: 10px;
+  background: #3b82f6;
+  color: white;
+  font-size: 0.55rem;
+  font-weight: 900;
+  padding: 1px 5px;
+  border-radius: 4px;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+  z-index: 2;
+  animation: pulse-glow 2s infinite;
+}
+
+.tracker-card.new-arrival {
+  background: rgba(59, 130, 246, 0.05) !important;
+}
+
+@keyframes pulse-glow {
+  0% { opacity: 0.8; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.1); }
+  100% { opacity: 0.8; transform: scale(1); }
+}
+
+/* New Data Highlights */
+.new-badge {
+  position: absolute;
+  top: -8px;
+  right: 10px;
+  background: #3b82f6;
+  color: white;
+  font-size: 0.55rem;
+  font-weight: 900;
+  padding: 1px 5px;
+  border-radius: 4px;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+  z-index: 2;
+  animation: pulse-glow 2s infinite;
+}
+
+.tracker-card.new-arrival {
+  background: rgba(59, 130, 246, 0.05) !important;
+}
+
+@keyframes pulse-glow {
+  0% { opacity: 0.8; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.1); }
+  100% { opacity: 0.8; transform: scale(1); }
+}
+
+/* --- Premium UI Overhaul --- */
+:root {
+  --glass: rgba(255, 255, 255, 0.03);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-glow: rgba(59, 130, 246, 0.15);
+  --card-radius: 16px;
+}
+
+body {
+  background: radial-gradient(circle at top right, #1a1c2c, #0a0b14);
+}
+
+.card {
+  background: var(--glass);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--card-radius);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-5px);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.metric-card {
+  padding: 1.5rem;
+  overflow: hidden;
+}
+
+.metric-card.online { border-left: 4px solid var(--green); box-shadow: inset 5px 0 15px -5px rgba(16, 185, 129, 0.2); }
+.metric-card.tripped { border-left: 4px solid var(--red); box-shadow: inset 5px 0 15px -5px rgba(239, 68, 68, 0.2); }
+.metric-card.comms { border-left: 4px solid var(--yellow); box-shadow: inset 5px 0 15px -5px rgba(245, 158, 11, 0.2); }
+
+.tracker-health-card {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(37, 99, 235, 0.05));
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.1);
+}
+
+.metric-value {
+  font-size: 2.2rem;
+  font-weight: 800;
+  background: linear-gradient(to bottom, #fff, #9ca3af);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: -0.02em;
+}
+
+.tracker-header-dashboard {
+  display: grid !important;
+  grid-template-columns: repeat(3, 1fr) !important;
+  gap: 1.5rem !important;
+  padding: 1.5rem !important;
+  background: var(--glass) !important;
+  border-radius: 20px !important;
+  border: 1px solid var(--glass-border) !important;
+  margin-bottom: 2rem !important;
+}
+
+.tracker-main-stat-card {
+  background: none !important;
+  border: none !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  text-align: left !important;
+  border-right: 1px solid var(--glass-border) !important;
+}
+
+.tracker-main-stat-card:last-child { border-right: none !important; }
+
+.main-stat-val {
+  font-size: 2.5rem !important;
+  background: linear-gradient(135deg, #fff 0%, var(--accent) 100%) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+.ncu-section-header {
+  background: linear-gradient(to right, rgba(59, 130, 246, 0.1), transparent) !important;
+  padding: 1rem !important;
+  border-radius: 12px !important;
+  border-left: 4px solid var(--accent) !important;
+  margin-bottom: 2rem !important;
+}
+
+.tracker-card {
+  border-width: 1px !important;
+  background: rgba(255, 255, 255, 0.02) !important;
+}
+
+.tracker-card.new-arrival {
+  animation: glow-pulse 2s infinite !important;
+  border-color: var(--accent) !important;
+}
+
+@keyframes glow-pulse {
+  0% { box-shadow: 0 0 5px rgba(59, 130, 246, 0.2); }
+  50% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.4); }
+  100% { box-shadow: 0 0 5px rgba(59, 130, 246, 0.2); }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+/* --- Header & Layout Refinements --- */
+.header-refresh-timer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-top: 0.25rem;
+}
+
+.plant-meta-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding-left: 2rem;
+  border-left: 1px solid var(--glass-border);
+}
+
+.meta-row {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.meta-label { font-weight: 700; color: #fff; }
+.meta-val { color: var(--accent); }
+
+.status-pulse {
+  animation: extraction-pulse 2s infinite;
+}
+
+@keyframes extraction-pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; color: var(--accent); }
+  100% { opacity: 0.6; }
+}
+
+/* Tab Icons Glow */
+.tab-btn.active .tab-icon {
+  filter: drop-shadow(0 0 5px var(--accent));
+}
+
+/* Inverter Grid Balance */
+#inverter-grid {
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important;
+}
+
+/* --- Merged & Breakdown Layouts --- */
+.status-breakdown {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--glass-border);
+}
+
+.breakdown-item {
+  font-size: 0.65rem;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.ncu-breakdown-row {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  background: rgba(255,255,255,0.03);
+  padding: 0.4rem 0.75rem;
+  border-radius: 8px;
+}
+
+.ncu-mini-stat {
+  font-size: 0.65rem;
+  color: var(--muted);
+}
+
+.ncu-mini-stat b { color: var(--accent); }
+
+.ncu-status-pills {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 1rem;
+}
+
+.ncu-pill {
+  font-size: 0.7rem;
+  background: rgba(255,255,255,0.05);
+  padding: 4px 10px;
+  border-radius: 6px;
+  display: flex;
+  justify-content: space-between;
+  border-left: 2px solid var(--accent);
+}
+
+.ncu-pill .val { font-weight: 700; color: #fff; }
+
+.anomalies-scroll-box {
+  max-height: 100px;
+  overflow-y: auto;
+  margin-top: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+/* --- Tracker Navigation & Filter Buttons --- */
+.tracker-navigation-bar {
+  display: flex;
+  justify-content: center;
+  margin: 2rem 0;
+  padding: 0.4rem;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--glass-border);
+  border-radius: 100px;
+  width: fit-content;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.tracker-filters {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.filter-btn {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  padding: 0.5rem 1.25rem;
+  border-radius: 100px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.filter-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.filter-btn.active {
+  background: linear-gradient(135deg, var(--accent), #3b82f6);
+  color: #fff;
+  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
+}
+
+.ncu-section {
+  animation: fadeIn 0.5s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }

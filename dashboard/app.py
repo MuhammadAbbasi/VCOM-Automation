@@ -135,19 +135,25 @@ async def data_broadcaster():
             except Exception:
                 # Fallback: read from JSON file
                 json_path = DATA_DIR / f"dashboard_data_{today}.json"
-                if json_path.exists():
-                    with open(json_path, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                    if data:
-                        latest_key = sorted(data.keys())[-1]
-                        latest_data = data[latest_key]
-                        snap_ts = latest_data.get("macro_health", {}).get("last_sync", "")
-                        if snap_ts != last_snapshot_ts:
-                            last_snapshot_ts = snap_ts
-                            await manager.broadcast({"type": "data_update", "data": latest_data})
+            status = load_latest_snapshot(today)
+            if status:
+                status["sensor_history"] = get_daily_sensor_history(today)
+            
+            trackers = get_all_tracker_status()
+            
+            payload = {
+                "type": "data_update",
+                "data": status,
+                "trackers": trackers,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            if payload != last_broadcast_data:
+                await manager.broadcast(payload)
+                last_broadcast_data = payload
         except Exception:
             pass
-        await asyncio.sleep(2)
+        await asyncio.sleep(5)
 
 @app.post("/api/extraction/trigger")
 async def trigger_extraction(user: str = Depends(verify_credentials)):
@@ -178,12 +184,12 @@ async def websocket_endpoint(websocket: WebSocket):
         # Send initial data immediately from database
         today = datetime.now().strftime("%Y-%m-%d")
         try:
-            from db.db_manager import load_latest_snapshot, get_daily_sensor_history
+            from db.db_manager import load_latest_snapshot, get_daily_sensor_history, get_all_tracker_status
             latest_data = load_latest_snapshot(today)
             if latest_data:
                 # Enrich with sensor history
                 latest_data["sensor_history"] = get_daily_sensor_history(today)
-                await websocket.send_json({"type": "data_update", "data": latest_data})
+                await websocket.send_json({"type": "data_update", "data": latest_data, "trackers": get_all_tracker_status()})
         except Exception:
             # Fallback: read from JSON file
             json_path = DATA_DIR / f"dashboard_data_{today}.json"
@@ -206,7 +212,13 @@ async def websocket_endpoint(websocket: WebSocket):
         manager.disconnect(websocket)
 
 
-@app.get("/api/settings")
+@app.get("/api/trackers")
+async def get_trackers(username: str = Depends(verify_credentials)):
+    from db.db_manager import get_all_tracker_status
+    return get_all_tracker_status()
+
+
+@app.get("/api/status")
 async def get_settings(user: str = Depends(verify_credentials)):
     from processor_watchdog_final import load_user_settings
     return JSONResponse(load_user_settings())

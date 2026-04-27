@@ -68,6 +68,11 @@ SERVICES = [
         "cmd": [sys.executable, "-u", str(ROOT / "telegram_bot.py")],
         "new_console": False,
     },
+    {
+        "name": "TRACKER",
+        "cmd": [sys.executable, "-u", str(ROOT / "tracker_testing" / "receiver.py")],
+        "new_console": False,
+    },
 ]
 
 

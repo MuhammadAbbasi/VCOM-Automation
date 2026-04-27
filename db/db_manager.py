@@ -100,6 +100,21 @@ def _init_data_db() -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_dc_date ON corrente_dc(date)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_dc_date_inv ON corrente_dc(date, inverter_id)")
 
+    # Tracker Status — real-time snapshot of the tracker field
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS tracker_status (
+            ncu_id TEXT,
+            tcu_id TEXT,
+            tracker_no TEXT,
+            target_angle REAL,
+            actual_angle REAL,
+            alarm TEXT,
+            mode TEXT,
+            last_update TEXT,
+            PRIMARY KEY (ncu_id, tcu_id)
+        )
+    """)
+
     # Analysis snapshots — stores full dashboard JSON per timestamp
     conn.execute("""
         CREATE TABLE IF NOT EXISTS analysis_snapshots (
@@ -162,6 +177,7 @@ METRIC_TABLE_MAP = {
     "Irraggiamento":             "irraggiamento",
     "PR inverter":               "pr_readings",
     "Corrente DC":               "corrente_dc",     # normalized — special handling
+    "Potenza attiva":            "potenza_attiva",
 }
 
 # List of all standard inverter IDs in the plant
@@ -837,4 +853,85 @@ def get_daily_sensor_history(date_str: str) -> dict:
         return result
     except Exception as e:
         logger.error(f"Error fetching daily sensor history: {e}")
+        return {}
+def save_tracker_data(records: list) -> None:
+    """Batch upsert tracker records into the database."""
+    conn = get_data_conn()
+    timestamp = datetime.now().isoformat()
+    
+    try:
+        with conn:
+            conn.executemany("""
+                INSERT INTO tracker_status (
+                    ncu_id, tcu_id, tracker_no, target_angle, actual_angle, alarm, mode, last_update
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(ncu_id, tcu_id) DO UPDATE SET
+                    tracker_no = excluded.tracker_no,
+                    target_angle = excluded.target_angle,
+                    actual_angle = excluded.actual_angle,
+                    alarm = excluded.alarm,
+                    mode = excluded.mode,
+                    last_update = excluded.last_update
+            """, [
+                (
+                    r.get("ncu"),
+                    r.get("tcu"),
+                    r.get("tracker_no"),
+                    r.get("target_angle"),
+                    r.get("actual_angle"),
+                    r.get("alarm"),
+                    r.get("mode"),
+                    timestamp
+                ) for r in records
+            ])
+    except Exception as e:
+        logger.error(f"Failed to save tracker data: {e}")
+
+def get_all_tracker_status() -> list:
+    """Retrieve current status for all trackers."""
+    conn = get_data_conn()
+    try:
+        cursor = conn.execute("SELECT * FROM tracker_status ORDER BY ncu_id, tcu_id")
+        cols = [column[0] for column in cursor.description]
+        results = []
+        for row in cursor.fetchall():
+            results.append(dict(zip(cols, row)))
+        return results
+    except Exception as e:
+        logger.error(f"Failed to load tracker status: {e}")
+        return []
+
+def get_tracker_summary() -> dict:
+    """Get high-level summary of tracker field (Avg angles, alarms)."""
+    conn = get_data_conn()
+    try:
+        # 1. NCU-wise Averages
+        cursor = conn.execute("""
+            SELECT ncu_id, 
+                   AVG(actual_angle) as avg_angle,
+                   COUNT(*) as total,
+                   SUM(CASE WHEN status != 'Normal' THEN 1 ELSE 0 END) as alarms
+            FROM tracker_status 
+            GROUP BY ncu_id
+        """)
+        summary = {}
+        for row in cursor.fetchall():
+            ncu = f"NCU {row[0]:02d}"
+            summary[ncu] = {
+                "avg_angle": round(row[1], 2) if row[1] is not None else 0,
+                "total_trackers": row[2],
+                "active_alarms": row[3]
+            }
+        
+        # 2. Modes distribution
+        cursor = conn.execute("SELECT mode, COUNT(*) FROM tracker_status GROUP BY mode")
+        modes = {row[0]: row[1] for row in cursor.fetchall()}
+        
+        return {
+            "ncu_stats": summary,
+            "modes": modes,
+            "total_plant_trackers": sum(s["total_trackers"] for s in summary.values())
+        }
+    except Exception as e:
+        logger.error(f"Failed to get tracker summary: {e}")
         return {}

@@ -35,3 +35,4 @@ def extract_pr(page) -> pd.DataFrame:
     # But for Mazara, we want a daily time-series if 'Valori in minuti' works.
     
     return df
+

@@ -122,12 +122,20 @@ def login(page) -> None:
       7. Wait for 'Valutazione' link → click it
     """
     cfg = load_config()
-    logger.info("Logging into VCOM meteocontrol...")
-    page.goto(cfg["SYSTEM_URL"], timeout=60_000)
-
-    # Dismiss cookie banner early if it's blocking the view
+    
+    # Check if already logged in
     try:
-        page.locator('button:has-text("Usa solo i cookie necessari"), button:has-text("Accetta tutti i cookie")').click(timeout=5_000)
+        if page.locator('a[title="Valutazione"]').count() > 0 or "valutazione" in page.url.lower():
+            logger.info("Already logged in. Skipping navigation to login page.")
+        else:
+            logger.info("Logging into VCOM meteocontrol...")
+            page.goto(cfg["SYSTEM_URL"], timeout=60_000)
+    except Exception:
+        page.goto(cfg["SYSTEM_URL"], timeout=60_000)
+
+    # Dismiss cookie banner early
+    try:
+        page.locator('button:has-text("Usa solo i cookie necessari"), button:has-text("Accetta tutti i cookie")').click(timeout=3_000)
     except Exception:
         pass
 

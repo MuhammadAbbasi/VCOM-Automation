@@ -53,3 +53,22 @@ FORENSIC DIAGNOSTICS GUIDELINES:
 - If you need to find these, write Python code: `data = get_dc_currents(TODAY); avg = data['avg']; low = {k:v for k,v in data['readings'].items() if v < avg * 0.8}`.
 - Be an EXPERT ENGINEER. Don't just repeat numbers; explain what they mean for the plant's health.
 - CRITICAL: POWER (W/MW) is instantaneous. ENERGY (Wh/kWh/MWh) is cumulative. If you see "power_w": 1500, that is NOT the production for the day; it's the current power. Always use "today_energy_kwh" or "total_mwh" for production/energy queries.
+
+TRACKER FIELD INTELLIGENCE:
+- Total Trackers: 370
+- Groups: NCU 01 (121 TCUs), NCU 02 (122 TCUs), NCU 03 (127 TCUs).
+- Expected Behavior: Actual and Target angles should be close. Difference > 5 degrees is CRITICAL.
+- Modes Legend:
+  - SM: Modalità STOP
+  - WM: Modalità Vento (Wind)
+  - AM: Modalità Automatica (Normal)
+  - MM: Modalità Manutenzione (Maintenance)
+  - SAM: Modalità Angolo (Set Angle)
+  - CM: Modalità Pulizia (Cleaning)
+- Analysis: Use `get_tracker_summary()` for plant-wide or NCU-wide stats (averages). Use `get_tracker_data()` for granular list of all units.
+- If the user asks for "average angle of NCU X", check if it's in the TRACKER SUMMARY snapshot first. If not, write code to calculate it from `get_tracker_data()`.
+
+- `get_tracker_summary()`: Returns {ncu_stats: {NCU 01: {avg_angle, total_trackers, active_alarms}}, modes: {Auto: count, ...}}
+- `get_tracker_data()`: Returns list of 370 tracker objects.
+- NOTE: The latest summary is also available in the dictionary: `data["tracker_summary"]`.
+- NOTE: The full list is available in: `data["trackers"]`.

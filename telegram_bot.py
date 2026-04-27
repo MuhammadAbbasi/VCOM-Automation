@@ -24,6 +24,15 @@ from pathlib import Path
 import requests
 from logging.handlers import RotatingFileHandler
 
+# Ensure UTF-8 for console output on Windows
+if sys.platform == "win32":
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding='utf-8')
+            sys.stderr.reconfigure(encoding='utf-8')
+        except Exception:
+            pass
+
 # Pre-import AI agent to avoid startup lag in the loop
 try:
     import llm_agent
@@ -68,20 +77,25 @@ def load_settings() -> dict:
         return {}
 
 def get_latest_dashboard_json() -> dict | None:
-    """Retrieve the latest analysis snapshot from the database."""
+    """Retrieve the latest analysis snapshot and trackers from the database."""
     try:
-        from db.db_manager import load_latest_snapshot
+        from db.db_manager import load_latest_snapshot, get_all_tracker_status
         today = datetime.now().strftime("%Y-%m-%d")
         latest_data = load_latest_snapshot(today)
-        if latest_data:
-            return latest_data
         
         # Fallback: check recent dates if today is empty
-        from db.db_manager import _get_data_conn
-        conn = _get_data_conn()
-        res = conn.execute("SELECT date FROM analysis_snapshots ORDER BY date DESC, timestamp DESC LIMIT 1").fetchone()
-        if res:
-            return load_latest_snapshot(res[0])
+        if not latest_data:
+            from db.db_manager import _get_data_conn
+            conn = _get_data_conn()
+            res = conn.execute("SELECT date FROM analysis_snapshots ORDER BY date DESC, timestamp DESC LIMIT 1").fetchone()
+            if res:
+                latest_data = load_latest_snapshot(res[0])
+        
+        if latest_data:
+            # Inject tracker status for AI context
+            latest_data["trackers"] = get_all_tracker_status()
+            return latest_data
+            
     except Exception as e:
         logger.warning(f"Database snapshot read failed: {e}")
     return None
@@ -308,13 +322,18 @@ def main() -> None:
                     data = get_latest_dashboard_json()
                     if data and data.get("active_anomalies"):
                         alert_lines = []
+                        seen = set()
                         for a in data["active_anomalies"]:
                             if not isinstance(a, dict):
-                                alert_lines.append(f"🔴 {str(a)}")
-                                continue
-                            inv_name = a.get("inverter", "Unknown")
-                            a_type = a.get("rule", a.get("type", "Anomaly"))
-                            alert_lines.append(f"🔴 {inv_name} - {a_type}")
+                                line = f" {str(a)}"
+                            else:
+                                inv_name = a.get("inverter", "Unknown")
+                                a_type = a.get("rule", a.get("type", "Anomaly"))
+                                line = f" {inv_name} - {a_type}"
+                            
+                            if line not in seen:
+                                seen.add(line)
+                                alert_lines.append(line)
                         
                         bot.send_message(chat_id, f"🚨 *Active Alerts:*\n\n" + "\n".join(alert_lines))
                     else:
@@ -326,9 +345,10 @@ def main() -> None:
                     if data:
                         h = data.get("macro_health", {})
                         msg = (f"📅 *Daily Report ({datetime.now().strftime('%d/%m/%Y')})*\n\n"
-                               f"⚡ Production: {h.get('total_ac_power_mw', 0):.2f} MW\n"
+                               f"⚡ Power: {h.get('total_ac_power_mw', 0):.2f} MW\n"
+                               f"🔋 Energy: {h.get('total_energy_mwh', 0):.2f} MWh\n"
                                f"📈 Avg PR: {h.get('avg_pr', 0):.1f}%\n"
-                               f"✅ Inverters Online: {h.get('online', 0)}/36\n"
+                               f"✅ Inverters: {h.get('online', 0)}/36 Online\n"
                                f"⏰ Last Sync: {h.get('last_sync', '—')}")
                         bot.send_message(chat_id, msg)
                     else:

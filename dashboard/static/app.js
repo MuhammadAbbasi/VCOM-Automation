@@ -14,6 +14,8 @@ let reconnectInterval = 2000;
 let currentConfig = null;
 let historicalData = [];
 let lastData = null; // cache for tab switching
+let lastTrackerData = null;
+let currentNcuFilter = "all";
 let activeAlertFilter = "ALL";
 
 // Ordered list of inverter names matching the analyser
@@ -30,6 +32,7 @@ const FILE_LABELS = {
   Resistenza_Isolamento: "Resistenza Isol.",
   Temperatura: "Temperatura",
   Irraggiamento: "Irraggiamento",
+  Potenza_Attiva: "Grid Limit (Power Control)",
 };
 
 // Sort state for detail tables
@@ -57,6 +60,17 @@ function getDomain(name) {
   return name.replace("INV ", "").substring(0, 3);
 }
 
+function updateDashboard(data) {
+  if (!data || Object.keys(data).length === 0) return;
+  updateMacro(data);
+  updateIngestion(data);
+  updateInverterGrid(data);
+  updateAlerts(data);
+  updateHistory(data);
+  updateDowntime(data);
+  updateSensorsTab(data);
+}
+
 // ─── 1. Macro health ──────────────────────────────────────────────────────
 
 function updateMacro(data) {
@@ -75,14 +89,45 @@ function updateMacro(data) {
       const eMwh = m.total_energy_mwh || 0;
       el("val-daily-energy").textContent = `${eMwh.toFixed(2)} MWh`;
   }
+  if (el("val-avg-pr")) {
+      const avgPr = m.avg_pr || 0;
+      el("val-avg-pr").textContent = `${avgPr.toFixed(1)}%`;
+  }
   
   // Update Sensor Macro
   const sData = data.sensor_data || {};
   // Try to find a POA value to show on overview
-  const poaKey = Object.keys(sData).find(k => k.includes("POA"));
+  let poaKey = Object.keys(sData).find(k => k.toUpperCase().includes("POA"));
+  // Fallback to any Irradiance key if POA not found
+  if (!poaKey) {
+      poaKey = Object.keys(sData).find(k => k.includes("Irraggiamento"));
+  }
+
   if (poaKey && el("val-poa")) {
       const pVal = sData[poaKey];
-      el("val-poa").textContent = (typeof pVal === 'number') ? `${pVal.toFixed(1)} W/m²` : pVal;
+      // If it's a number, format it; otherwise show as is (unless it's just the header name)
+      if (typeof pVal === 'number') {
+          el("val-poa").textContent = `${pVal.toFixed(1)} W/m²`;
+      } else if (typeof pVal === 'string' && !pVal.includes("Irraggiamento")) {
+          el("val-poa").textContent = pVal;
+      } else {
+          el("val-poa").textContent = "—";
+      }
+  }
+  
+  // Update Grid Limit
+  if (el("val-grid-limit")) {
+      const limit = m.grid_limit || 87.6;
+      el("val-grid-limit").textContent = `${limit.toFixed(1)}%`;
+      
+      const card = el("card-grid-limit");
+      if (Math.abs(limit - 87.6) > 0.1) {
+          card.classList.add("alert-red");
+          card.classList.remove("normal");
+      } else {
+          card.classList.remove("alert-red");
+          card.classList.add("normal");
+      }
   }
 
   
@@ -121,6 +166,22 @@ function updateIngestion(data) {
     `;
     grid.appendChild(card);
   });
+
+  // Add Tracker Status Card
+  if (lastTrackerData && lastTrackerData.length > 0) {
+    const latest = [...lastTrackerData].sort((a,b) => (b.last_update || "").localeCompare(a.last_update || ""))[0];
+    const ts = latest.last_update ? latest.last_update.replace("T", " ").substring(11, 19) : "—";
+    
+    const card = document.createElement("div");
+    card.className = `card file-card success`;
+    card.style.borderLeft = "4px solid var(--accent)";
+    card.innerHTML = `
+      <span class="file-name">TRACKER FIELD</span>
+      <span class="file-status">connected</span>
+      <span class="file-time">${ts}</span>
+    `;
+    grid.appendChild(card);
+  }
 }
 
 // ─── 3. Inverter health matrix ────────────────────────────────────────────
@@ -150,50 +211,62 @@ function updateInverterGrid(data) {
   const health = data.inverter_health || {};
   const grid = el("inverter-grid");
   grid.innerHTML = "";
-
+  
+  // Group inverters by TX
+  const groups = {};
   INVERTER_NAMES.forEach(name => {
-    const flags = health[name] || {};
-    const pr      = flags.pr           || "grey";
-    const temp    = flags.temp         || "grey";
-    const dc      = flags.dc_current   || "grey";
-    const ac      = flags.ac_power     || "grey";
-    const iso     = flags.iso          || "grey";
-    const overall = flags.overall_status || "grey";
+      const tx = getDomain(name);
+      if (!groups[tx]) groups[tx] = [];
+      groups[tx].push(name);
+  });
 
-    // Short label: TX1-01
-    const shortName = name.replace("INV ", "");
+  Object.entries(groups).sort().forEach(([tx, inverters]) => {
+      const groupContainer = document.createElement("div");
+      groupContainer.className = "inverter-group";
+      groupContainer.innerHTML = `<div class="group-title">${tx}</div><div class="group-cards"></div>`;
+      const cardsContainer = groupContainer.querySelector(".group-cards");
+      
+      inverters.forEach(name => {
+        const flags = health[name] || {};
+        const pr      = flags.pr           || "grey";
+        const temp    = flags.temp         || "grey";
+        const dc      = flags.dc_current   || "grey";
+        const ac      = flags.ac_power     || "grey";
+        const iso     = flags.iso          || "grey";
+        const overall = flags.overall_status || "grey";
 
-    const card = document.createElement("div");
-    card.className = `inverter-card status-${overall}`;
-    card.title = `${name}`;
-    
-    // Preparation for tooltips
-    const prT   = ledHtml(pr,   "PR",   flags.pr_v);
-    const tempT = ledHtml(temp, "Temp", flags.temp_v);
-    const dcT   = ledHtml(dc,   "DC",   flags.dc_v);
-    const acT   = ledHtml(ac,   "AC",   flags.ac_v);
-    const isoT  = ledHtml(iso,  "ISO",  flags.iso_v);
-    
-    // Extract titles for labels
-    const getTitle = (html) => {
-        const match = html.match(/title="([^"]+)"/);
-        return match ? match[1] : "";
-    };
-    
-    card.innerHTML = `
-      <div class="inv-name">${shortName}</div>
-      <div class="led-row">
-        ${prT} ${tempT} ${dcT} ${acT} ${isoT}
-      </div>
-      <div class="led-labels">
-        <span class="led-label" title="${getTitle(prT)}">PR</span>
-        <span class="led-label" title="${getTitle(tempT)}">T</span>
-        <span class="led-label" title="${getTitle(dcT)}">DC</span>
-        <span class="led-label" title="${getTitle(acT)}">AC</span>
-        <span class="led-label" title="${getTitle(isoT)}">ISO</span>
-      </div>
-    `;
-    grid.appendChild(card);
+        const shortName = name.replace("INV ", "");
+        const card = document.createElement("div");
+        card.className = `inverter-card status-${overall}`;
+        card.title = `${name}`;
+        
+        const prT   = ledHtml(pr,   "PR",   flags.pr_v);
+        const tempT = ledHtml(temp, "Temp", flags.temp_v);
+        const dcT   = ledHtml(dc,   "DC",   flags.dc_v);
+        const acT   = ledHtml(ac,   "AC",   flags.ac_v);
+        const isoT  = ledHtml(iso,  "ISO",  flags.iso_v);
+        
+        const getTitle = (html) => {
+            const match = html.match(/title="([^"]+)"/);
+            return match ? match[1] : "";
+        };
+        
+        card.innerHTML = `
+          <div class="inv-name">${shortName}</div>
+          <div class="led-row">
+            ${prT} ${tempT} ${dcT} ${acT} ${isoT}
+          </div>
+          <div class="led-labels">
+            <span class="led-label" title="${getTitle(prT)}">PR</span>
+            <span class="led-label" title="${getTitle(tempT)}">T</span>
+            <span class="led-label" title="${getTitle(dcT)}">DC</span>
+            <span class="led-label" title="${getTitle(acT)}">AC</span>
+            <span class="led-label" title="${getTitle(isoT)}">ISO</span>
+          </div>
+        `;
+        cardsContainer.appendChild(card);
+      });
+      grid.appendChild(groupContainer);
   });
 }
 
@@ -914,18 +987,23 @@ function connectWebSocket() {
       const msg = JSON.parse(event.data);
       if (msg.type === "data_update") {
         const data = msg.data;
-        if (!data || Object.keys(data).length === 0) return;
-        
-        lastData = data; // cache data
-        
-        // Always update overview
-        updateMacro(data);
-        updateIngestion(data);
-        updateInverterGrid(data);
-        updateAlerts(data);
-        updateHistory(data);
-        updateDowntime(data);
-        updateSensorsTab(data);
+      const payload = JSON.parse(event.data);
+      if (payload.type === "data_update") {
+        if (payload.data) {
+          lastData = payload.data;
+          updateDashboard(payload.data);
+        }
+        if (payload.trackers) {
+          lastTrackerData = payload.trackers;
+          updateTrackers(payload.trackers);
+          if (lastData) updateIngestion(lastData); // Refresh ingestion grid to show tracker arrival
+        }
+
+        // Global Last Update
+        if (el("global-last-update")) {
+          el("global-last-update").textContent = now();
+        }
+      }
         
         // Update whichever detail tab is active
 
@@ -1020,6 +1098,11 @@ function applyConfig(config) {
     if (el("pref-dc-warn-tg")) el("pref-dc-warn-tg").checked = !!ap.dc_warning?.telegram;
     if (el("pref-dc-crit-db")) el("pref-dc-crit-db").checked = !!ap.dc_critical?.dashboard;
     if (el("pref-dc-crit-tg")) el("pref-dc-crit-tg").checked = !!ap.dc_critical?.telegram;
+
+    if (el("pref-iso-db")) el("pref-iso-db").checked = !!ap.iso_fault?.dashboard;
+    if (el("pref-iso-tg")) el("pref-iso-tg").checked = !!ap.iso_fault?.telegram;
+    if (el("pref-grid-db")) el("pref-grid-db").checked = !!ap.grid_limit_change?.dashboard;
+    if (el("pref-grid-tg")) el("pref-grid-tg").checked = !!ap.grid_limit_change?.telegram;
 
     if (el("pref-recovery-tg")) el("pref-recovery-tg").checked = !!ap.recovery?.telegram;
   }
@@ -1131,6 +1214,14 @@ async function handleSaveSettings() {
       dc_critical: {
         dashboard: !!el("pref-dc-crit-db")?.checked,
         telegram: !!el("pref-dc-crit-tg")?.checked
+      },
+      iso_fault: {
+        dashboard: !!el("pref-iso-db")?.checked,
+        telegram: !!el("pref-iso-tg")?.checked
+      },
+      grid_limit_change: {
+        dashboard: !!el("pref-grid-db")?.checked,
+        telegram: !!el("pref-grid-tg")?.checked
       },
       recovery: {
         telegram: !!el("pref-recovery-tg")?.checked
@@ -1423,6 +1514,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initTabs();
   initSortableHeaders();
   initAlertFilters();
+  initTrackerFilters();
 
   // Initialize Analytics if tab is switched to
   document.querySelector('[data-tab="tab-analytics"]').addEventListener('click', () => {
@@ -1655,4 +1747,142 @@ function sendSuggestion(text) {
     input.value = text;
     input.focus();
   }
+}
+
+// ─── Tracker Field Rendering ─────────────────────────────────────────────
+
+function updateTrackers(trackers) {
+  const container = el("tracker-sections-container");
+  if (!container) return;
+
+  if (!trackers || trackers.length === 0) {
+    container.innerHTML = "<div class='empty-state'>Waiting for tracker data...</div>";
+    return;
+  }
+
+  // 1. Calculate Global Stats
+  const totalReceived = trackers.length;
+  const inAuto = trackers.filter(t => t.mode === "AM").length;
+  const criticals = trackers.filter(t => Math.abs(t.actual_angle - t.target_angle) >= 5);
+
+  // 2. Update Header Stats
+  if (el("stat-total-connected")) el("stat-total-connected").textContent = `${totalReceived} / 370`;
+  if (el("stat-total-auto")) el("stat-total-auto").textContent = inAuto;
+  if (el("stat-total-critical")) el("stat-total-critical").textContent = criticals.length;
+
+  // 3. Update Overview Page (if elements exist)
+  if (el("val-tracker-health")) el("val-tracker-health").textContent = `${inAuto}/${totalReceived}`;
+  if (el("val-tracker-crit")) el("val-tracker-crit").textContent = `${criticals.length} Dev`;
+
+  // 4. Group data by NCU
+  const ncus = ["NCU_01", "NCU_02", "NCU_03"];
+  const grouped = {};
+  ncus.forEach(n => grouped[n] = trackers.filter(t => t.ncu_id === n));
+
+  // 5. Update NCU-Specific Stats in UI
+  if (el("val-n1-am")) el("val-n1-am").textContent = grouped["NCU_01"].filter(t => t.mode === "AM").length;
+  if (el("val-n2-am")) el("val-n2-am").textContent = grouped["NCU_02"].filter(t => t.mode === "AM").length;
+  if (el("val-n3-am")) el("val-n3-am").textContent = grouped["NCU_03"].filter(t => t.mode === "AM").length;
+
+  if (el("pill-n1")) el("pill-n1").querySelector(".val").textContent = grouped["NCU_01"].length;
+  if (el("pill-n2")) el("pill-n2").querySelector(".val").textContent = grouped["NCU_02"].length;
+  if (el("pill-n3")) el("pill-n3").querySelector(".val").textContent = grouped["NCU_03"].length;
+
+  if (el("pill-n1-am")) el("pill-n1-am").textContent = grouped["NCU_01"].filter(t => t.mode === "AM").length;
+  if (el("pill-n2-am")) el("pill-n2-am").textContent = grouped["NCU_02"].filter(t => t.mode === "AM").length;
+  if (el("pill-n3-am")) el("pill-n3-am").textContent = grouped["NCU_03"].filter(t => t.mode === "AM").length;
+
+  if (el("val-tracker-last-sync")) {
+      const latest = [...trackers].sort((a,b) => (b.last_update || "").localeCompare(a.last_update || ""))[0];
+      if (latest) el("val-tracker-last-sync").textContent = latest.last_update.substring(11,16);
+  }
+
+  // 6. Render Anomalies Scroll Box
+  const anomaliesBox = el("tracker-anomalies");
+  if (anomaliesBox) {
+    if (criticals.length > 0) {
+      anomaliesBox.innerHTML = criticals.map(t => `
+        <div style="font-size:0.65rem; padding:2px 0; border-bottom:1px solid rgba(255,255,255,0.05)">
+           <b>${t.tcu_id}</b>: Dev ${Math.abs(t.actual_angle - t.target_angle).toFixed(1)}°
+        </div>
+      `).join("");
+    } else {
+      anomaliesBox.innerHTML = "<div style='font-size:0.65rem; color:var(--muted)'>No active deviations</div>";
+    }
+  }
+
+  // 7. Render Sections
+  container.innerHTML = ncus.map(ncuId => {
+    // If filter is active and doesn't match this NCU, skip (unless "all")
+    if (currentNcuFilter !== "all" && currentNcuFilter !== ncuId) return "";
+    
+    const units = grouped[ncuId];
+    if (units.length === 0) return "";
+
+    return `
+      <section class="ncu-section" id="section-${ncuId}">
+        <div class="ncu-section-header">
+           <span class="ncu-title">${ncuId.replace("_", " ")}</span>
+           <span class="ncu-badge">${units.length} Trackers</span>
+        </div>
+        <div class="tracker-grid">
+           ${units.map(t => {
+             const isNoState = t.mode === "No State" || t.mode === "NoState" || !t.mode;
+             const alarmClass = `alarm-${t.alarm || 'grey'}`;
+             const stateClass = isNoState ? 'no-state' : '';
+             
+             const updateTime = new Date(t.last_update);
+             const diffMins = (new Date() - updateTime) / (1000 * 60);
+             const isNew = diffMins < 2;
+
+             const modeMap = {
+               "SM": "STOP",
+               "WM": "VENTO",
+               "AM": "AUTO",
+               "MM": "MANUT.",
+               "SAM": "ANGOLO",
+               "CM": "PULIZIA"
+             };
+             const modeLabel = modeMap[t.mode] || t.mode || '—';
+
+             return `
+               <div class="tracker-card ${alarmClass} ${stateClass} ${isNew ? 'new-arrival' : ''}">
+                 ${isNew ? '<span class="new-badge">NEW</span>' : ''}
+                 <div class="tracker-row">
+                   <div class="tracker-meta">
+                     <span class="tracker-meta-sub">${t.ncu_id}</span>
+                     <div class="tracker-meta-text">${t.tcu_id}</div>
+                   </div>
+                   <div class="tracker-meta" style="text-align:right">
+                     <span class="tracker-meta-sub">ID</span>
+                     <div class="tracker-meta-text">${t.tracker_no || '—'}</div>
+                   </div>
+                 </div>
+                 <div class="tracker-row" style="border-top: 1px solid var(--border); padding-top: 0.4rem;">
+                   <div class="tracker-angles-box">
+                      <span class="angle-label">Target / Actual</span>
+                      <span class="angle-val">${t.target_angle.toFixed(1)}°</span> / 
+                      <span class="angle-val actual">${t.actual_angle.toFixed(1)}°</span>
+                   </div>
+                   <div class="tracker-status-tag">${modeLabel}</div>
+                 </div>
+               </div>
+             `;
+           }).join("")}
+        </div>
+      </section>
+    `;
+  }).join("");
+}
+
+// Re-bind filter buttons (since they might have changed or need to handle new container)
+function initTrackerFilters() {
+    document.querySelectorAll(".filter-btn").forEach(btn => {
+        btn.onclick = () => {
+          document.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+          currentNcuFilter = btn.dataset.ncu;
+          if (lastTrackerData) updateTrackers(lastTrackerData);
+        };
+    });
 }
