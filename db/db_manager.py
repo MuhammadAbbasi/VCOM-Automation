@@ -854,6 +854,40 @@ def get_daily_sensor_history(date_str: str) -> dict:
     except Exception as e:
         logger.error(f"Error fetching daily sensor history: {e}")
         return {}
+def resolve_tracker_id(ncu, tcu) -> int:
+    """Map NCU/TCU local numbers to a global 1-370 tracker index."""
+    try:
+        # Extract numeric part of NCU (e.g. "NCU 01" or "NCU_01" -> 1)
+        if isinstance(ncu, str):
+            match = re.search(r'(\d+)', ncu)
+            ncu_num = int(match.group(1)) if match else 0
+        else:
+            ncu_num = int(ncu)
+            
+        # Extract numeric part of TCU (e.g. "TCU 01" -> 1)
+        if isinstance(tcu, str):
+            match = re.search(r'(\d+)', tcu)
+            tcu_num = int(match.group(1)) if match else 0
+        else:
+            tcu_num = int(tcu)
+        
+        if ncu_num == 0 or tcu_num == 0:
+            return 0
+
+        # Logic:
+        # NCU 1: 1-121
+        # NCU 2: 122-243 (121 + 122)
+        # NCU 3: 244-370 (243 + 127)
+        if ncu_num == 1:
+            return tcu_num
+        elif ncu_num == 2:
+            return 121 + tcu_num
+        elif ncu_num == 3:
+            return 121 + 122 + tcu_num
+        return 0 # Unknown mapping
+    except Exception:
+        return 0
+
 def save_tracker_data(records: list) -> None:
     """Batch upsert tracker records into the database."""
     conn = get_data_conn()
@@ -876,7 +910,7 @@ def save_tracker_data(records: list) -> None:
                 (
                     r.get("ncu"),
                     r.get("tcu"),
-                    r.get("tracker_no"),
+                    str(re.search(r'(\d+)', str(r.get("tracker_no"))).group(1)) if r.get("tracker_no") and re.search(r'(\d+)', str(r.get("tracker_no"))) else str(resolve_tracker_id(r.get("ncu"), r.get("tcu"))),
                     r.get("target_angle"),
                     r.get("actual_angle"),
                     r.get("alarm"),
@@ -910,14 +944,22 @@ def get_tracker_summary() -> dict:
             SELECT ncu_id, 
                    AVG(actual_angle) as avg_angle,
                    COUNT(*) as total,
-                   SUM(CASE WHEN status != 'Normal' THEN 1 ELSE 0 END) as alarms
+                   SUM(CASE WHEN alarm != 'Normal' AND alarm != '' THEN 1 ELSE 0 END) as alarms
             FROM tracker_status 
             GROUP BY ncu_id
         """)
         summary = {}
         for row in cursor.fetchall():
-            ncu = f"NCU {row[0]:02d}"
-            summary[ncu] = {
+            ncu_val = row[0]
+            # Handle both integer and string (e.g. 'NCU_01') ncu_id
+            if isinstance(ncu_val, str):
+                import re
+                match = re.search(r'(\d+)', ncu_val)
+                ncu_label = f"NCU {int(match.group(1)):02d}" if match else ncu_val
+            else:
+                ncu_label = f"NCU {int(ncu_val):02d}"
+                
+            summary[ncu_label] = {
                 "avg_angle": round(row[1], 2) if row[1] is not None else 0,
                 "total_trackers": row[2],
                 "active_alarms": row[3]

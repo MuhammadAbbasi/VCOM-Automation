@@ -146,6 +146,13 @@ browser_logs/
 *.har
 VCOM_Screenshots/
 
+# ============================================================================
+# LOCAL DEVELOPMENT & SCRATCH FILES
+# ============================================================================
+antigravity-skills/
+Untitled-1.txt
+tracker_testing/sync_*.json
+
 
 # ============================================================================
 # DOCKER & DEPLOYMENT (if used)

@@ -117,15 +117,18 @@ function updateMacro(data) {
   
   // Update Grid Limit
   if (el("val-grid-limit")) {
-      const limit = m.grid_limit || 87.6;
+      // Standard is 87.6% (maximum allowed for this plant)
+      const limit = m.grid_limit !== undefined ? m.grid_limit : 87.6;
       el("val-grid-limit").textContent = `${limit.toFixed(1)}%`;
       
       const card = el("card-grid-limit");
-      if (Math.abs(limit - 87.6) > 0.1) {
+      if (limit < 87.5) {
+          // Critical drop below allowed maximum
           card.classList.add("alert-red");
-          card.classList.remove("normal");
+          card.classList.remove("alert-yellow", "normal");
       } else {
-          card.classList.remove("alert-red");
+          // Normal production at or above 87.6%
+          card.classList.remove("alert-red", "alert-yellow");
           card.classList.add("normal");
       }
   }
@@ -135,8 +138,8 @@ function updateMacro(data) {
   const start = m.plant_start_time || "--:--";
   const fetch = m.last_data_fetch ? m.last_data_fetch.substring(11, 16) : "--:--";
   
-  el("meta-start-time").textContent = `Plant Start: ${start}`;
-  el("meta-last-fetch").textContent = `Latest Data: ${fetch}`;
+  el("meta-start-time").textContent = start;
+  el("meta-last-fetch").textContent = fetch;
   
   // Downtime Subtitle
   const sub = el("downtime-subtitle");
@@ -975,10 +978,12 @@ function connectWebSocket() {
   socket = new WebSocket(wsUrl);
   
   socket.onopen = () => {
-    const statusEl = el("last-updated");
-    statusEl.textContent = `Real-time: Connected`;
-    statusEl.style.color = "var(--green)";
-    statusEl.style.opacity = "1";
+    const statusEl = el("global-last-update") || el("last-updated");
+    if (statusEl) {
+        statusEl.textContent = `Connected`;
+        statusEl.style.color = "var(--green)";
+        statusEl.style.opacity = "1";
+    }
     reconnectInterval = 2000;
   };
   
@@ -986,30 +991,32 @@ function connectWebSocket() {
     try {
       const msg = JSON.parse(event.data);
       if (msg.type === "data_update") {
-        const data = msg.data;
-      const payload = JSON.parse(event.data);
-      if (payload.type === "data_update") {
+        const payload = msg;
         if (payload.data) {
           lastData = payload.data;
           updateDashboard(payload.data);
+          
+          // Update Link Status UI from nested data
+          if (payload.data.link_status) {
+            updateLinkStatusUI(payload.data.link_status);
+          }
         }
+        
         if (payload.trackers) {
           lastTrackerData = payload.trackers;
           updateTrackers(payload.trackers);
-          if (lastData) updateIngestion(lastData); // Refresh ingestion grid to show tracker arrival
+          if (lastData) updateIngestion(lastData);
         }
 
         // Global Last Update
-        if (el("global-last-update")) {
-          el("global-last-update").textContent = now();
+        const lastUpdEl = el("global-last-update") || el("last-updated");
+        if (lastUpdEl) {
+          lastUpdEl.textContent = now();
         }
-      }
         
         // Update whichever detail tab is active
-
         renderActiveDetailTab();
         
-        el("last-updated").textContent = `Last updated: ${now()}`;
       } else if (msg.type === "config_update") {
         applyConfig(msg.data);
       } else if (msg.type === "extraction_status") {
@@ -1103,6 +1110,11 @@ function applyConfig(config) {
     if (el("pref-iso-tg")) el("pref-iso-tg").checked = !!ap.iso_fault?.telegram;
     if (el("pref-grid-db")) el("pref-grid-db").checked = !!ap.grid_limit_change?.dashboard;
     if (el("pref-grid-tg")) el("pref-grid-tg").checked = !!ap.grid_limit_change?.telegram;
+
+    if (el("pref-tracker-db")) el("pref-tracker-db").checked = !!ap.tracker_comm?.dashboard;
+    if (el("pref-tracker-tg")) el("pref-tracker-tg").checked = !!ap.tracker_comm?.telegram;
+    if (el("pref-mqtt-db")) el("pref-mqtt-db").checked = !!ap.mqtt_pulse?.dashboard;
+    if (el("pref-mqtt-tg")) el("pref-mqtt-tg").checked = !!ap.mqtt_pulse?.telegram;
 
     if (el("pref-recovery-tg")) el("pref-recovery-tg").checked = !!ap.recovery?.telegram;
   }
@@ -1222,6 +1234,14 @@ async function handleSaveSettings() {
       grid_limit_change: {
         dashboard: !!el("pref-grid-db")?.checked,
         telegram: !!el("pref-grid-tg")?.checked
+      },
+      tracker_comm: {
+        dashboard: !!el("pref-tracker-db")?.checked,
+        telegram: !!el("pref-tracker-tg")?.checked
+      },
+      mqtt_pulse: {
+        dashboard: !!el("pref-mqtt-db")?.checked,
+        telegram: !!el("pref-mqtt-tg")?.checked
       },
       recovery: {
         telegram: !!el("pref-recovery-tg")?.checked
@@ -1597,69 +1617,45 @@ document.addEventListener("DOMContentLoaded", () => {
             .replace(/```python([\s\S]*?)```/g, '<code>$1</code>');
         contentDiv.innerHTML = formatted;
     } else {
-        contentDiv.textContent = text;
+      contentDiv.textContent = text;
     }
+    
     msgDiv.appendChild(contentDiv);
-
-    const timeDiv = document.createElement("div");
-    timeDiv.className = "msg-time";
-    timeDiv.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    msgDiv.appendChild(timeDiv);
-
     chatMessages.scrollTop = chatMessages.scrollHeight;
   }
 
   async function handleChatSend() {
-    if (!chatInput || !chatInput.value.trim()) return;
+    if (!chatInput || !chatSendBtn) return;
     const question = chatInput.value.trim();
+    if (!question) return;
+
     chatInput.value = "";
-    
     appendChatMessage(question, "user");
-    
-    // Add dummy 'Thinking' message
+
     const thinkingDiv = document.createElement("div");
     thinkingDiv.className = "chat-message bot thinking";
-    thinkingDiv.innerHTML = `<div class="msg-content"><span class="spinner"></span> Thinking... Examining plant data...</div>`;
+    thinkingDiv.setAttribute("data-avatar", "AI");
+    thinkingDiv.innerHTML = '<div class="msg-content"><span class="spinner"></span> Thinking...</div>';
     chatMessages.appendChild(thinkingDiv);
     chatMessages.scrollTop = chatMessages.scrollHeight;
 
-    if (chatSendBtn) {
+    try {
       chatSendBtn.disabled = true;
       chatSendBtn.style.opacity = "0.5";
-    }
 
-    try {
       const resp = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question })
       });
       
-      if (!resp.ok) {
-        if (thinkingDiv) thinkingDiv.remove();
-        let errorMsg = `Server error ${resp.status}`;
-        if (resp.status === 404) {
-          errorMsg = "Model not found in Ollama. Please run 'ollama pull qwen2.5-coder:7b' in your terminal.";
-        }
-        appendChatMessage("⚠️ " + errorMsg, "bot error");
-        return;
-      }
+      const result = await resp.json();
+      if (thinkingDiv) thinkingDiv.remove();
 
-      const contentType = resp.headers.get("content-type");
-      if (contentType && contentType.includes("application/json")) {
-        const data = await resp.json();
-        if (thinkingDiv) thinkingDiv.remove();
-        if (data.status === "success") {
-          appendChatMessage(data.answer, "bot");
-        } else {
-          appendChatMessage("AI Error: " + data.message, "bot");
-        }
+      if (result.status === "success") {
+        appendChatMessage(result.answer, "bot");
       } else {
-        // Handle non-JSON (HTML error pages etc)
-        const text = await resp.text();
-        if (thinkingDiv) thinkingDiv.remove();
-        appendChatMessage("AI Response Error: Received non-JSON response from server.", "bot");
-        console.error("Non-JSON response:", text);
+        appendChatMessage("Error: " + result.message, "bot");
       }
     } catch (err) {
       if (thinkingDiv) thinkingDiv.remove();
@@ -1752,127 +1748,205 @@ function sendSuggestion(text) {
 // ─── Tracker Field Rendering ─────────────────────────────────────────────
 
 function updateTrackers(trackers) {
-  const container = el("tracker-sections-container");
-  if (!container) return;
+  const gridContainer = el("tracker-led-grid");
+  if (!gridContainer) return;
 
-  if (!trackers || trackers.length === 0) {
-    container.innerHTML = "<div class='empty-state'>Waiting for tracker data...</div>";
-    return;
-  }
+  if (!trackers) trackers = [];
 
-  // 1. Calculate Global Stats
-  const totalReceived = trackers.length;
-  const inAuto = trackers.filter(t => t.mode === "AM").length;
-  const criticals = trackers.filter(t => Math.abs(t.actual_angle - t.target_angle) >= 5);
+  // 1. Group data by Global Tracker No (1-370)
+  const trackerMap = {};
+  const getGlobalId = (t) => {
+    // Robust parsing for string prefixes
+    const extractNum = (str) => {
+        if (!str) return null;
+        const match = String(str).match(/(\d+)/);
+        return match ? parseInt(match[1]) : null;
+    };
 
-  // 2. Update Header Stats
-  if (el("stat-total-connected")) el("stat-total-connected").textContent = `${totalReceived} / 370`;
-  if (el("stat-total-auto")) el("stat-total-auto").textContent = inAuto;
-  if (el("stat-total-critical")) el("stat-total-critical").textContent = criticals.length;
+    const tno = extractNum(t.tracker_no);
+    if (tno) return tno;
 
-  // 3. Update Overview Page (if elements exist)
-  if (el("val-tracker-health")) el("val-tracker-health").textContent = `${inAuto}/${totalReceived}`;
-  if (el("val-tracker-crit")) el("val-tracker-crit").textContent = `${criticals.length} Dev`;
-
-  // 4. Group data by NCU
-  const ncus = ["NCU_01", "NCU_02", "NCU_03"];
-  const grouped = {};
-  ncus.forEach(n => grouped[n] = trackers.filter(t => t.ncu_id === n));
-
-  // 5. Update NCU-Specific Stats in UI
-  if (el("val-n1-am")) el("val-n1-am").textContent = grouped["NCU_01"].filter(t => t.mode === "AM").length;
-  if (el("val-n2-am")) el("val-n2-am").textContent = grouped["NCU_02"].filter(t => t.mode === "AM").length;
-  if (el("val-n3-am")) el("val-n3-am").textContent = grouped["NCU_03"].filter(t => t.mode === "AM").length;
-
-  if (el("pill-n1")) el("pill-n1").querySelector(".val").textContent = grouped["NCU_01"].length;
-  if (el("pill-n2")) el("pill-n2").querySelector(".val").textContent = grouped["NCU_02"].length;
-  if (el("pill-n3")) el("pill-n3").querySelector(".val").textContent = grouped["NCU_03"].length;
-
-  if (el("pill-n1-am")) el("pill-n1-am").textContent = grouped["NCU_01"].filter(t => t.mode === "AM").length;
-  if (el("pill-n2-am")) el("pill-n2-am").textContent = grouped["NCU_02"].filter(t => t.mode === "AM").length;
-  if (el("pill-n3-am")) el("pill-n3-am").textContent = grouped["NCU_03"].filter(t => t.mode === "AM").length;
-
-  if (el("val-tracker-last-sync")) {
-      const latest = [...trackers].sort((a,b) => (b.last_update || "").localeCompare(a.last_update || ""))[0];
-      if (latest) el("val-tracker-last-sync").textContent = latest.last_update.substring(11,16);
-  }
-
-  // 6. Render Anomalies Scroll Box
-  const anomaliesBox = el("tracker-anomalies");
-  if (anomaliesBox) {
-    if (criticals.length > 0) {
-      anomaliesBox.innerHTML = criticals.map(t => `
-        <div style="font-size:0.65rem; padding:2px 0; border-bottom:1px solid rgba(255,255,255,0.05)">
-           <b>${t.tcu_id}</b>: Dev ${Math.abs(t.actual_angle - t.target_angle).toFixed(1)}°
-        </div>
-      `).join("");
-    } else {
-      anomaliesBox.innerHTML = "<div style='font-size:0.65rem; color:var(--muted)'>No active deviations</div>";
-    }
-  }
-
-  // 7. Render Sections
-  container.innerHTML = ncus.map(ncuId => {
-    // If filter is active and doesn't match this NCU, skip (unless "all")
-    if (currentNcuFilter !== "all" && currentNcuFilter !== ncuId) return "";
+    const tcu = extractNum(t.tcu_id);
+    const ncuStr = String(t.ncu_id || "").replace("_", " "); // "NCU_01" -> "NCU 01"
     
-    const units = grouped[ncuId];
-    if (units.length === 0) return "";
+    if (tcu) {
+        if (ncuStr === "NCU 01") return tcu;
+        if (ncuStr === "NCU 02") return 121 + tcu;
+        if (ncuStr === "NCU 03") return 121 + 122 + tcu;
+    }
+    return null;
+  };
 
-    return `
-      <section class="ncu-section" id="section-${ncuId}">
-        <div class="ncu-section-header">
-           <span class="ncu-title">${ncuId.replace("_", " ")}</span>
-           <span class="ncu-badge">${units.length} Trackers</span>
-        </div>
-        <div class="tracker-grid">
-           ${units.map(t => {
-             const isNoState = t.mode === "No State" || t.mode === "NoState" || !t.mode;
-             const alarmClass = `alarm-${t.alarm || 'grey'}`;
-             const stateClass = isNoState ? 'no-state' : '';
-             
-             const updateTime = new Date(t.last_update);
-             const diffMins = (new Date() - updateTime) / (1000 * 60);
-             const isNew = diffMins < 2;
+  trackers.forEach(t => {
+    const gid = getGlobalId(t);
+    if (gid) trackerMap[gid] = t;
+  });
 
-             const modeMap = {
-               "SM": "STOP",
-               "WM": "VENTO",
-               "AM": "AUTO",
-               "MM": "MANUT.",
-               "SAM": "ANGOLO",
-               "CM": "PULIZIA"
-             };
-             const modeLabel = modeMap[t.mode] || t.mode || '—';
+  // 2. Stats
+  const stats = {
+    total: 370,
+    connected: trackers.length,
+    am: trackers.filter(t => t.mode === "AM").length,
+    mm: trackers.filter(t => t.mode === "MM").length,
+    wm: trackers.filter(t => t.mode === "WM").length,
+    alarm: trackers.filter(t => t.alarm && t.alarm !== 'green' && t.alarm !== 'grey').length,
+    ncu: {
+      "NCU 01": { total: 121, connected: 0, am: 0, mm: 0, wm: 0 },
+      "NCU 02": { total: 122, connected: 0, am: 0, mm: 0, wm: 0 },
+      "NCU 03": { total: 127, connected: 0, am: 0, mm: 0, wm: 0 }
+    }
+  };
 
-             return `
-               <div class="tracker-card ${alarmClass} ${stateClass} ${isNew ? 'new-arrival' : ''}">
-                 ${isNew ? '<span class="new-badge">NEW</span>' : ''}
-                 <div class="tracker-row">
-                   <div class="tracker-meta">
-                     <span class="tracker-meta-sub">${t.ncu_id}</span>
-                     <div class="tracker-meta-text">${t.tcu_id}</div>
-                   </div>
-                   <div class="tracker-meta" style="text-align:right">
-                     <span class="tracker-meta-sub">ID</span>
-                     <div class="tracker-meta-text">${t.tracker_no || '—'}</div>
-                   </div>
-                 </div>
-                 <div class="tracker-row" style="border-top: 1px solid var(--border); padding-top: 0.4rem;">
-                   <div class="tracker-angles-box">
-                      <span class="angle-label">Target / Actual</span>
-                      <span class="angle-val">${t.target_angle.toFixed(1)}°</span> / 
-                      <span class="angle-val actual">${t.actual_angle.toFixed(1)}°</span>
-                   </div>
-                   <div class="tracker-status-tag">${modeLabel}</div>
-                 </div>
-               </div>
-             `;
-           }).join("")}
-        </div>
-      </section>
-    `;
-  }).join("");
+  trackers.forEach(t => {
+    const ncuKey = String(t.ncu_id || "").replace("_", " ");
+    if (stats.ncu[ncuKey]) {
+      stats.ncu[ncuKey].connected++;
+      if (t.mode === "AM") stats.ncu[ncuKey].am++;
+      if (t.mode === "MM") stats.ncu[ncuKey].mm++;
+      if (t.mode === "WM") stats.ncu[ncuKey].wm++;
+    }
+  });
+
+  // 3. Update UI Elements
+  if (el("stat-total-connected")) el("stat-total-connected").textContent = `${stats.connected} / ${stats.total}`;
+  if (el("stat-total-auto"))      el("stat-total-auto").textContent = stats.am;
+  if (el("stat-total-manual"))    el("stat-total-manual").textContent = stats.mm;
+  if (el("stat-total-wind"))      el("stat-total-wind").textContent = stats.wm;
+  if (el("stat-total-critical"))  el("stat-total-critical").textContent = stats.alarm;
+
+  if (el("stat-last-sync") && trackers.length > 0) {
+      const latest = [...trackers].sort((a,b) => (b.last_update || "").localeCompare(a.last_update || ""))[0];
+      if (latest && latest.last_update) {
+          el("stat-last-sync").textContent = latest.last_update.split("T")[1].substring(0, 5);
+      }
+  }
+
+  ["NCU 01", "NCU 02", "NCU 03"].forEach((ncu, idx) => {
+    const id = idx + 1;
+    if (el(`stat-n${id}-count`)) el(`stat-n${id}-count`).textContent = stats.ncu[ncu].connected;
+    if (el(`stat-n${id}-am`))    el(`stat-n${id}-am`).textContent = stats.ncu[ncu].am;
+    if (el(`stat-n${id}-mm`))    el(`stat-n${id}-mm`).textContent = stats.ncu[ncu].mm;
+    if (el(`stat-n${id}-wm`))    el(`stat-n${id}-wm`).textContent = stats.ncu[ncu].wm;
+  });
+
+  // Update Overview Card (Macro health)
+  if (el("val-tracker-health")) el("val-tracker-health").textContent = `${stats.am} / ${stats.total}`;
+  if (el("val-n1-am")) el("val-n1-am").textContent = stats.ncu["NCU 01"].am;
+  if (el("val-n2-am")) el("val-n2-am").textContent = stats.ncu["NCU 02"].am;
+  if (el("val-n3-am")) el("val-n3-am").textContent = stats.ncu["NCU 03"].am;
+  if (el("val-tracker-crit")) el("val-tracker-crit").textContent = `${stats.alarm} Alarms`;
+
+  if (el("val-tracker-last-sync") && trackers.length > 0) {
+      const latest = [...trackers].sort((a,b) => (b.last_update || "").localeCompare(a.last_update || ""))[0];
+      if (latest && latest.last_update) {
+          el("val-tracker-last-sync").textContent = latest.last_update.split("T")[1].substring(0, 5);
+      }
+  }
+
+  // 4. Render Grid
+  let html = "";
+  const ranges = [
+    { label: "NCU 01 (1-121)", start: 1, end: 121, id: "NCU 01" },
+    { label: "NCU 02 (122-243)", start: 122, end: 243, id: "NCU 02" },
+    { label: "NCU 03 (244-370)", start: 244, end: 370, id: "NCU 03" }
+  ];
+
+  ranges.forEach(range => {
+    if (currentNcuFilter !== "all" && currentNcuFilter !== range.id) return;
+
+    html += `<div class="ncu-header">${range.label}</div>`;
+    for (let i = range.start; i <= range.end; i++) {
+      const t = trackerMap[i];
+      let statusClass = "status-grey";
+      let modeClass = "";
+      
+      if (t) {
+        if (t.alarm && t.alarm !== 'green' && t.alarm !== 'grey') {
+            statusClass = "status-red";
+            modeClass = "mode-alarm";
+        } else if (t.mode === "MM") {
+            statusClass = "status-yellow";
+            modeClass = "mode-mm";
+        } else if (t.mode === "WM") {
+            statusClass = "status-blue";
+            modeClass = "mode-wm";
+        } else if (t.mode === "AM") {
+            statusClass = "status-green";
+            modeClass = "mode-am";
+        }
+      }
+
+      const tcu = t ? t.tcu_id : "—";
+      const ncu = t ? t.ncu_id : "—";
+      const mode = t ? t.mode : "OFFLINE";
+      const target = t ? t.target_angle.toFixed(1) : "—";
+      const actual = t ? t.actual_angle.toFixed(1) : "—";
+
+      html += `
+        <div class="tracker-card-detailed ${statusClass}" onclick="showTrackerDetail(${t ? JSON.stringify(t).replace(/"/g, '&quot;') : 'null'})">
+          <div class="card-id-row">
+            <span class="card-tracker-num">#${i}</span>
+            <span class="card-tcu-label">TCU ${tcu}</span>
+          </div>
+          <div class="card-data-grid">
+            <div class="data-item">
+              <span class="data-label">Actual</span>
+              <span class="data-val">${actual}°</span>
+            </div>
+            <div class="data-item">
+              <span class="data-label">Target</span>
+              <span class="data-val">${target}°</span>
+            </div>
+            <div class="data-item">
+              <span class="data-label">NCU</span>
+              <span class="data-val">${ncu}</span>
+            </div>
+            <div class="data-item">
+              <span class="data-label">Status</span>
+              <span class="data-val">${t ? 'ONLINE' : 'OFFLINE'}</span>
+            </div>
+          </div>
+          <div class="card-mode-badge ${modeClass}">${mode} MODE</div>
+        </div>`;
+    }
+  });
+
+  gridContainer.innerHTML = html;
+
+  // 5. Render Deviation LED Strips
+  const devContainer = el("tracker-deviation-container");
+  if (devContainer) {
+    let devHtml = "";
+    ranges.forEach(range => {
+      devHtml += `
+        <div class="deviation-ncu-block">
+          <div class="deviation-label">
+            <span>${range.id} Accuracy Health</span>
+            <span style="opacity: 0.6">50 trackers per row</span>
+          </div>
+          <div class="deviation-led-strip">`;
+      
+      for (let i = range.start; i <= range.end; i++) {
+        const t = trackerMap[i];
+        let colorClass = "grey";
+        let tip = `Tracker ${i}: No Data`;
+
+        if (t) {
+          const dev = Math.abs(t.actual_angle - t.target_angle);
+          if (dev <= 5) colorClass = "green";
+          else if (dev <= 10) colorClass = "yellow";
+          else colorClass = "red";
+          
+          tip = `Tracker ${i}\nActual: ${t.actual_angle.toFixed(1)}°\nTarget: ${t.target_angle.toFixed(1)}°\nDev: ${dev.toFixed(1)}°`;
+        }
+        
+        devHtml += `<div class="dev-led ${colorClass}" title="${tip}"></div>`;
+      }
+      
+      devHtml += `</div></div>`;
+    });
+    devContainer.innerHTML = devHtml;
+  }
 }
 
 // Re-bind filter buttons (since they might have changed or need to handle new container)
@@ -1885,4 +1959,24 @@ function initTrackerFilters() {
           if (lastTrackerData) updateTrackers(lastTrackerData);
         };
     });
+}
+
+// ─── Link Status Monitoring ──────────────────────────────────────────────
+
+function updateLinkStatusUI(linkInfo) {
+  const badge = el("link-status-badge");
+  if (!badge) return;
+
+  const status = linkInfo.status || "offline";
+  const site = linkInfo.site || "GATEWAY";
+
+  badge.className = `link-status-pill ${status}`;
+  
+  if (status === "online") {
+    badge.textContent = "LINK: ONLINE";
+  } else if (status === "stale") {
+    badge.textContent = "LINK: STALE";
+  } else {
+    badge.textContent = "LINK: OFFLINE";
+  }
 }

@@ -109,6 +109,8 @@ DEFAULT_SETTINGS = {
         "dc_critical": { "dashboard": True, "telegram": True },
         "iso_fault": { "dashboard": True, "telegram": True },
         "grid_limit_change": { "dashboard": True, "telegram": True },
+        "tracker_comm": { "dashboard": True, "telegram": True },
+        "mqtt_pulse": { "dashboard": True, "telegram": True },
         "recovery": { "telegram": True }
     }
 }
@@ -628,7 +630,7 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
                 
                 # 2. Extract ALL relevant sensor columns at this timestamp
                 # (Excluding Ora and internal numeric columns)
-                for col in irrad_df.columns:
+                for col in irrad_copy.columns:
                     if col not in ["Ora", "Ora_num"]:
                         val = irrad_copy.loc[best_idx, col]
                         if pd.notna(val) and val != "x" and not (isinstance(val, str) and "Irraggiamento" in val):
@@ -1067,16 +1069,46 @@ def analyze_site(date_str: str) -> None:
         # Grid Power Limit Check
         current_grid_limit = 87.6
         if attiva_df is not None and not attiva_df.empty:
-            # Look for "Valore nominale della potenza attiva (gestore di rete)" or similar
-            limit_cols = [c for c in attiva_df.columns if "Valore nominale" in c and "potenza attiva" in c.lower()]
-            if limit_cols:
+            # Priority 1: General limit, Priority 2: Gestore (Network), Priority 3: Terzi
+            priority_names = [
+                "Valore nominale potenza attiva",
+                "Valore nominale della potenza attiva (gestore di rete)",
+                "Valore nominale della potenza attiva (terzi)"
+            ]
+            
+            limit_col = None
+            for p_name in priority_names:
+                found = [c for c in attiva_df.columns if p_name in c]
+                if found:
+                    limit_col = found[0]
+                    break
+            
+            if not limit_col:
+                # Fallback to any column containing "Valore nominale" and "potenza attiva"
+                limit_cols = [c for c in attiva_df.columns if "Valore nominale" in c and "potenza attiva" in c.lower()]
+                if limit_cols:
+                    limit_col = limit_cols[0]
+
+            if limit_col:
+                logger.info(f"[GRID] Using limit column: {limit_col}")
                 # Get the latest non-null value
-                latest_row = attiva_df.dropna(subset=[limit_cols[0]]).iloc[-1] if not attiva_df.dropna(subset=[limit_cols[0]]).empty else None
-                if latest_row is not None:
+                temp_df = attiva_df.dropna(subset=[limit_col])
+                if not temp_df.empty:
+                    latest_row = temp_df.iloc[-1]
                     try:
-                        current_grid_limit = float(str(latest_row[limit_cols[0]]).replace(",", "."))
-                    except:
-                        pass
+                        val_raw = latest_row[limit_col]
+                        # Handle strings like "87,6 %"
+                        if isinstance(val_raw, str):
+                            val_str = val_raw.replace("%", "").replace(",", ".").strip()
+                            current_grid_limit = float(val_str)
+                        else:
+                            current_grid_limit = float(val_raw)
+                        
+                        logger.info(f"[GRID] Detected Grid Limit: {current_grid_limit}% (from {limit_col})")
+                    except Exception as e:
+                        logger.warning(f"[GRID] Failed to parse grid limit value '{val_raw}': {e}")
+                else:
+                    logger.warning(f"[GRID] Column '{limit_col}' has no non-null values.")
         
         macro_health["grid_limit"] = current_grid_limit
         
@@ -1149,25 +1181,27 @@ def analyze_site(date_str: str) -> None:
             return prefs.get(category, {}).get(target, True)
 
         # --- TELEGRAM RE-FIRE RULES ---
-        # Critical (red): re-fire every cycle while active.
-        # Non-critical (yellow/grey): re-fire every 60 minutes while active.
-        # Recovery: once and done (handled in the recovery branches).
+        # To avoid spamming the technician:
+        # Critical (red): re-fire every 2 hours while active.
+        # Non-critical (yellow/grey): re-fire every 4 hours while active.
         now_dt = datetime.fromisoformat(timestamp)
-        TG_REFIRE_NONCRIT_SEC = 3600
+        TG_REFIRE_CRIT_SEC = 7200    # 2 hours
+        TG_REFIRE_NONCRIT_SEC = 14400 # 4 hours
 
         def should_send_tg(alarm: dict) -> bool:
             """Decide whether to push a Telegram message for this active alarm now."""
             last_sent = alarm.get("last_tg_sent")
             if not last_sent:
-                return True  # First time we're notifying about this alarm
+                return True  # First time notifying
+            
             severity = alarm.get("severity", "yellow")
-            if severity == "red":
-                return True  # Critical re-fires every cycle
+            threshold = TG_REFIRE_CRIT_SEC if severity == "red" else TG_REFIRE_NONCRIT_SEC
+            
             try:
                 last_dt = datetime.fromisoformat(last_sent)
+                return (now_dt - last_dt).total_seconds() >= threshold
             except Exception:
                 return True
-            return (now_dt - last_dt).total_seconds() >= TG_REFIRE_NONCRIT_SEC
 
         def fire_tg(alarm: dict, category: str, line: str) -> None:
             """Queue a Telegram line and stamp the alarm with the send time."""
@@ -1190,6 +1224,10 @@ def analyze_site(date_str: str) -> None:
 
             message = f"Data outage detected from {gap['start']} to {gap['end']} ({gap['duration']} min)."
             if gap['type'] == "POST-PRODUCTION DROP":
+                # Suppress if irradiance is low (likely evening)
+                poa = macro_health.get("poa", 100) 
+                if poa is not None and poa < 10:
+                    continue
                 message = f"Global data outage started at {gap['start']} and has not recovered."
 
             if drop_alarm_id in prev_alarm_map:
@@ -1232,32 +1270,122 @@ def analyze_site(date_str: str) -> None:
         grid_alarm_id = "GRID_LIMIT_CHANGE"
         checked_ids.add(grid_alarm_id)
 
-        current_limit = macro_health.get("grid_limit", 87.6)
-        if abs(current_limit - 87.6) > 0.1:
+        # Standard is 87.6% (maximum allowed for this plant)
+        STANDARD_LIMIT = 87.6
+        current_limit = macro_health.get("grid_limit", STANDARD_LIMIT)
+        
+        # We alert if the limit drops BELOW 87.6%
+        if current_limit < (STANDARD_LIMIT - 0.1):
             if grid_alarm_id in prev_alarm_map:
                 alarm = prev_alarm_map[grid_alarm_id]
-                alarm["message"] = f"Grid production limit is {current_limit:.1f}% (Standard: 87.6%)."
+                alarm["message"] = f"Grid production limit is restricted to {current_limit:.1f}% (Below plant max of 87.6%)."
+                alarm["severity"] = "red" # Critical as per user request
             else:
                 alarm = {
                     "id": grid_alarm_id,
                     "inverter": "GRID",
                     "type": "GRID LIMIT CHANGE",
-                    "severity": "red",
+                    "severity": "red", # Critical as per user request
                     "trip_time": timestamp,
-                    "message": f"Grid production limit changed to {current_limit:.1f}% (Standard: 87.6%)."
+                    "message": f"Grid production limit dropped to {current_limit:.1f}% (Below plant max of 87.6%)."
                 }
             if should_alert("grid_limit_change", "dashboard"):
                 current_active.append(alarm)
             if should_alert("grid_limit_change", "telegram") and should_send_tg(alarm):
-                fire_tg(alarm, "URGENT: GRID LIMIT", f"⚠️ *GRID LIMIT CHANGE*\nLimit is now *{current_limit:.1f}%* (Standard: 87.6%)")
+                fire_tg(alarm, "URGENT: GRID LIMIT", f"🚨 *CRITICAL: GRID LIMIT DROP*\nLimit is now *{current_limit:.1f}%* (Below max allowed 87.6%)")
         else:
+            # Recovery if it goes back to 87.6% or above
             if grid_alarm_id in prev_alarm_map:
                 past_alarm = prev_alarm_map[grid_alarm_id]
                 past_alarm["recovery_time"] = timestamp
                 historical_trail.append(past_alarm)
                 checked_ids.add(grid_alarm_id)
                 if should_alert("recovery", "telegram"):
-                    add_tg_msg("RECOVERED", f"✅ GRID LIMIT restored to 87.6%")
+                    add_tg_msg("RECOVERED", f"✅ GRID LIMIT restored to {current_limit:.1f}%")
+
+        # --- MQTT Pulse Alert ---
+        mqtt_alarm_id = "MQTT_PULSE_LOST"
+        checked_ids.add(mqtt_alarm_id)
+        
+        link_status_path = ROOT / "db" / "link_status.json"
+        link_info = {"status": "offline"}
+        if link_status_path.exists():
+            try:
+                with open(link_status_path, "r") as f:
+                    link_info = json.load(f)
+                if "last_heartbeat" in link_info:
+                    last_ts = datetime.fromisoformat(link_info["last_heartbeat"])
+                    if (datetime.now() - last_ts).total_seconds() > 300: # 5 minutes
+                        link_info["status"] = "stale"
+            except:
+                pass
+        
+        if link_info["status"] != "online":
+            msg = "MQTT Bridge Link is OFFLINE." if link_info["status"] == "offline" else "MQTT Bridge Link is STALE (last data > 5m ago)."
+            if mqtt_alarm_id in prev_alarm_map:
+                alarm = prev_alarm_map[mqtt_alarm_id]
+                alarm["message"] = msg
+            else:
+                alarm = {
+                    "id": mqtt_alarm_id,
+                    "inverter": "MQTT",
+                    "type": "MQTT LINK LOST",
+                    "severity": "red",
+                    "trip_time": timestamp,
+                    "message": msg
+                }
+            if should_alert("mqtt_pulse", "dashboard"):
+                current_active.append(alarm)
+            if should_alert("mqtt_pulse", "telegram") and should_send_tg(alarm):
+                fire_tg(alarm, "MQTT PULSE", f"📡 *MQTT LINK {link_info['status'].upper()}*")
+        else:
+            if mqtt_alarm_id in prev_alarm_map:
+                past_alarm = prev_alarm_map[mqtt_alarm_id]
+                past_alarm["recovery_time"] = timestamp
+                historical_trail.append(past_alarm)
+                checked_ids.add(mqtt_alarm_id)
+                if should_alert("recovery", "telegram"):
+                    add_tg_msg("RECOVERED", f"✅ MQTT LINK restored")
+
+        # --- Tracker Comms Alert ---
+        try:
+            from db.db_manager import get_all_tracker_status
+            trackers = get_all_tracker_status()
+            if trackers:
+                TOTAL_TRACKERS = 370
+                connected_count = len([t for t in trackers if t.get("mode")])
+                
+                if connected_count < TOTAL_TRACKERS * 0.9: # More than 10% offline
+                    tracker_alarm_id = "TRACKER_MASS_OFFLINE"
+                    checked_ids.add(tracker_alarm_id)
+                    
+                    msg = f"{TOTAL_TRACKERS - connected_count} trackers are offline or missing data."
+                    if tracker_alarm_id in prev_alarm_map:
+                        alarm = prev_alarm_map[tracker_alarm_id]
+                        alarm["message"] = msg
+                    else:
+                        alarm = {
+                            "id": tracker_alarm_id,
+                            "inverter": "TRACKER",
+                            "type": "TRACKER MASS OFFLINE",
+                            "severity": "yellow",
+                            "trip_time": timestamp,
+                            "message": msg
+                        }
+                    if should_alert("tracker_comm", "dashboard"):
+                        current_active.append(alarm)
+                    if should_alert("tracker_comm", "telegram") and should_send_tg(alarm):
+                        fire_tg(alarm, "TRACKER COMMS", f"🛰️ *TRACKER ALERT*\n{msg}")
+                else:
+                    if "TRACKER_MASS_OFFLINE" in prev_alarm_map:
+                        past_alarm = prev_alarm_map["TRACKER_MASS_OFFLINE"]
+                        past_alarm["recovery_time"] = timestamp
+                        historical_trail.append(past_alarm)
+                        checked_ids.add("TRACKER_MASS_OFFLINE")
+                        if should_alert("recovery", "telegram"):
+                            add_tg_msg("RECOVERED", f"✅ Tracker connectivity restored")
+        except Exception as e:
+            logger.debug(f"Tracker alert check failed: {e}")
 
         # --- Per-Inverter Alarms ---
         thresh = settings.get("thresholds", DEFAULT_SETTINGS["thresholds"])
@@ -1321,7 +1449,8 @@ def analyze_site(date_str: str) -> None:
                         "type": pr_type,
                         "severity": pr_severity,
                         "trip_time": timestamp,
-                        "message": f"PR is {pr_val:.1f}% (Threshold: {pr_yellow_thresh}%)"
+                        "message": f"PR is {pr_val:.1f}% (Threshold: {pr_yellow_thresh}%)",
+                        "pref_category": pr_cat
                     }
                 if should_alert(pr_cat, "dashboard"):
                     current_active.append(alarm)
@@ -1333,7 +1462,8 @@ def analyze_site(date_str: str) -> None:
                     prev_alarm = prev_alarm_map[pr_alarm_id]
                     prev_alarm["recovery_time"] = timestamp
                     historical_trail.append(prev_alarm)
-                    if should_alert("recovery", "telegram"):
+                    orig_cat = prev_alarm.get("pref_category", "low_pr")
+                    if should_alert("recovery", "telegram") and should_alert(orig_cat, "telegram"):
                         add_tg_msg("RECOVERED", f"✅ {prev_alarm['type']} ({inv_label})")
 
             # --- 3. AC Power Alarm ---
@@ -1355,7 +1485,8 @@ def analyze_site(date_str: str) -> None:
                         "type": ac_type,
                         "severity": ac_status,
                         "trip_time": timestamp,
-                        "message": ac_msg
+                        "message": ac_msg,
+                        "pref_category": ac_cat
                     }
                 if should_alert(ac_cat, "dashboard"):
                     current_active.append(alarm)
@@ -1367,7 +1498,8 @@ def analyze_site(date_str: str) -> None:
                     prev_alarm = prev_alarm_map[ac_alarm_id]
                     prev_alarm["recovery_time"] = timestamp
                     historical_trail.append(prev_alarm)
-                    if should_alert("recovery", "telegram"):
+                    orig_cat = prev_alarm.get("pref_category", "ac_drop")
+                    if should_alert("recovery", "telegram") and should_alert(orig_cat, "telegram"):
                         add_tg_msg("RECOVERED", f"✅ {prev_alarm['type']} ({inv_label})")
 
             # --- 4. Temperature Alarm ---
@@ -1392,7 +1524,8 @@ def analyze_site(date_str: str) -> None:
                         "type": temp_type,
                         "severity": temp_status,
                         "trip_time": timestamp,
-                        "message": f"Temperature {temp_status}: {temp_val}°C"
+                        "message": f"Temperature {temp_status}: {temp_val}°C",
+                        "pref_category": temp_cat
                     }
                 if should_alert(temp_cat, "dashboard"):
                     current_active.append(alarm)
@@ -1404,7 +1537,8 @@ def analyze_site(date_str: str) -> None:
                     prev_alarm = prev_alarm_map[temp_alarm_id]
                     prev_alarm["recovery_time"] = timestamp
                     historical_trail.append(prev_alarm)
-                    if should_alert("recovery", "telegram"):
+                    orig_cat = prev_alarm.get("pref_category", "high_temp")
+                    if should_alert("recovery", "telegram") and should_alert(orig_cat, "telegram"):
                         add_tg_msg("RECOVERED", f"✅ {prev_alarm['type']} ({inv_label})")
 
             # --- 5. Insulation Resistance (ISO) Alarm ---
@@ -1438,8 +1572,10 @@ def analyze_site(date_str: str) -> None:
                     if should_alert("recovery", "telegram"):
                         add_tg_msg("RECOVERED", f"✅ INSULATION FAULT ({inv_label})")
 
-        # --- DC MPPT Faults ---
+        # --- DC MPPT Faults Aggregation ---
         active_dc_fault_ids = set()
+        inv_dc_summary = {} # { "INV TX1-05": { "crit": [], "warn": [], "alarms": [] } }
+        
         for f in dc_faults:
             inv_id_f    = f["Inverter"]
             inv_label_f = f"INV {inv_id_f}"
@@ -1450,26 +1586,45 @@ def analyze_site(date_str: str) -> None:
             is_crit  = f['Severity'] == "CRITICAL"
             dc_cat   = "dc_critical" if is_crit else "dc_warning"
             dc_type  = "DC CRITICAL" if is_crit else "DC WARNING"
-            dc_msg   = f"MPPT {f['MPPT']} {f['Type']}: {f['Measured']}A (Expected: {f['Expected']}A) for {format_duration(f['Duration'])}."
-
+            
+            if inv_label_f not in inv_dc_summary:
+                inv_dc_summary[inv_label_f] = {"crit": [], "warn": [], "alarms": []}
+            
             if dc_alarm_id in prev_alarm_map:
                 alarm = prev_alarm_map[dc_alarm_id]
-                alarm["message"]  = dc_msg
-                alarm["severity"] = "red" if is_crit else "yellow"
             else:
                 alarm = {
                     "id": dc_alarm_id,
                     "inverter": inv_label_f,
                     "type": dc_type,
                     "severity": "red" if is_crit else "yellow",
-                    "trip_time": timestamp,
-                    "message": dc_msg
+                    "trip_time": timestamp
                 }
+            
             if should_alert(dc_cat, "dashboard"):
                 current_active.append(alarm)
+            
             if should_alert(dc_cat, "telegram") and should_send_tg(alarm):
-                icon = "⚡" if is_crit else "🔌"
-                fire_tg(alarm, dc_type, f"{icon} {inv_label_f} MPPT {f['MPPT']} — {f['Measured']}A (exp. {f['Expected']}A)")
+                if is_crit:
+                    inv_dc_summary[inv_label_f]["crit"].append(str(f['MPPT']))
+                else:
+                    inv_dc_summary[inv_label_f]["warn"].append(str(f['MPPT']))
+                inv_dc_summary[inv_label_f]["alarms"].append((alarm, dc_type))
+
+        # Send aggregated DC alerts
+        for inv_label, details in inv_dc_summary.items():
+            if details["crit"]:
+                mppt_list = ", ".join(details["crit"])
+                msg = f"⚡ {inv_label} — CRITICAL DC (MPPTs: {mppt_list})"
+                add_tg_msg("DC CRITICAL", msg)
+                for alarm, dtype in details["alarms"]:
+                    if alarm["severity"] == "red": alarm["last_tg_sent"] = timestamp
+            if details["warn"]:
+                mppt_list = ", ".join(details["warn"])
+                msg = f"🔌 {inv_label} — DC Warning (MPPTs: {mppt_list})"
+                add_tg_msg("DC WARNING", msg)
+                for alarm, dtype in details["alarms"]:
+                    if alarm["severity"] != "red": alarm["last_tg_sent"] = timestamp
 
         # Recover resolved DC faults
         for past_alarm_id, past_alarm in prev_alarm_map.items():

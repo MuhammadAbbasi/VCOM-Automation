@@ -14,27 +14,37 @@
 <body>
 
   <header>
-    <div style="display:flex; align-items:center; gap:2rem">
-      <div class="logo-box">
-        <h1 style="margin:0; font-size:1.5rem; letter-spacing:-0.03em">MAZARA <span style="color:var(--accent); font-weight:300">SCADA</span></h1>
-        <div class="header-refresh-timer">
-          <span class="dot green"></span> SYSTEM ONLINE • LAST PULSE: <span id="global-last-update">--:--:--</span>
-        </div>
-      </div>
-      <div class="plant-meta-header">
-        <div class="meta-row">
-          <span class="meta-label">ID:</span> <span class="meta-val">2144635</span> &bull; 
-          <span class="meta-label">UNITS:</span> <span class="meta-val">36 Inverters</span>
-        </div>
-        <div class="meta-row">
-          <span id="meta-start-time">Plant Start: --:--</span> &bull; 
-          <span id="meta-last-fetch">Last Fetch: --:--</span>
-        </div>
+    <div class="logo-box">
+      <h1>MAZARA <span>SCADA</span></h1>
+      <div class="meta-row" style="justify-content: flex-start; opacity: 0.6; font-size: 0.6rem;">
+        ID: <span class="meta-val">2144635</span> &bull; UNITS: <span class="meta-val">36 Inverters</span>
       </div>
     </div>
+
+    <div class="header-status-hub">
+      <div class="status-item">
+        <span class="dot green"></span> SYSTEM <b>ONLINE</b>
+      </div>
+      <div class="status-item">
+        <span id="link-status-badge" class="link-status-pill offline">LINK: OFFLINE</span>
+      </div>
+      <div class="status-item" style="border-left: 1px solid rgba(255,255,255,0.1); padding-left: 1.5rem;">
+        PULSE: <b id="global-last-update">--:--:--</b>
+      </div>
+    </div>
+
+    <div class="plant-meta-header">
+      <div class="meta-row">
+        Start: <b id="meta-start-time">--:--</b>
+      </div>
+      <div class="meta-row">
+        Latest: <b id="meta-last-fetch">--:--</b>
+      </div>
+    </div>
+
     <div class="header-actions">
-      <button id="settings-btn" class="btn-rescan" style="margin-right: 0.5rem; background:rgba(255,255,255,0.05)">⚙️ SETTINGS</button>
-      <button id="rescan-btn" class="btn-rescan">FORENSIC RE-SCAN</button>
+      <button id="settings-btn" class="btn-rescan"><span>⚙️</span> SETTINGS</button>
+      <button id="rescan-btn" class="btn-rescan"><span>🔍</span> FORENSIC RE-SCAN</button>
     </div>
   </header>
 
@@ -80,7 +90,7 @@
           <div class="metric-label">Plant Irradiance (POA)</div>
         </div>
         <div class="card metric-card grid-limit" id="card-grid-limit">
-          <div class="metric-value" id="val-grid-limit">87.6%</div>
+          <div class="metric-value" id="val-grid-limit">100.0%</div>
           <div class="metric-label">Grid Production Limit</div>
         </div>
         <div class="card metric-card action-card" style="grid-column: span 1; background: var(--glass-glow)">
@@ -393,41 +403,66 @@
     <div class="tracker-header-dashboard">
        <div class="tracker-main-stat-card">
           <div class="main-stat-val" id="stat-total-connected">0 / 370</div>
-          <div class="main-stat-label">Total Field Units</div>
+          <div class="main-stat-label">Total Units</div>
           <div class="ncu-status-pills">
-             <div class="ncu-pill" id="pill-n1">NCU 01: <span class="val">0</span></div>
-             <div class="ncu-pill" id="pill-n2">NCU 02: <span class="val">0</span></div>
-             <div class="ncu-pill" id="pill-n3">NCU 03: <span class="val">0</span></div>
+             <div class="ncu-pill">N1: <span id="stat-n1-count" class="val">0</span></div>
+             <div class="ncu-pill">N2: <span id="stat-n2-count" class="val">0</span></div>
+             <div class="ncu-pill">N3: <span id="stat-n3-count" class="val">0</span></div>
           </div>
        </div>
        <div class="tracker-main-stat-card">
           <div class="main-stat-val" id="stat-total-auto" style="color:var(--green)">0</div>
-          <div class="main-stat-label">Units in AM Mode</div>
+          <div class="main-stat-label">Auto Mode (AM)</div>
           <div class="ncu-status-pills">
-             <div class="ncu-pill">N1: <span id="pill-n1-am">0</span></div>
-             <div class="ncu-pill">N2: <span id="pill-n2-am">0</span></div>
-             <div class="ncu-pill">N3: <span id="pill-n3-am">0</span></div>
+             <div class="ncu-pill">N1: <span id="stat-n1-am" class="val">0</span></div>
+             <div class="ncu-pill">N2: <span id="stat-n2-am" class="val">0</span></div>
+             <div class="ncu-pill">N3: <span id="stat-n3-am" class="val">0</span></div>
+          </div>
+       </div>
+       <div class="tracker-main-stat-card">
+          <div class="main-stat-val" id="stat-total-wind" style="color:#3b82f6">0</div>
+          <div class="main-stat-label">Wind Mode (WM)</div>
+          <div class="ncu-status-pills">
+             <div class="ncu-pill">N1: <span id="stat-n1-wm" class="val">0</span></div>
+             <div class="ncu-pill">N2: <span id="stat-n2-wm" class="val">0</span></div>
+             <div class="ncu-pill">N3: <span id="stat-n3-wm" class="val">0</span></div>
+          </div>
+       </div>
+       <div class="tracker-main-stat-card">
+          <div class="main-stat-val" id="stat-total-manual" style="color:var(--yellow)">0</div>
+          <div class="main-stat-label">Manual Mode (MM)</div>
+          <div class="ncu-status-pills">
+             <div class="ncu-pill">N1: <span id="stat-n1-mm" class="val">0</span></div>
+             <div class="ncu-pill">N2: <span id="stat-n2-mm" class="val">0</span></div>
+             <div class="ncu-pill">N3: <span id="stat-n3-mm" class="val">0</span></div>
           </div>
        </div>
        <div class="tracker-main-stat-card">
           <div class="main-stat-val" id="stat-total-critical" style="color:var(--red)">0</div>
-          <div class="main-stat-label">Active Deviations</div>
-          <div id="tracker-anomalies" class="anomalies-scroll-box"></div>
+          <div class="main-stat-label">Active Alarms</div>
        </div>
+       <div class="tracker-main-stat-card">
+          <div class="main-stat-val" id="stat-last-sync" style="color:var(--accent)">—</div>
+          <div class="main-stat-label">Last Data Sync</div>
+       </div>
+    </div>
+
+    <div id="tracker-deviation-container" class="deviation-container">
+       <!-- Deviation LEDs injected by JS -->
     </div>
 
     <div class="tracker-navigation-bar">
       <div class="tracker-filters">
         <button class="filter-btn active" data-ncu="all">All Fields</button>
-        <button class="filter-btn" data-ncu="NCU_01">NCU 01</button>
-        <button class="filter-btn" data-ncu="NCU_02">NCU 02</button>
-        <button class="filter-btn" data-ncu="NCU_03">NCU 03</button>
+        <button class="filter-btn" data-ncu="NCU 01">NCU 01</button>
+        <button class="filter-btn" data-ncu="NCU 02">NCU 02</button>
+        <button class="filter-btn" data-ncu="NCU 03">NCU 03</button>
       </div>
-      <div id="tracker-anomalies" class="anomalies-mini-list"></div>
+      <div id="tracker-anomalies-list" class="anomalies-mini-list"></div>
     </div>
 
-    <div id="tracker-sections-container">
-       <!-- NCU Sections will be injected here -->
+    <div id="tracker-led-grid" class="tracker-led-grid">
+       <!-- 370 LEDs will be injected here by JS -->
     </div>
   </main>
 
@@ -622,6 +657,24 @@
                     (Strings Offline)</td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-dc-crit-db"></td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-dc-crit-tg"></td>
+                </tr>
+
+                <tr style="border-top: 1px solid var(--border);">
+                  <td colspan="3"
+                    style="font-size:0.65rem; color:var(--muted); padding:0.25rem 0.75rem; background:rgba(0,0,0,0.2);">
+                    TRACKER & MQTT CONNECTIVITY</td>
+                </tr>
+                <tr>
+                  <td style="padding:0.75rem;"><span
+                      style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">🛰️</span> Tracker Comms (MQTT Missing)</td>
+                  <td style="text-align:center;"><input type="checkbox" id="pref-tracker-db"></td>
+                  <td style="text-align:center;"><input type="checkbox" id="pref-tracker-tg"></td>
+                </tr>
+                <tr>
+                  <td style="padding:0.75rem;"><span
+                      style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">📡</span> System Data Pulse (Missing Data)</td>
+                  <td style="text-align:center;"><input type="checkbox" id="pref-mqtt-db"></td>
+                  <td style="text-align:center;"><input type="checkbox" id="pref-mqtt-tg"></td>
                 </tr>
 
                 <tr style="border-top: 1px solid var(--border);">

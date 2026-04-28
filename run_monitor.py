@@ -69,8 +69,18 @@ SERVICES = [
         "new_console": False,
     },
     {
+        "name": "BROKER",
+        "cmd": [sys.executable, "-u", str(ROOT / "tracker_testing" / "broker.py")],
+        "new_console": False,
+    },
+    {
         "name": "TRACKER",
         "cmd": [sys.executable, "-u", str(ROOT / "tracker_testing" / "receiver.py")],
+        "new_console": False,
+    },
+    {
+        "name": "DOCTOR",
+        "cmd": [sys.executable, "-u", str(ROOT / "dashboard_doctor.py")],
         "new_console": False,
     },
 ]

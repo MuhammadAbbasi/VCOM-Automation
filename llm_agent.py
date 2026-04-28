@@ -56,7 +56,11 @@ def get_user_context(user_id):
 # ---------------------------------------------------------------------------
 import pandas as pd
 import numpy as np
-from db.db_manager import load_metric, load_latest_snapshot, get_db_stats, get_data_conn, get_logs_conn, get_tracker_summary, get_all_tracker_status
+from db.db_manager import (
+    load_metric, load_latest_snapshot, get_db_stats, get_data_conn, 
+    get_logs_conn, get_tracker_summary, get_all_tracker_status,
+    load_all_snapshots
+)
 
 INV_IDS = [f"INV TX{tx}-{i:02d}" for tx in range(1, 4) for i in range(1, 13)]
 
@@ -406,15 +410,49 @@ def get_downtime_events(date_str=None):
     
     return {"date": date_str, "production_start": prod_start, "production_end": prod_end, "downtime_events": events}
 
-def search_logs(query, limit=10):
-    """Search system logs in scada_logs.db for keywords."""
+def get_alarm_history(date_str=None, inverter=None, alarm_type=None):
+    """Search all snapshots for a date to find specific alarm events."""
+    date_str = date_str or datetime.now().strftime("%Y-%m-%d")
+    snaps = load_all_snapshots(date_str)
+    if not snaps:
+        return []
+    
+    found = []
+    seen_ids = set()
+    
     try:
-        conn = get_logs_conn()
-        sql = "SELECT timestamp, source, level, message FROM logs WHERE message LIKE ? ORDER BY timestamp DESC LIMIT ?"
-        res = conn.execute(sql, (f"%{query}%", limit)).fetchall()
-        return [{"timestamp": r[0], "source": r[1], "level": r[2], "message": r[3]} for r in res]
+        latest_ts = sorted(snaps.keys())[-1]
+        latest_snap = snaps[latest_ts]
+        
+        # Watchdog carries forward history in these keys
+        pool = latest_snap.get("historical_trail", []) + latest_snap.get("active_anomalies", [])
+        
+        for a in pool:
+            # Filter by inverter (e.g. "TX3-07")
+            target_inv = inverter.upper() if inverter else ""
+            if target_inv and target_inv not in a.get("inverter", "").upper() and target_inv not in a.get("id", "").upper():
+                continue
+            # Filter by type (e.g. "INSULATION")
+            target_type = alarm_type.upper() if alarm_type else ""
+            if target_type and target_type not in a.get("type", "").upper() and target_type not in a.get("id", "").upper():
+                continue
+                
+            aid = a.get("id")
+            if aid not in seen_ids:
+                found.append(a)
+                seen_ids.add(aid)
     except Exception as e:
-        return {"error": str(e)}
+        logger.error(f"Error in get_alarm_history: {e}")
+            
+    return found
+
+def get_active_anomalies():
+    """Get currently active plant anomalies."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    snap = load_latest_snapshot(today)
+    if snap:
+        return snap.get("active_anomalies", [])
+    return []
 
 def get_tracker_data_summary():
     """Get concise summary of tracker field."""
@@ -446,7 +484,8 @@ def build_data_snapshot(plant_data, question):
         "DOWNTIME": ["off", "down", "zero", "offline", "stopped", "trip", "fault", "spento", "not working", "not producing", "fermo", "anomalia", "allarme"],
         "DC_STRINGS": ["current", "dc", "string", "mppt", "corrente", "amper", "stringhe"],
         "IRRADIANCE": ["irradiance", "sun", "irraggiamento", "solar", "radiation", "pyranometer", "sole", "luce"],
-        "HISTORY": ["history", "historical", "trail", "past", "last alarms", "storia", "passato", "ieri", "precedente"],
+        "INSULATION": ["insulation", "iso", "isolamento", "resistenza", "kohm", "kohm", "omega"],
+        "HISTORY": ["history", "historical", "trail", "past", "last alarms", "storia", "passato", "ieri", "precedente", "quanti", "how many", "how long", "durata", "duration"],
         "TRACKERS": ["tracker", "trackers", "ncu", "tcu", "angle", "position", "tilt", "seguimento", "inclinazione", "angolo", "motore", "motor"]
     }
     
@@ -518,8 +557,19 @@ def build_data_snapshot(plant_data, question):
     if "DOWNTIME" in active_cats or "HISTORY" in active_cats:
         dt = get_downtime_events(target_date)
         snapshot.append(f"DOWNTIME EVENTS: {json.dumps(dt, default=str)}")
-        if plant_data and "historical_trail" in plant_data:
-            snapshot.append(f"RECENT ALARMS: {json.dumps(plant_data['historical_trail'][-10:], default=str)}")
+        if plant_data:
+            if "active_anomalies" in plant_data:
+                snapshot.append(f"ACTIVE ANOMALIES: {json.dumps(plant_data['active_anomalies'], default=str)}")
+            if "historical_trail" in plant_data:
+                snapshot.append(f"RECENT ALARM TRAIL (Last 20): {json.dumps(plant_data['historical_trail'][-20:], default=str)}")
+            
+    if "INSULATION" in active_cats:
+        iso_df = load_metric(target_date, "Resistenza di isolamento")
+        if iso_df is not None and not iso_df.empty:
+             snapshot.append(f"ISO READINGS (Latest): {json.dumps(iso_df.iloc[-1].to_dict(), default=str)}")
+        # Also check history for insulation
+        iso_history = get_alarm_history(target_date, alarm_type="INSULATION")
+        snapshot.append(f"INSULATION ALARM HISTORY: {json.dumps(iso_history, default=str)}")
             
     if "DC_STRINGS" in active_cats:
         # If specific device, fetch all DC for them. Otherwise, just fetch offline strings.
@@ -603,6 +653,8 @@ def run_python_analysis(code: str, plant_data: dict) -> tuple:
         "get_tracker_summary": get_tracker_summary,
         "get_tracker_data": get_all_tracker_status,
         "get_tracker_data_summary": get_tracker_data_summary,
+        "get_alarm_history": get_alarm_history,
+        "get_active_anomalies": get_active_anomalies,
         "search_logs": search_logs,
         "load_csv": _load_csv, # Kept but hidden from prompt
         "INV_IDS": INV_IDS,

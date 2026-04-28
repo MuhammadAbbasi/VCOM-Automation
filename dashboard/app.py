@@ -119,38 +119,38 @@ async def data_broadcaster():
                 "is_extracting": is_extracting
             })
 
+            # Check Link Status (Heartbeat)
+            link_status_path = ROOT / "db" / "link_status.json"
+            link_info = {"status": "offline", "last_heartbeat": None}
+            if link_status_path.exists():
+                try:
+                    with open(link_status_path, "r") as f:
+                        link_info = json.load(f)
+                    # Check if stale (more than 2 minutes)
+                    last_ts = datetime.fromisoformat(link_info["last_heartbeat"])
+                    if (datetime.now() - last_ts).total_seconds() > 120:
+                        link_info["status"] = "stale"
+                except Exception:
+                    pass
+
             # Try loading from database first
             try:
-                from db.db_manager import load_latest_snapshot, get_daily_sensor_history
+                from db.db_manager import load_latest_snapshot, get_daily_sensor_history, get_all_tracker_status
                 latest_data = load_latest_snapshot(today)
                 if latest_data:
                     # Enrich with sensor history for sparklines
                     latest_data["sensor_history"] = get_daily_sensor_history(today)
+                    latest_data["link_status"] = link_info
                     
-                    # Use last_sync as a change-detection key
-                    snap_ts = latest_data.get("macro_health", {}).get("last_sync", "")
-                    if snap_ts != last_snapshot_ts:
-                        last_snapshot_ts = snap_ts
-                        await manager.broadcast({"type": "data_update", "data": latest_data})
-            except Exception:
-                # Fallback: read from JSON file
-                json_path = DATA_DIR / f"dashboard_data_{today}.json"
-            status = load_latest_snapshot(today)
-            if status:
-                status["sensor_history"] = get_daily_sensor_history(today)
-            
-            trackers = get_all_tracker_status()
-            
-            payload = {
-                "type": "data_update",
-                "data": status,
-                "trackers": trackers,
-                "timestamp": datetime.now().isoformat()
-            }
-            
-            if payload != last_broadcast_data:
-                await manager.broadcast(payload)
-                last_broadcast_data = payload
+                    # Broadcast every tick
+                    await manager.broadcast({
+                        "type": "data_update", 
+                        "data": latest_data,
+                        "trackers": get_all_tracker_status(),
+                        "timestamp": datetime.now().isoformat()
+                    })
+            except Exception as e:
+                print(f"[DASHBOARD] Broadcast error: {e}")
         except Exception:
             pass
         await asyncio.sleep(5)
@@ -186,19 +186,24 @@ async def websocket_endpoint(websocket: WebSocket):
         try:
             from db.db_manager import load_latest_snapshot, get_daily_sensor_history, get_all_tracker_status
             latest_data = load_latest_snapshot(today)
+            
+            # Check Link Status
+            link_status_path = ROOT / "db" / "link_status.json"
+            link_info = {"status": "offline"}
+            if link_status_path.exists():
+                with open(link_status_path, "r") as f:
+                    link_info = json.load(f)
+            
             if latest_data:
-                # Enrich with sensor history
                 latest_data["sensor_history"] = get_daily_sensor_history(today)
-                await websocket.send_json({"type": "data_update", "data": latest_data, "trackers": get_all_tracker_status()})
-        except Exception:
-            # Fallback: read from JSON file
-            json_path = DATA_DIR / f"dashboard_data_{today}.json"
-            if json_path.exists():
-                with open(json_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                if data:
-                    latest_key = sorted(data.keys())[-1]
-                    await websocket.send_json({"type": "data_update", "data": data[latest_key]})
+                latest_data["link_status"] = link_info
+                await websocket.send_json({
+                    "type": "data_update", 
+                    "data": latest_data, 
+                    "trackers": get_all_tracker_status()
+                })
+        except Exception as e:
+            print(f"[WS] Initial data error: {e}")
                 
         # Send initial settings
         from processor_watchdog_final import load_user_settings
@@ -222,6 +227,14 @@ async def get_trackers(username: str = Depends(verify_credentials)):
 async def get_settings(user: str = Depends(verify_credentials)):
     from processor_watchdog_final import load_user_settings
     return JSONResponse(load_user_settings())
+
+@app.get("/api/link_status")
+async def get_link_status(user: str = Depends(verify_credentials)):
+    status_file = ROOT / "db" / "link_status.json"
+    if status_file.exists():
+        with open(status_file, "r") as f:
+            return json.load(f)
+    return JSONResponse({"status": "offline", "message": "No heartbeat received yet."})
 
 
 @app.post("/api/settings")
@@ -315,7 +328,7 @@ async def test_telegram(user: str = Depends(verify_credentials)):
 # LLM Chat Endpoint
 # ---------------------------------------------------------------------------
 try:
-    from llm_agent import ask_llm
+    from llm_agent_v2 import ask_agent as ask_llm
 except ImportError:
     ask_llm = None
 
