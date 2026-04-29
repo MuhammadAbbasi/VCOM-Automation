@@ -520,20 +520,39 @@ def build_data_snapshot(plant_data, question):
     # 4. Global State (Always include)
     if plant_data:
         macro = plant_data.get("macro_health", {})
-        poa = macro.get("poa", 0)
+        # Extract POA with fallbacks
+        poa = macro.get("poa")
+        if poa is None:
+            # Try sensor_data fallback
+            s_data = plant_data.get("sensor_data", {})
+            poa_key = next((k for k in s_data.keys() if "POA" in k.upper()), None)
+            poa = s_data.get(poa_key, 0) if poa_key else 0
+            
         pr = macro.get("avg_pr", "?")
-        mw = macro.get('MW','?')
+        mw = macro.get('MW') or macro.get('total_ac_power_mw', '?')
+        online_count = macro.get('online', '?')
+        total_count = macro.get('total_inverters', macro.get('total', '?'))
         
-        # NIGHT MODE DETECTION
+        # NIGHT MODE DETECTION vs SENSOR FAILURE
         now = datetime.now()
         now_hr = now.hour + (now.minute / 60.0)
         sunrise, sunset = calculate_sun_times(target_date)
-        is_night = (now_hr > sunset + 0.5 or now_hr < sunrise - 0.5) or (poa < 30 and now_hr > 17)
         
-        mode = "NIGHT MODE (Offline)" if is_night else "PRODUCTION MODE (Daylight)"
+        is_dark_hours = (now_hr > sunset + 0.5 or now_hr < sunrise - 0.5)
+        is_sensor_zero = (poa < 10) # Very low reading
         
+        if is_dark_hours:
+            mode = "NIGHT MODE (Offline)"
+            status_msg = f"It is currently night time at the plant. POA is {poa} W/m² as expected."
+        elif is_sensor_zero and now_hr > (sunrise + 1) and now_hr < (sunset - 1):
+            mode = "SENSOR ALERT (Irregularity)"
+            status_msg = f"ALERT: Irradiance (POA) is reporting {poa} W/m² during daylight hours. This likely indicates a sensor communication issue or failure."
+        else:
+            mode = "PRODUCTION MODE (Daylight)"
+            status_msg = f"Plant is in production. POA={poa} W/m²."
+
         snapshot.append(f"CURRENT LOCAL TIME: {now.strftime('%H:%M')}")
-        snapshot.append(f"CURRENT STATUS (Latest Sync): {mode}, MW={mw}, Online={macro.get('online','?')}/{macro.get('total','?')}, POA={poa} W/m², Avg PR={pr}%")
+        snapshot.append(f"CURRENT STATUS (Latest Sync): {mode}, MW={mw}, Online={online_count}/{total_count}, {status_msg}, Avg PR={pr}%")
         snapshot.append(f"SUN SCHEDULE ({target_date}): Sunrise ~{int(sunrise)}:{int((sunrise%1)*60):02d}, Sunset ~{int(sunset)}:{int((sunset%1)*60):02d}")
         
     pub = get_public_url() or "https://carl-perkiest-paniculately.ngrok-free.dev/"

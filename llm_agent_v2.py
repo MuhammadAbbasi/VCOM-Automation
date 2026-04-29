@@ -50,6 +50,18 @@ def get_latest_readings(metric: str, date: str = None, **kwargs) -> str:
     d = date or datetime.now().strftime("%Y-%m-%d")
     df = load_metric(d, metric)
     if df is None or df.empty: return "No data."
+    
+    # Filter out rows that are completely empty/null (common in VCOM pre-populated tables)
+    # We ignore the 'Ora' and 'Timestamp Fetch' columns when checking for data
+    data_cols = [c for c in df.columns if c not in ("Ora", "Timestamp Fetch")]
+    if data_cols:
+        # Drop rows where all data columns are NaN or 0 (if we consider 0 as 'no data yet' for metrics like AC/POA)
+        # Note: For some metrics 0 is valid, but usually we want rows with actual updates.
+        # Let's just drop completely null rows first.
+        df_valid = df.dropna(subset=data_cols, how='all')
+        if not df_valid.empty:
+            df = df_valid
+            
     return json.dumps(df.tail(3).to_dict(orient='records'))
 
 def get_tracker_data(ncu: str = None, **kwargs) -> str:
