@@ -1,0 +1,24 @@
+{
+  "GRID_LIMIT_CHANGE": {
+    "first_detected": "2026-04-29T10:39:59.765732",
+    "type": "GRID LIMIT CHANGE",
+    "message": "Grid production limit is restricted to 87.6%.",
+    "odoo_anomalia_id": 2,
+    "odoo_intervento_id": 11,
+    "notified": true,
+    "assignment_notified": false,
+    "resolved": true,
+    "last_technician": null
+  },
+  "TRACKER_OFFLINE": {
+    "first_detected": "2026-04-29T16:45:10.484172",
+    "type": "TRACKER",
+    "message": "370 tracker(s) stale >60 min. NCUs: NCU_03, NCU_01, NCU_02",
+    "odoo_anomalia_id": 21,
+    "odoo_intervento_id": 23,
+    "notified": true,
+    "assignment_notified": false,
+    "resolved": true,
+    "last_technician": null
+  }
+}

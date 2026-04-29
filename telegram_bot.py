@@ -56,6 +56,299 @@ logging.basicConfig(
 )
 logger = logging.getLogger("telegram_bot")
 
+# ---------------------------------------------------------------------------
+# /generate_ticket — interactive ticket creation flow
+# ---------------------------------------------------------------------------
+
+FAULT_TYPES_TG = {
+    "1":  ("INVERTER TRIP",     "inverter_fault",   "guasto",    "urgente", "urgente"),
+    "2":  ("LOW PR",            "produzione_bassa",  "ispezione", "alta",    "alta"),
+    "3":  ("CRIT PR",           "produzione_bassa",  "ispezione", "urgente", "urgente"),
+    "4":  ("ISO FAULT",         "inverter_fault",    "guasto",    "urgente", "urgente"),
+    "5":  ("COMM LOST",         "comunicazione",     "ispezione", "alta",    "alta"),
+    "6":  ("DC MPPT FAULT",     "inverter_fault",    "guasto",    "alta",    "alta"),
+    "7":  ("HIGH TEMP",         "inverter_fault",    "ispezione", "alta",    "alta"),
+    "8":  ("CRIT TEMP",         "inverter_fault",    "ispezione", "urgente", "urgente"),
+    "9":  ("TRACKER OFFLINE",   "tracker",           "ispezione", "alta",    "alta"),
+    "10": ("GRID LIMIT CHANGE", "rete",              "ispezione", "normale", "media"),
+    "11": ("CUSTOM",            "altro",             "altro",     "normale", "bassa"),
+}
+
+PRIORITIES_TG = {"1": "bassa", "2": "normale", "3": "alta", "4": "urgente"}
+
+INTERVENTION_TYPES_TG = {
+    "1": "manutenzione_ordinaria",
+    "2": "manutenzione_straordinaria",
+    "3": "guasto",
+    "4": "ispezione",
+    "5": "sfalcio",
+    "6": "collaudo",
+    "7": "altro",
+}
+
+_FAULT_MENU = (
+    "🎫 *Crea Ticket — Mazara 01*\n\n"
+    "Tipo di guasto:\n"
+    "1️⃣ INVERTER TRIP\n"
+    "2️⃣ LOW PR\n"
+    "3️⃣ CRIT PR\n"
+    "4️⃣ ISO FAULT\n"
+    "5️⃣ COMM LOST\n"
+    "6️⃣ DC MPPT FAULT\n"
+    "7️⃣ HIGH TEMP\n"
+    "8️⃣ CRIT TEMP\n"
+    "9️⃣ TRACKER OFFLINE\n"
+    "🔟 GRID LIMIT CHANGE\n"
+    "1️⃣1️⃣ CUSTOM\n\n"
+    "Rispondi con 1–11 oppure /cancel"
+)
+
+_PRIO_MENU = (
+    "⭐ *Priorità:*\n"
+    "1️⃣ Bassa   2️⃣ Normale   3️⃣ Alta   4️⃣ Urgente\n\n"
+    "Rispondi con 1–4 oppure `ok` per usare il default"
+)
+
+_INTV_MENU = (
+    "🔧 *Tipo Intervento:*\n"
+    "1️⃣ Manutenzione Ordinaria\n"
+    "2️⃣ Manutenzione Straordinaria\n"
+    "3️⃣ Guasto / Riparazione\n"
+    "4️⃣ Ispezione\n"
+    "5️⃣ Sfalcio / Pulizia\n"
+    "6️⃣ Collaudo\n"
+    "7️⃣ Altro\n\n"
+    "Rispondi con 1–7 oppure `ok` per usare il default"
+)
+
+# ticket_sessions[chat_id] = {"step": str, "data": dict}
+ticket_sessions: dict = {}
+
+
+def _create_odoo_ticket(data: dict):
+    """Create SCADA session + anomalia + intervento in Odoo. Returns (name, intv_id, anom_id)."""
+    from db.odoo_client import OdooClient
+    client = OdooClient("http://localhost:8069", "odoo", "pietro.artale@gmail.com", "odoo")
+    if not client.login():
+        raise RuntimeError("Odoo login failed")
+
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+    label  = data["fault_label"]
+    device = data["device"]
+    titolo = f"[{label}] {device} — Mazara 01"
+    causa  = "\n".join([
+        "SCADA FAULT REPORT — Submitted via Telegram",
+        "=" * 50,
+        f"Fault Type      : {label}",
+        f"Device          : {device}",
+        f"Submitted At    : {now_str}",
+        f"Priority        : {data['intv_prio'].upper()}",
+        "",
+        "DESCRIPTION",
+        "-" * 50,
+        data["description"],
+    ])
+    if data.get("notes"):
+        causa += f"\n\nNOTES\n{'-'*50}\n{data['notes']}"
+
+    session_id  = client.create_scada_session(
+        fault_summary=f"Telegram ticket: {label} on {device}",
+        stato_impianto="alarm" if data["intv_prio"] == "urgente" else "warning",
+    )
+    anomalia_id = client.create_anomalia(
+        session_id=session_id, titolo=titolo,
+        tipo=data["anom_tipo"], priorita=data["anom_prio"],
+        descrizione=causa, intervento_richiesto=data["field_work"],
+    )
+    intervento_id = client.create_intervento(
+        titolo=titolo, tipo_intervento=data["intv_tipo"],
+        priorita=data["intv_prio"], causa_guasto=causa,
+        session_id=session_id,
+    )
+    if anomalia_id and intervento_id:
+        client.link_anomalia_to_intervento(anomalia_id, intervento_id)
+    intv_data = client.get_intervento(intervento_id)
+    intv_name = intv_data["name"] if intv_data else f"ID-{intervento_id}"
+    return intv_name, intervento_id, anomalia_id
+
+
+def _handle_ticket_step(bot, chat_id: int, text: str) -> bool:
+    """
+    Handle one step of the /generate_ticket flow.
+    Returns True if the message was consumed by the flow, False otherwise.
+    """
+    session = ticket_sessions.get(chat_id)
+    if not session:
+        return False
+
+    step = session["step"]
+    data = session["data"]
+    t    = text.strip()
+
+    # /cancel anywhere aborts
+    if t.lower() in ("/cancel", "cancel"):
+        ticket_sessions.pop(chat_id, None)
+        bot.send_message(chat_id, "❌ Ticket annullato.")
+        return True
+
+    # ── Step: fault_type ────────────────────────────────────────
+    if step == "fault_type":
+        if t not in FAULT_TYPES_TG:
+            bot.send_message(chat_id, "⚠️ Scelta non valida. Rispondi con 1–11 oppure /cancel")
+            return True
+        label, anom_tipo, intv_tipo, intv_prio, anom_prio = FAULT_TYPES_TG[t]
+        data.update(fault_key=t, anom_tipo=anom_tipo, intv_tipo=intv_tipo,
+                    intv_prio=intv_prio, anom_prio=anom_prio)
+        if t == "11":
+            session["step"] = "custom_name"
+            bot.send_message(chat_id, "📝 Nome del guasto personalizzato:")
+            return True
+        data["fault_label"] = label
+        session["step"] = "device"
+        bot.send_message(chat_id,
+            f"✅ Fault: *{label}*\n\n"
+            "🔌 *Quale dispositivo è interessato?*\n"
+            "Scrivi il nome (es. `TX1-03`, `TX2-11`, `PLANT`, `GRID`)\n\n"
+            "oppure /cancel")
+        return True
+
+    # ── Step: custom_name ───────────────────────────────────────
+    if step == "custom_name":
+        if not t or t.startswith("/"):
+            bot.send_message(chat_id, "⚠️ Inserisci un nome per il guasto.")
+            return True
+        data["fault_label"] = t.upper()
+        session["step"] = "device"
+        bot.send_message(chat_id,
+            f"✅ Fault: *{data['fault_label']}*\n\n"
+            "🔌 *Quale dispositivo è interessato?*\n"
+            "Scrivi il nome (es. `TX1-03`, `TX2-11`, `PLANT`)")
+        return True
+
+    # ── Step: device ────────────────────────────────────────────
+    if step == "device":
+        if not t or t.startswith("/"):
+            bot.send_message(chat_id, "⚠️ Inserisci il nome del dispositivo.")
+            return True
+        data["device"] = t.upper()
+        session["step"] = "priority"
+        bot.send_message(chat_id,
+            f"✅ Device: *{data['device']}*\n\n"
+            f"{_PRIO_MENU}\n"
+            f"Default per *{data['fault_label']}*: `{data['intv_prio'].upper()}`")
+        return True
+
+    # ── Step: priority ───────────────────────────────────────────
+    if step == "priority":
+        if t.lower() != "ok":
+            if t not in PRIORITIES_TG:
+                bot.send_message(chat_id, "⚠️ Rispondi con 1–4 oppure `ok`.")
+                return True
+            data["intv_prio"] = PRIORITIES_TG[t]
+            # Map 'normale' to 'media' for fv.anomalia model compatibility
+            data["anom_prio"] = "media" if data["intv_prio"] == "normale" else data["intv_prio"]
+        session["step"] = "intv_type"
+        bot.send_message(chat_id,
+            f"✅ Priorità: *{data['intv_prio'].upper()}*\n\n"
+            f"{_INTV_MENU}\n"
+            f"Default per *{data['fault_label']}*: `{data['intv_tipo']}`")
+        return True
+
+    # ── Step: intv_type ──────────────────────────────────────────
+    if step == "intv_type":
+        if t.lower() != "ok":
+            if t not in INTERVENTION_TYPES_TG:
+                bot.send_message(chat_id, "⚠️ Rispondi con 1–7 oppure `ok`.")
+                return True
+            data["intv_tipo"] = INTERVENTION_TYPES_TG[t]
+        session["step"] = "description"
+        bot.send_message(chat_id,
+            f"✅ Tipo: *{data['intv_tipo']}*\n\n"
+            "📋 *Descrivi il guasto:*\n"
+            "Invia la descrizione in un unico messaggio\n\n"
+            "oppure /cancel")
+        return True
+
+    # ── Step: description ────────────────────────────────────────
+    if step == "description":
+        if not t or t.startswith("/"):
+            bot.send_message(chat_id, "⚠️ Inserisci una descrizione.")
+            return True
+        data["description"] = t
+        session["step"] = "notes"
+        bot.send_message(chat_id,
+            "✅ Descrizione salvata.\n\n"
+            "📝 *Note aggiuntive?*\n"
+            "Invia le note oppure scrivi `none` per saltare")
+        return True
+
+    # ── Step: notes ──────────────────────────────────────────────
+    if step == "notes":
+        data["notes"] = "" if t.lower() == "none" else t
+        session["step"] = "field_work"
+        bot.send_message(chat_id,
+            "📌 *Richiede intervento sul campo?*\n"
+            "Rispondi `y` (sì) oppure `n` (no)")
+        return True
+
+    # ── Step: field_work ─────────────────────────────────────────
+    if step == "field_work":
+        if t.lower() not in ("y", "n", "yes", "no", "si", "sì"):
+            bot.send_message(chat_id, "⚠️ Rispondi con `y` oppure `n`.")
+            return True
+        data["field_work"] = t.lower() in ("y", "yes", "si", "sì")
+        session["step"] = "confirm"
+        desc_preview = data["description"][:120] + ("…" if len(data["description"]) > 120 else "")
+        preview = (
+            f"📋 *ANTEPRIMA TICKET*\n"
+            f"{'─'*32}\n"
+            f"*Tipo:*       {data['fault_label']}\n"
+            f"*Device:*     {data['device']}\n"
+            f"*Priorità:*   {data['intv_prio'].upper()}\n"
+            f"*Intervento:* {data['intv_tipo']}\n"
+            f"*Campo:*      {'Sì' if data['field_work'] else 'No'}\n"
+            f"*Descrizione:* {desc_preview}\n"
+        )
+        if data.get("notes"):
+            preview += f"*Note:* {data['notes'][:80]}\n"
+        preview += "\n✅ Confermi la creazione? (`y` / `n`)"
+        bot.send_message(chat_id, preview)
+        return True
+
+    # ── Step: confirm ────────────────────────────────────────────
+    if step == "confirm":
+        if t.lower() in ("n", "no"):
+            ticket_sessions.pop(chat_id, None)
+            bot.send_message(chat_id, "❌ Ticket annullato.")
+            return True
+        if t.lower() not in ("y", "yes", "si", "sì"):
+            bot.send_message(chat_id, "⚠️ Rispondi con `y` oppure `n`.")
+            return True
+
+        ticket_sessions.pop(chat_id, None)
+        bot.send_message(chat_id, "⏳ Creazione ticket in Odoo…")
+        try:
+            intv_name, intv_id, anom_id = _create_odoo_ticket(data)
+            bot.send_message(chat_id,
+                f"✅ *TICKET CREATO — Mazara 01*\n\n"
+                f"*Intervento:* `{intv_name}`\n"
+                f"*Anomalia:*  #{anom_id}\n"
+                f"*Stato:*     Nuovo — in attesa di assegnazione admin\n\n"
+                f"📍 http://localhost:8069/odoo/fv-interventi"
+            )
+        except Exception as e:
+            logger.error(f"Ticket creation error: {e}")
+            bot.send_message(chat_id, f"❌ Errore nella creazione: {str(e)[:120]}")
+        return True
+
+    return False
+
+
+def start_ticket_flow(bot, chat_id: int) -> None:
+    ticket_sessions[chat_id] = {"step": "fault_type", "data": {}}
+    bot.send_message(chat_id, _FAULT_MENU)
+
+
 TRIGGER_KEYWORDS = [
     "/status", "status", "plant status", "stato", "potenza",
     "stato impianto", "stato dell'impianto", "/potenza",
@@ -190,11 +483,12 @@ class TelegramBot:
     def set_my_commands(self) -> None:
         """Sets the bot's command list for the '/' menu."""
         commands = [
-            {"command": "start",  "description": "Welcome & capabilities overview"},
-            {"command": "status", "description": "📊 Live plant power, PR & health"},
-            {"command": "alerts", "description": "🚨 Active faults & anomalies"},
-            {"command": "daily",  "description": "📅 Daily energy production report"},
-            {"command": "ai",     "description": "🧠 AI-powered plant analysis"},
+            {"command": "start",           "description": "Welcome & capabilities overview"},
+            {"command": "status",          "description": "📊 Live plant power, PR & health"},
+            {"command": "alerts",          "description": "🚨 Active faults & anomalies"},
+            {"command": "daily",           "description": "📅 Daily energy production report"},
+            {"command": "ai",              "description": "🧠 AI-powered plant analysis"},
+            {"command": "generate_ticket", "description": "🎫 Crea nuovo ticket di guasto"},
         ]
         try:
             requests.post(f"{self.base}/setMyCommands", json={"commands": commands}, timeout=API_TIMEOUT)
@@ -234,13 +528,24 @@ def main() -> None:
     if tg.get("chat_id"):
         bot.set_chat_description(tg.get("chat_id"))
     
-    ALLOWED_IDS = [str(tg.get("chat_id")), str(tg.get("personal_id"))]
     ai_semaphore = threading.Semaphore(20)
     
     # State for handling /ai question waiting
     waiting_for_ai = {} # {chat_id: {"prompt_msg_id": int}}
+    
     while True:
         try:
+            # Reload settings dynamically to pick up new authorized IDs
+            settings = load_settings()
+            tg = settings.get("telegram", {})
+            if not tg.get("enabled"): 
+                time.sleep(30)
+                continue
+                
+            ALLOWED_IDS = [str(tg.get("chat_id")), str(tg.get("personal_id"))]
+            for tid in tg.get("trusted_ids", []):
+                ALLOWED_IDS.append(str(tid))
+
             updates = bot.get_updates()
             for update in updates:
                 bot.offset = update["update_id"] + 1
@@ -256,12 +561,21 @@ def main() -> None:
                 if sender_id not in ALLOWED_IDS:
                     logger.warning(f"Unauthorized access attempt from chat_id {chat_id}")
                     continue
+                
+                # Special response for the new trusted user as requested
+                if sender_id == "8222569154":
+                    bot.send_message(chat_id, "8222569154")
+
+                # Active ticket-creation session takes priority over all other routing
+                if chat_id in ticket_sessions:
+                    _handle_ticket_step(bot, chat_id, text)
+                    continue
 
                 # Check if this is a reply to the AI prompt or if we are waiting for one
                 reply_to = msg.get("reply_to_message")
                 is_ai_reply = reply_to and "What would you like to know" in reply_to.get("text", "")
                 is_waiting_state = chat_id in waiting_for_ai
-                
+
                 if text.lower().startswith("/start"):
                     # Clear waiting state on /start
                     waiting_for_ai.pop(chat_id, None)
@@ -273,13 +587,23 @@ def main() -> None:
                         "📊 /status — Live AC power, PR & inverter health\n"
                         "🚨 /alerts — Active faults & anomalies\n"
                         "📅 /daily — Today's energy production report\n"
-                        "🧠 /ai `<question>` — Ask anything about the plant\n\n"
+                        "🧠 /ai `<question>` — Ask anything about the plant\n"
+                        "🎫 /generate\\_ticket — Create a new fault ticket\n\n"
                         "*Example AI Questions:*\n"
                         "• `/ai What was yesterday's total production?`\n"
                         "• `/ai Which inverters are above 50°C?`\n"
                         "• `/ai Compare TX1 vs TX2 production`\n"
                         "• `/ai Any inverters offline today?`"
                     )
+                    continue
+
+                elif text.lower().startswith("/generate_ticket"):
+                    waiting_for_ai.pop(chat_id, None)
+                    start_ticket_flow(bot, chat_id)
+                    continue
+
+                elif text.lower() in ("/cancel", "cancel") and chat_id not in ticket_sessions:
+                    bot.send_message(chat_id, "ℹ️ Nessuna operazione attiva da annullare.")
                     continue
 
                 elif text.lower().startswith("/ai") or is_ai_reply or is_waiting_state:
@@ -365,7 +689,8 @@ def main() -> None:
                         "📊 /status — Live plant summary\n"
                         "🚨 /alerts — Active anomalies\n"
                         "📅 /daily — Production report\n"
-                        "🧠 /ai `<question>` — AI analysis\n\n"
+                        "🧠 /ai `<question>` — AI analysis\n"
+                        "🎫 /generate\\_ticket — Create fault ticket\n\n"
                         "_Type /start for a full overview._"
                     )
 
