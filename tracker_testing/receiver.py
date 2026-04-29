@@ -111,20 +111,23 @@ def handle_sync_request(client, payload):
                 ncu = t.get("ncu", "Unknown")
                 ncu_counts[ncu] = ncu_counts.get(ncu, 0) + 1
                 
-            ncu_str = ", ".join([f"{k}: {v}" for k, v in ncu_counts.items()])
+            ncu_str = ", ".join([f"{str(k).replace('&', '&amp;').replace('<', '&lt;')}: {v}" for k, v in ncu_counts.items()])
             
-            msg = f"📡 <b>New Tracker Data Received</b>\n\n" \
-                  f"• <b>Total Units:</b> {total_trackers}\n" \
-                  f"• <b>NCUs:</b> {ncu_str}\n" \
-                  f"• <b>Critical Deviations (>5°):</b> {critical_dev}\n"
-                  
-            if duplicates:
-                msg += f"\n⚠️ <b>Duplicates filtered:</b> {len(duplicates)}"
-                
-            resp = requests.post(f"https://api.telegram.org/bot{token}/sendMessage", 
-                         json={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"}, timeout=15)
-            resp.raise_for_status()
-            logging.info("Telegram summary alert sent.")
+            if critical_dev > 0:
+                msg = f"📡 <b>New Tracker Data Received</b>\n\n" \
+                      f"• <b>Total Units:</b> {total_trackers}\n" \
+                      f"• <b>NCUs:</b> {ncu_str}\n" \
+                      f"• <b>Critical Deviations (>5°):</b> {critical_dev}\n"
+                      
+                if duplicates:
+                    msg += f"\n⚠️ <b>Duplicates filtered:</b> {len(duplicates)}"
+                    
+                resp = requests.post(f"https://api.telegram.org/bot{token}/sendMessage", 
+                             json={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"}, timeout=15)
+                resp.raise_for_status()
+                logging.info("Telegram summary alert sent due to critical deviations.")
+            else:
+                logging.info(f"No critical deviations ({critical_dev}). Skipping Telegram alert.")
     except Exception as te:
         logging.error(f"Failed to send Telegram summary: {te}")
         if hasattr(te, 'response') and te.response is not None:

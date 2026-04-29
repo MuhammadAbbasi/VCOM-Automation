@@ -197,14 +197,35 @@ def login(page) -> None:
     # Click the "Valutazione" tab to reach the evaluation/analysis section.
     logger.info("Navigating to Valutazione section...")
     valutazione_selector = 'a[title="Valutazione"]'
+    
+    # 1. First try direct navigation as it's the most reliable
     try:
-        page.wait_for_selector(valutazione_selector, timeout=60_000)
-        page.locator(valutazione_selector).first.click()
+        if "valutazione" not in page.url.lower():
+            logger.info(f"Direct navigation to {cfg['SYSTEM_URL']}...")
+            page.goto(cfg["SYSTEM_URL"], timeout=45_000)
+            page.wait_for_load_state("networkidle", timeout=30_000)
     except Exception as e:
-        logger.error(f"Failed to find Valutazione link: {e}")
-        if not page.is_closed():
-            page.screenshot(path=str(ERRORS_DIR / "navigation_error.png"))
-        raise
+        logger.warning(f"Direct navigation attempt failed: {e}")
+
+    # 2. If not there, try the selector (might be in a menu or sidebar)
+    if "valutazione" not in page.url.lower():
+        try:
+            # Check if we need to open the sidebar first (Barra laterale)
+            sidebar_toggle = page.locator('button:has-text("Barra laterale"), .sidebar-toggle, .menu-toggle').first
+            if sidebar_toggle.count() > 0 and not page.locator(valutazione_selector).is_visible():
+                logger.info("Opening sidebar to find Valutazione link...")
+                sidebar_toggle.click()
+                time.sleep(1)
+
+            page.wait_for_selector(valutazione_selector, timeout=15_000)
+            page.locator(valutazione_selector).first.click()
+        except Exception as e:
+            logger.error(f"Failed to find Valutazione link via selector: {e}")
+            if not page.is_closed():
+                page.screenshot(path=str(ERRORS_DIR / "navigation_error.png"))
+            # If we are already on evaluation (URL check), don't raise
+            if "valutazione" not in page.url.lower():
+                raise
 
     # Confirm we're on the right page
     try:

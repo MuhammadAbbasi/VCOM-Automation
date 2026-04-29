@@ -50,6 +50,7 @@
 
   <nav class="tab-nav" id="tab-nav">
     <button class="tab-btn active" data-tab="tab-overview"><span class="tab-icon">📊</span> Overview</button>
+    <button class="tab-btn" data-tab="tab-plant-map"><span class="tab-icon">🗺️</span> Plant Map</button>
     <button class="tab-btn" data-tab="tab-pr"><span class="tab-icon">⚡</span> PR Detail</button>
     <button class="tab-btn" data-tab="tab-temp"><span class="tab-icon">🌡️</span> Temperature</button>
     <button class="tab-btn" data-tab="tab-dc"><span class="tab-icon">🔌</span> DC Current</button>
@@ -70,6 +71,7 @@
           <div class="status-breakdown">
             <span class="breakdown-item"><span class="dot red"></span> <b id="val-tripped">0</b> Tripped</span>
             <span class="breakdown-item"><span class="dot yellow"></span> <b id="val-comms">0</b> Comms</span>
+            <span class="breakdown-item"><span class="dot purple"></span> <b id="val-nostate">0</b> No State</span>
             <span class="breakdown-item"><span class="dot blue"></span> <b id="val-total">36</b> Total</span>
           </div>
         </div>
@@ -122,11 +124,14 @@
 
     <div class="matrix-alerts-row">
       <section class="matrix-col">
-        <h2>Inverter Health Matrix
-          <span style="font-size:0.65rem;font-weight:400;color:var(--muted);margin-left:0.75rem;">
-            LED: PR | Temp | DC | AC | ISO
-          </span>
-        </h2>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.5rem;">
+          <h2 style="margin:0;">Inverter Health Matrix
+            <span style="font-size:0.65rem;font-weight:400;color:var(--muted);margin-left:0.75rem;">
+              LED: PR | Temp | DC | AC | ISO
+            </span>
+          </h2>
+          <div id="inverter-ns-summary" style="font-size: 0.75rem; color: #a855f7; font-weight: 700;"></div>
+        </div>
         <div id="inverter-grid"></div>
       </section>
 
@@ -173,6 +178,92 @@
           </thead>
           <tbody id="downtime-tbody"></tbody>
         </table>
+      </div>
+    </section>
+  </main>
+
+  <main id="tab-plant-map" class="tab-content">
+    <section>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h2 style="margin: 0;">🗺️ Interactive Plant Map</h2>
+        <div style="font-size: 0.85rem; color: #aaa;">
+          <span style="display: inline-block; margin-right: 1.5rem;">
+            <span style="display: inline-block; width: 12px; height: 12px; background: #00ff00; border-radius: 50%; margin-right: 6px;"></span>
+            <b>Green:</b> Healthy (>80%)
+          </span>
+          <span style="display: inline-block; margin-right: 1.5rem;">
+            <span style="display: inline-block; width: 12px; height: 12px; background: #ffff00; border-radius: 50%; margin-right: 6px;"></span>
+            <b>Yellow:</b> Warning (60-80%)
+          </span>
+          <span style="display: inline-block;">
+            <span style="display: inline-block; width: 12px; height: 12px; background: #ff0000; border-radius: 50%; margin-right: 6px;"></span>
+            <b>Red:</b> Critical (<60%)
+          </span>
+        </div>
+      </div>
+
+      <div style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 20px; margin-bottom: 20px; overflow: auto;">
+        <svg id="plant-map-svg" style="width: 100%; min-height: 600px; background: rgba(10,10,20,0.8); border-radius: 4px;"></svg>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px;">
+        <div class="card" style="background: var(--glass-dark); border: 1px solid rgba(255,255,255,0.1);">
+          <div style="padding: 15px;">
+            <h3 style="margin: 0 0 12px 0; font-size: 0.95rem;">📍 How to Use</h3>
+            <div style="font-size: 0.85rem; color: #ccc; line-height: 1.6;">
+              <div style="margin-bottom: 10px;">
+                <b style="color: #00ff00;">Level 1:</b> View all inverters on the plant map. Each circle shows an inverter's health status.
+              </div>
+              <div style="margin-bottom: 10px;">
+                <b style="color: #ffff00;">Level 2:</b> Click on an inverter circle to see all strings inside that inverter.
+              </div>
+              <div>
+                <b style="color: #ff0000;">Level 3:</b> Detailed health metrics for each string are displayed in the grid.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="background: var(--glass-dark); border: 1px solid rgba(255,255,255,0.1);">
+          <div style="padding: 15px;">
+            <h3 style="margin: 0 0 12px 0; font-size: 0.95rem;">⚙️ Health Calculation</h3>
+            <div style="font-size: 0.85rem; color: #ccc; line-height: 1.6;">
+              <div>Health Score combines:</div>
+              <div style="margin-top: 8px; font-family: monospace; font-size: 0.80rem; background: rgba(0,0,0,0.5); padding: 8px; border-radius: 3px;">
+                • DC Current (10-150A)<br>
+                • Temperature (<65°C)<br>
+                • Insulation (>50kΩ)<br>
+                • PR (>0.75)
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="background: var(--glass-dark); border: 1px solid rgba(255,255,255,0.1);">
+          <div style="padding: 15px;">
+            <h3 style="margin: 0 0 12px 0; font-size: 0.95rem;">📊 Plant Overview</h3>
+            <div style="font-size: 0.85rem; color: #ccc; line-height: 1.8;">
+              <div>
+                <b>Total Inverters:</b> <span style="color: #00ff00;">36</span>
+              </div>
+              <div>
+                <b>Total Trackers:</b> <span style="color: #ffff00;">370</span>
+              </div>
+              <div>
+                <b>Total Strings:</b> <span style="color: #ff0000;">1,110</span>
+              </div>
+              <div style="margin-top: 8px; font-size: 0.75rem; color: #888;">
+                Organized in 6 sections across 3 fields
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top: 25px; padding: 15px; background: rgba(0,150,255,0.05); border: 1px solid rgba(0,150,255,0.2); border-radius: 6px;">
+        <div style="font-size: 0.9rem; color: #aaa;">
+          <b style="color: #00aaff;">💡 Tip:</b> Hover over inverter circles to see quick health info. Click to view detailed string layout. The map updates automatically every 30 seconds.
+        </div>
       </div>
     </section>
   </main>
@@ -438,6 +529,15 @@
           </div>
        </div>
        <div class="tracker-main-stat-card">
+          <div class="main-stat-val" id="stat-total-nostate" style="color:#a855f7">0</div>
+          <div class="main-stat-label">No State</div>
+          <div class="ncu-status-pills">
+             <div class="ncu-pill">N1: <span id="stat-n1-ns" class="val">0</span></div>
+             <div class="ncu-pill">N2: <span id="stat-n2-ns" class="val">0</span></div>
+             <div class="ncu-pill">N3: <span id="stat-n3-ns" class="val">0</span></div>
+          </div>
+       </div>
+       <div class="tracker-main-stat-card">
           <div class="main-stat-val" id="stat-total-critical" style="color:var(--red)">0</div>
           <div class="main-stat-label">Active Alarms</div>
        </div>
@@ -459,6 +559,10 @@
         <button class="filter-btn" data-ncu="NCU 03">NCU 03</button>
       </div>
       <div id="tracker-anomalies-list" class="anomalies-mini-list"></div>
+      <div id="tracker-nostate-header" class="nostate-header-strip">
+         <span class="label">NO STATE DEVICES:</span>
+         <div id="tracker-nostate-list" class="nostate-list">--</div>
+      </div>
     </div>
 
     <div id="tracker-led-grid" class="tracker-led-grid">
@@ -813,5 +917,6 @@
   </footer>
 
   <script src="/static/app.js"></script>
+  <script src="/static/plant_map.js"></script>
 </body>
 </html>

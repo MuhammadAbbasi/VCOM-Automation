@@ -1087,6 +1087,11 @@ section>h2 {
   box-shadow: none;
 }
 
+.led.purple {
+  background: #a855f7;
+  box-shadow: 0 0 6px #a855f7;
+}
+
 /* Overall border colour */
 .inverter-card.status-green {
   border-color: var(--green);
@@ -1102,6 +1107,12 @@ section>h2 {
 
 .inverter-card.status-grey {
   border-color: var(--grey);
+}
+
+.inverter-card.status-no_state,
+.inverter-card.status-purple {
+  border-color: #a855f7;
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.2);
 }
 
 .led-labels {
@@ -2878,10 +2889,37 @@ section>h2 {
   z-index: 5;
 }
 
-.dev-led.green  { background: #10b981; box-shadow: 0 0 8px rgba(16, 185, 129, 0.4); }
+.dev-led.green { background: #10b981; box-shadow: 0 0 8px rgba(16, 185, 129, 0.4); }
 .dev-led.yellow { background: #f59e0b; box-shadow: 0 0 8px rgba(245, 158, 11, 0.4); }
-.dev-led.red    { background: #ef4444; box-shadow: 0 0 8px rgba(239, 68, 68, 0.4); }
-.dev-led.grey   { background: #374151; opacity: 0.3; }
+.dev-led.red { background: #ef4444; box-shadow: 0 0 5px rgba(239, 68, 68, 0.4); }
+.dev-led.purple { background: #a855f7; box-shadow: 0 0 5px rgba(168, 85, 247, 0.4); }
+.dev-led.grey { background: #3f3f46; opacity: 0.3; }
+
+/* ─── Tracker No State Header Strip ──────────────────────── */
+.nostate-header-strip {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: rgba(168, 85, 247, 0.1);
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  margin-left: auto;
+  font-family: 'Outfit', sans-serif;
+}
+
+.nostate-header-strip .label {
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: #a855f7;
+  letter-spacing: 0.05em;
+}
+
+.nostate-header-strip .nostate-list {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #fff;
+}
 
 /* ─── Tracker Detailed Cards Grid ─────────────────────────── */
 .tracker-led-grid {
@@ -3022,4 +3060,8 @@ section>h2 {
 .card-mode-badge.mode-am { color: #10b981; border-color: rgba(16, 185, 129, 0.3); }
 .card-mode-badge.mode-mm { color: #f59e0b; border-color: rgba(245, 158, 11, 0.3); }
 .card-mode-badge.mode-wm { color: #3b82f6; border-color: rgba(59, 130, 246, 0.3); }
+.card-mode-badge.mode-ns { color: #a855f7; border-color: rgba(168, 85, 247, 0.3); }
 .card-mode-badge.mode-alarm { color: #ef4444; border-color: rgba(239, 68, 68, 0.3); }
+
+/* Status Coloring for No State */
+.tracker-card-detailed.status-purple::before { background: #a855f7; box-shadow: 0 0 15px rgba(168, 85, 247, 0.5); }

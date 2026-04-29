@@ -79,6 +79,7 @@ function updateMacro(data) {
   el("val-online").textContent  = safeNum(m.online, "—");
   el("val-tripped").textContent = safeNum(m.tripped, "—");
   el("val-comms").textContent   = safeNum(m.comms_lost, "—");
+  if (el("val-nostate")) el("val-nostate").textContent = safeNum(m.no_state, 0);
   
   // Update New Macro Metrics
   if (el("val-total-power")) {
@@ -217,6 +218,7 @@ function updateInverterGrid(data) {
   
   // Group inverters by TX
   const groups = {};
+  const nsInverters = [];
   INVERTER_NAMES.forEach(name => {
       const tx = getDomain(name);
       if (!groups[tx]) groups[tx] = [];
@@ -237,6 +239,10 @@ function updateInverterGrid(data) {
         const ac      = flags.ac_power     || "grey";
         const iso     = flags.iso          || "grey";
         const overall = flags.overall_status || "grey";
+        
+        if (overall === "no_state" || overall === "purple") {
+            nsInverters.push(name.replace("INV TX", "TX"));
+        }
 
         const shortName = name.replace("INV ", "");
         const card = document.createElement("div");
@@ -271,6 +277,16 @@ function updateInverterGrid(data) {
       });
       grid.appendChild(groupContainer);
   });
+
+  // Update No State summary in header
+  const nsSummary = el("inverter-ns-summary");
+  if (nsSummary) {
+    if (nsInverters.length > 0) {
+      nsSummary.innerHTML = `<span style="opacity:0.7; font-size:0.6rem; margin-right:0.5rem">NO STATE:</span> ${nsInverters.join(", ")}`;
+    } else {
+      nsSummary.textContent = "";
+    }
+  }
 }
 
 // ─── 4. Active alerts ─────────────────────────────────────────────────────
@@ -1770,9 +1786,9 @@ function updateTrackers(trackers) {
     const ncuStr = String(t.ncu_id || "").replace("_", " "); // "NCU_01" -> "NCU 01"
     
     if (tcu) {
-        if (ncuStr === "NCU 01") return tcu;
-        if (ncuStr === "NCU 02") return 121 + tcu;
-        if (ncuStr === "NCU 03") return 121 + 122 + tcu;
+        if (ncuStr.includes("NCU 01") || ncuStr.includes("NCU 1")) return tcu;
+        if (ncuStr.includes("NCU 02") || ncuStr.includes("NCU 2")) return 121 + tcu;
+        if (ncuStr.includes("NCU 03") || ncuStr.includes("NCU 3")) return 121 + 122 + tcu;
     }
     return null;
   };
@@ -1786,24 +1802,38 @@ function updateTrackers(trackers) {
   const stats = {
     total: 370,
     connected: trackers.length,
-    am: trackers.filter(t => t.mode === "AM").length,
-    mm: trackers.filter(t => t.mode === "MM").length,
-    wm: trackers.filter(t => t.mode === "WM").length,
+    am: trackers.filter(t => String(t.mode).toUpperCase() === "AM").length,
+    mm: trackers.filter(t => String(t.mode).toUpperCase() === "MM").length,
+    wm: trackers.filter(t => String(t.mode).toUpperCase() === "WM").length,
+    ns: 0, // Will be summed in the loop below for consistency
     alarm: trackers.filter(t => t.alarm && t.alarm !== 'green' && t.alarm !== 'grey').length,
     ncu: {
-      "NCU 01": { total: 121, connected: 0, am: 0, mm: 0, wm: 0 },
-      "NCU 02": { total: 122, connected: 0, am: 0, mm: 0, wm: 0 },
-      "NCU 03": { total: 127, connected: 0, am: 0, mm: 0, wm: 0 }
-    }
+      "NCU 01": { total: 121, connected: 0, am: 0, mm: 0, wm: 0, ns: 0 },
+      "NCU 02": { total: 122, connected: 0, am: 0, mm: 0, wm: 0, ns: 0 },
+      "NCU 03": { total: 127, connected: 0, am: 0, mm: 0, wm: 0, ns: 0 }
+    },
+    nsList: []
   };
 
   trackers.forEach(t => {
+    const gid = getGlobalId(t);
     const ncuKey = String(t.ncu_id || "").replace("_", " ");
     if (stats.ncu[ncuKey]) {
       stats.ncu[ncuKey].connected++;
-      if (t.mode === "AM") stats.ncu[ncuKey].am++;
-      if (t.mode === "MM") stats.ncu[ncuKey].mm++;
-      if (t.mode === "WM") stats.ncu[ncuKey].wm++;
+      const m = String(t.mode || "").toUpperCase().trim();
+      
+      if (m === "AM") {
+          stats.ncu[ncuKey].am++;
+      } else if (m === "MM") {
+          stats.ncu[ncuKey].mm++;
+      } else if (m === "WM") {
+          stats.ncu[ncuKey].wm++;
+      } else {
+          // Fallback: Anything else (including empty, "No State", "OFFLINE", etc)
+          stats.ncu[ncuKey].ns++;
+          stats.ns++;
+          stats.nsList.push(gid);
+      }
     }
   });
 
@@ -1812,6 +1842,7 @@ function updateTrackers(trackers) {
   if (el("stat-total-auto"))      el("stat-total-auto").textContent = stats.am;
   if (el("stat-total-manual"))    el("stat-total-manual").textContent = stats.mm;
   if (el("stat-total-wind"))      el("stat-total-wind").textContent = stats.wm;
+  if (el("stat-total-nostate"))   el("stat-total-nostate").textContent = stats.ns;
   if (el("stat-total-critical"))  el("stat-total-critical").textContent = stats.alarm;
 
   if (el("stat-last-sync") && trackers.length > 0) {
@@ -1827,7 +1858,18 @@ function updateTrackers(trackers) {
     if (el(`stat-n${id}-am`))    el(`stat-n${id}-am`).textContent = stats.ncu[ncu].am;
     if (el(`stat-n${id}-mm`))    el(`stat-n${id}-mm`).textContent = stats.ncu[ncu].mm;
     if (el(`stat-n${id}-wm`))    el(`stat-n${id}-wm`).textContent = stats.ncu[ncu].wm;
+    if (el(`stat-n${id}-ns`))    el(`stat-n${id}-ns`).textContent = stats.ncu[ncu].ns;
   });
+
+  // Update Tracker No State Header
+  const nsListEl = el("tracker-nostate-list");
+  if (nsListEl) {
+      if (stats.nsList.length > 0) {
+          nsListEl.textContent = stats.nsList.sort((a,b)=>a-b).join(", ");
+      } else {
+          nsListEl.textContent = "None";
+      }
+  }
 
   // Update Overview Card (Macro health)
   if (el("val-tracker-health")) el("val-tracker-health").textContent = `${stats.am} / ${stats.total}`;
@@ -1861,18 +1903,22 @@ function updateTrackers(trackers) {
       let modeClass = "";
       
       if (t) {
+        const m = String(t.mode || "").toUpperCase().trim();
         if (t.alarm && t.alarm !== 'green' && t.alarm !== 'grey') {
             statusClass = "status-red";
             modeClass = "mode-alarm";
-        } else if (t.mode === "MM") {
+        } else if (m === "MM") {
             statusClass = "status-yellow";
             modeClass = "mode-mm";
-        } else if (t.mode === "WM") {
+        } else if (m === "WM") {
             statusClass = "status-blue";
             modeClass = "mode-wm";
-        } else if (t.mode === "AM") {
+        } else if (m === "AM") {
             statusClass = "status-green";
             modeClass = "mode-am";
+        } else {
+            statusClass = "status-purple";
+            modeClass = "mode-ns";
         }
       }
 
@@ -1932,12 +1978,15 @@ function updateTrackers(trackers) {
         let tip = `Tracker ${i}: No Data`;
 
         if (t) {
+          const isNoState = String(t.mode).includes("No State");
           const dev = Math.abs(t.actual_angle - t.target_angle);
-          if (dev <= 5) colorClass = "green";
+          
+          if (isNoState) colorClass = "purple";
+          else if (dev <= 5) colorClass = "green";
           else if (dev <= 10) colorClass = "yellow";
           else colorClass = "red";
           
-          tip = `Tracker ${i}\nActual: ${t.actual_angle.toFixed(1)}°\nTarget: ${t.target_angle.toFixed(1)}°\nDev: ${dev.toFixed(1)}°`;
+          tip = `Tracker ${i}\nMode: ${t.mode}\nActual: ${t.actual_angle.toFixed(1)}°\nTarget: ${t.target_angle.toFixed(1)}°\nDev: ${dev.toFixed(1)}°`;
         }
         
         devHtml += `<div class="dev-led ${colorClass}" title="${tip}"></div>`;

@@ -83,6 +83,11 @@ SERVICES = [
         "cmd": [sys.executable, "-u", str(ROOT / "dashboard_doctor.py")],
         "new_console": False,
     },
+    {
+        "name": "TICKETS",
+        "cmd": [sys.executable, "-u", str(ROOT / "odoo_ticket_engine.py")],
+        "new_console": False,
+    },
 ]
 
 

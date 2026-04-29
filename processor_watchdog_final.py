@@ -797,6 +797,9 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
         if health.get("comms_lost_flag"):
             health["overall_status"] = "grey"
             health["ac_power"] = "grey"
+        elif ac_val is None or pd.isna(ac_val):
+            health["overall_status"] = "no_state"
+            health["ac_power"] = "no_state"
         elif not scores:
             health["overall_status"] = "grey"
         else:
@@ -996,6 +999,7 @@ def compute_macro_health(inverter_health: dict, daylight_start: float = 7.0, ac_
     online = sum(1 for h in inverter_health.values() if h["ac_power"] in ["green", "yellow"])
     tripped = sum(1 for h in inverter_health.values() if h["ac_power"] == "red")
     comms_lost = sum(1 for h in inverter_health.values() if h["ac_power"] == "grey")
+    no_state = sum(1 for h in inverter_health.values() if h["ac_power"] == "no_state")
 
     total_ac_w = sum(h.get("ac_v", 0.0) or 0.0 for h in inverter_health.values())
     total_ac_power_mw = total_ac_w / 1_000_000.0
@@ -1020,6 +1024,7 @@ def compute_macro_health(inverter_health: dict, daylight_start: float = 7.0, ac_
         "online": online,
         "tripped": tripped,
         "comms_lost": comms_lost,
+        "no_state": no_state,
         "total_ac_power_mw": total_ac_power_mw,
         "total_energy_mwh": total_energy_mwh,
         "avg_pr": avg_pr,
@@ -1065,6 +1070,12 @@ def analyze_site(date_str: str) -> None:
 
         macro_health = compute_macro_health(inverter_health, daylight_start=daylight_start, ac_df=ac_df)
         macro_health["sunset_time"] = format_ora(theory_sunset)
+        
+        # Extract POA from sensor data for header summary
+        poa_key = next((k for k in sensor_data if "POA" in k), None)
+        poa_val = sensor_data.get(poa_key, 0) if poa_key else 0
+        macro_health["poa"] = poa_val # Plane of Array Irradiance
+        macro_health["MW"] = macro_health["total_ac_power_mw"] # Alias for chatbot compatibility
         
         # Grid Power Limit Check
         current_grid_limit = 87.6
@@ -1205,7 +1216,11 @@ def analyze_site(date_str: str) -> None:
 
         def fire_tg(alarm: dict, category: str, line: str) -> None:
             """Queue a Telegram line and stamp the alarm with the send time."""
-            add_tg_msg(category, line)
+            # Only send critical (red) alarms or urgent grid alerts to Telegram to reduce noise
+            severity = alarm.get("severity", "yellow")
+            if severity == "red" or "GRID" in category:
+                add_tg_msg(category, line)
+            
             alarm["last_tg_sent"] = timestamp
 
         # Track ALL evaluated IDs to prevent filtered alerts from leaking back in via cleanup loop
@@ -1275,7 +1290,7 @@ def analyze_site(date_str: str) -> None:
         current_limit = macro_health.get("grid_limit", STANDARD_LIMIT)
         
         # We alert if the limit drops BELOW 87.6%
-        if current_limit < (STANDARD_LIMIT - 0.1):
+        if current_limit < (STANDARD_LIMIT - 0.01):
             if grid_alarm_id in prev_alarm_map:
                 alarm = prev_alarm_map[grid_alarm_id]
                 alarm["message"] = f"Grid production limit is restricted to {current_limit:.1f}% (Below plant max of 87.6%)."
@@ -1300,6 +1315,7 @@ def analyze_site(date_str: str) -> None:
                 past_alarm["recovery_time"] = timestamp
                 historical_trail.append(past_alarm)
                 checked_ids.add(grid_alarm_id)
+                # Only send recovery for grid if it was a real restriction
                 if should_alert("recovery", "telegram"):
                     add_tg_msg("RECOVERED", f"✅ GRID LIMIT restored to {current_limit:.1f}%")
 
@@ -1382,7 +1398,7 @@ def analyze_site(date_str: str) -> None:
                         past_alarm["recovery_time"] = timestamp
                         historical_trail.append(past_alarm)
                         checked_ids.add("TRACKER_MASS_OFFLINE")
-                        if should_alert("recovery", "telegram"):
+                        if should_alert("recovery", "telegram") and past_alarm.get("severity") == "red":
                             add_tg_msg("RECOVERED", f"✅ Tracker connectivity restored")
         except Exception as e:
             logger.debug(f"Tracker alert check failed: {e}")
@@ -1422,7 +1438,7 @@ def analyze_site(date_str: str) -> None:
                     prev_alarm = prev_alarm_map[comms_alarm_id]
                     prev_alarm["recovery_time"] = timestamp
                     historical_trail.append(prev_alarm)
-                    if should_alert("recovery", "telegram"):
+                    if should_alert("recovery", "telegram") and prev_alarm.get("severity") == "red":
                         add_tg_msg("RECOVERED", f"✅ COMMS LOST ({inv_label})")
 
             # --- 2. PR Alarm ---
@@ -1463,8 +1479,11 @@ def analyze_site(date_str: str) -> None:
                     prev_alarm["recovery_time"] = timestamp
                     historical_trail.append(prev_alarm)
                     orig_cat = prev_alarm.get("pref_category", "low_pr")
+                    orig_sev = prev_alarm.get("severity", "yellow")
                     if should_alert("recovery", "telegram") and should_alert(orig_cat, "telegram"):
-                        add_tg_msg("RECOVERED", f"✅ {prev_alarm['type']} ({inv_label})")
+                        # Only send recovery to telegram if the original alert was critical (red)
+                        if orig_sev == "red":
+                            add_tg_msg("RECOVERED", f"✅ {prev_alarm['type']} ({inv_label})")
 
             # --- 3. AC Power Alarm ---
             ac_alarm_id = f"{inv_id}_LOW_AC"
@@ -1499,8 +1518,11 @@ def analyze_site(date_str: str) -> None:
                     prev_alarm["recovery_time"] = timestamp
                     historical_trail.append(prev_alarm)
                     orig_cat = prev_alarm.get("pref_category", "ac_drop")
+                    orig_sev = prev_alarm.get("severity", "yellow")
                     if should_alert("recovery", "telegram") and should_alert(orig_cat, "telegram"):
-                        add_tg_msg("RECOVERED", f"✅ {prev_alarm['type']} ({inv_label})")
+                        # Only send recovery for critical trips
+                        if orig_sev == "red":
+                            add_tg_msg("RECOVERED", f"✅ {prev_alarm['type']} ({inv_label})")
 
             # --- 4. Temperature Alarm ---
             temp_alarm_id = f"TEMP_{inv_id}"
@@ -1538,8 +1560,10 @@ def analyze_site(date_str: str) -> None:
                     prev_alarm["recovery_time"] = timestamp
                     historical_trail.append(prev_alarm)
                     orig_cat = prev_alarm.get("pref_category", "high_temp")
+                    orig_sev = prev_alarm.get("severity", "yellow")
                     if should_alert("recovery", "telegram") and should_alert(orig_cat, "telegram"):
-                        add_tg_msg("RECOVERED", f"✅ {prev_alarm['type']} ({inv_label})")
+                        if orig_sev == "red":
+                            add_tg_msg("RECOVERED", f"✅ {prev_alarm['type']} ({inv_label})")
 
             # --- 5. Insulation Resistance (ISO) Alarm ---
             iso_alarm_id = f"ISO_{inv_id}"
@@ -1632,7 +1656,7 @@ def analyze_site(date_str: str) -> None:
                 past_alarm["recovery_time"] = timestamp
                 historical_trail.append(past_alarm)
                 checked_ids.add(past_alarm_id)
-                if should_alert("recovery", "telegram"):
+                if should_alert("recovery", "telegram") and past_alarm.get("severity") == "red":
                     add_tg_msg("RECOVERED", f"✅ {past_alarm['type']} ({past_alarm['inverter']})")
 
         # Final recovery grouping

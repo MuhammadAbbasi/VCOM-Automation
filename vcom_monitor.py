@@ -89,22 +89,69 @@ METRICS = [
 # Main Logic
 # ---------------------------------------------------------------------------
 
+def _is_on_evaluation_page(page) -> bool:
+    """Return True if we are already on the VCOM evaluation/valutazione section."""
+    try:
+        url = page.url.lower()
+        return "valutazione" in url or "evaluation" in url or "index/index" in url
+    except Exception:
+        return False
+
+
+def _is_on_login_page(page) -> bool:
+    """Return True if the browser is showing a login form."""
+    try:
+        return (
+            page.locator('input#username:visible, input[type="password"]:visible').count() > 0
+            or "login" in page.url.lower()
+            or "auth" in page.url.lower()
+        )
+    except Exception:
+        return False
+
+
+def ensure_session(page) -> bool:
+    """
+    Check the current page state and act accordingly:
+    - Already on evaluation page → do nothing, return True
+    - On login page → do full login, return True
+    - Anywhere else → navigate to evaluation, return True/False
+    Does NOT re-submit credentials if the session is still valid.
+    """
+    try:
+        if _is_on_evaluation_page(page):
+            logger.info("Session OK — already on evaluation page.")
+            return True
+
+        if _is_on_login_page(page):
+            logger.warning("Login page detected — re-authenticating...")
+            login(page)
+            return True
+
+        # Unknown state: navigate to the evaluation URL
+        logger.warning(f"Unexpected page ({page.url[:60]}) — navigating back...")
+        cfg = load_config()
+        page.goto(cfg["SYSTEM_URL"], timeout=60_000)
+        page.wait_for_load_state("networkidle", timeout=30_000)
+
+        if _is_on_login_page(page):
+            login(page)
+
+        return _is_on_evaluation_page(page)
+
+    except Exception as e:
+        logger.error(f"Session check error: {e}")
+        return False
+
+
 def run_extraction_cycle(page, cycle_count: int):
     cycle_start = time.time()
     logger.info(f"=== Starting Extraction Cycle #{cycle_count} ===")
-    
-    # 0. Quick session check
-    try:
-        if not page.locator('text=/Irraggiamento|Potenza AC/').first.is_visible(timeout=5000):
-            logger.warning("Session likely expired. Re-logging...")
-            login(page)
-    except Exception as e:
-        logger.warning(f"Session check failed ({e}). Attempting re-login anyway...")
-        try:
-            login(page)
-        except Exception as login_err:
-            logger.error(f"Re-login failed: {login_err}")
-            return # Skip this cycle
+
+    # 0. Ensure we are on the right page WITHOUT re-logging in if session is alive
+    if not ensure_session(page):
+        logger.error("Could not reach evaluation page — skipping cycle.")
+        return
 
     # 1. Select inverters
     select_inverters(page)
@@ -148,11 +195,74 @@ def run_extraction_cycle(page, cycle_count: int):
     summary = " | ".join([f"{n}: {d:.1f}s" for n, d in metric_timings.items()])
     logger.info(f"Summary: {summary}")
 
+LAST_CYCLE_FILE = ROOT / "db" / "last_extraction.json"
+
+
+def _read_last_cycle_time() -> datetime | None:
+    """Read the timestamp of the last completed extraction cycle."""
+    try:
+        if LAST_CYCLE_FILE.exists():
+            with open(LAST_CYCLE_FILE, encoding="utf-8") as f:
+                data = json.load(f)
+            return datetime.fromisoformat(data["completed_at"])
+    except Exception:
+        pass
+    return None
+
+
+def _write_last_cycle_time():
+    """Persist the current time as the last completed extraction cycle."""
+    LAST_CYCLE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(LAST_CYCLE_FILE, "w", encoding="utf-8") as f:
+        json.dump({"completed_at": datetime.now().isoformat()}, f)
+
+
+def _get_interval_minutes() -> int:
+    try:
+        from processor_watchdog_final import load_user_settings
+        return int(load_user_settings().get("collection_interval", 15))
+    except Exception:
+        return 15
+
+
+def _sleep_remaining(interval_minutes: int, trigger_path: Path) -> bool:
+    """
+    Sleep until the next cycle is due, checking once per second for a
+    manual trigger file. Returns True if woken by trigger, False if normal.
+
+    Crash-resistant: reads last_extraction.json so a restart mid-sleep
+    resumes the remaining wait rather than running immediately.
+    """
+    last = _read_last_cycle_time()
+    if last:
+        elapsed = (datetime.now() - last).total_seconds()
+        remaining = max(0, interval_minutes * 60 - int(elapsed))
+    else:
+        remaining = 0  # No record → run immediately
+
+    if remaining > 0:
+        logger.info(
+            f"Resuming wait: {remaining}s left of {interval_minutes}-min interval "
+            f"(last cycle was {int((datetime.now() - last).total_seconds())}s ago)"
+        )
+    else:
+        logger.info("Interval elapsed — starting next cycle immediately.")
+        return False
+
+    for _ in range(remaining):
+        if trigger_path.exists():
+            logger.info("Manual trigger detected — starting cycle now.")
+            trigger_path.unlink(missing_ok=True)
+            return True
+        time.sleep(1)
+
+    return False
+
+
 def main() -> None:
     print("[EXTRACTION] Script started.", flush=True)
     ERRORS_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Initialize databases
     try:
         from db.db_manager import init_databases
         init_databases()
@@ -163,7 +273,14 @@ def main() -> None:
     logger.info("VCOM monitor starting...")
 
     trigger_path = ROOT / ".trigger_extraction"
-    busy_path = ROOT / ".extraction_busy"
+    busy_path    = ROOT / ".extraction_busy"
+
+    # Clean up a stale busy flag from a previous crash
+    if busy_path.exists():
+        age = (datetime.now() - datetime.fromtimestamp(busy_path.stat().st_mtime)).total_seconds()
+        if age > 1800:
+            busy_path.unlink()
+            logger.warning("Removed stale .extraction_busy flag from previous crash.")
 
     try:
         with sync_playwright() as p:
@@ -172,15 +289,24 @@ def main() -> None:
             browser = p.chromium.launch(headless=is_headless)
             context = browser.new_context(viewport={"width": 1450, "height": 900})
             page = context.new_page()
-            
+
+            # Wait out remaining interval before first cycle (crash-resistant)
+            interval = _get_interval_minutes()
+            triggered = _sleep_remaining(interval, trigger_path)
+            if not triggered:
+                logger.info("Starting initial extraction cycle...")
+
             print("[EXTRACTION] Initial VCOM Login...", flush=True)
-            login(page)
+            try:
+                login(page)
+            except Exception as e:
+                logger.error(f"Initial login failed: {e}. Will retry in main loop.")
+                # Don't raise, let the while loop handle it
             
             cycle_count = 1
             while True:
-                # Mark as busy as soon as we start
                 busy_path.touch()
-                
+
                 try:
                     if page.is_closed():
                         logger.warning("Browser page was closed. Reopening...")
@@ -188,44 +314,33 @@ def main() -> None:
                         login(page)
 
                     run_extraction_cycle(page, cycle_count)
-                    
+                    _write_last_cycle_time()  # ← persist completion timestamp
+
                 except Exception as e:
-                    logger.critical(f"FATAL Exception in cycle #{cycle_count}: {e}\n{traceback.format_exc()}")
+                    logger.critical(
+                        f"FATAL Exception in cycle #{cycle_count}: {e}\n{traceback.format_exc()}"
+                    )
                     print(f"[EXTRACTION] Fatal Error in cycle: {e}", flush=True)
-                    # Simple recovery: try re-login if page is still alive
                     try:
                         if not page.is_closed():
                             login(page)
-                    except:
+                    except Exception:
                         pass
 
-                # Mark as IDLE while sleeping
-                if busy_path.exists(): busy_path.unlink()
+                finally:
+                    if busy_path.exists():
+                        busy_path.unlink()
 
-                try:
-                    from processor_watchdog_final import load_user_settings
-                    settings = load_user_settings()
-                    current_interval = settings.get("collection_interval", 15)
-                except Exception:
-                    current_interval = 15
+                # Sleep for the configured interval (crash-resistant)
+                interval = _get_interval_minutes()
+                logger.info(f"Cycle #{cycle_count} done. Sleeping {interval} min...")
+                _sleep_remaining(interval, trigger_path)
 
-                logger.info(f"Sleeping {current_interval} minutes until next cycle...")
-                
-                # INTERRUPTIBLE SLEEP
-                sleep_seconds = int(current_interval * 60)
-                for _ in range(sleep_seconds):
-                    if trigger_path.exists():
-                        print("[EXTRACTION] Manual trigger detected!", flush=True)
-                        trigger_path.unlink()
-                        break
-                    time.sleep(1)
-                
                 cycle_count += 1
 
             browser.close()
 
     finally:
-        # Final cleanup of busy flag
         if busy_path.exists():
             busy_path.unlink()
             logger.info("Removed busy flag on exit.")

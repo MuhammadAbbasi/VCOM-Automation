@@ -34,6 +34,12 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 # Import analysis logic
 from processor_watchdog_final import analyze_site
 
+# Import plant map routes
+try:
+    from dashboard.plant_map_routes import router as plant_map_router
+except ImportError:
+    plant_map_router = None
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
@@ -70,6 +76,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Mazara SCADA Monitor", docs_url=None, redoc_url=None, lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+# Include plant map routes
+if plant_map_router:
+    app.include_router(plant_map_router)
 
 @app.middleware("http")
 async def add_security_headers(request, call_next):
@@ -137,18 +147,20 @@ async def data_broadcaster():
             try:
                 from db.db_manager import load_latest_snapshot, get_daily_sensor_history, get_all_tracker_status
                 latest_data = load_latest_snapshot(today)
-                if latest_data:
-                    # Enrich with sensor history for sparklines
-                    latest_data["sensor_history"] = get_daily_sensor_history(today)
-                    latest_data["link_status"] = link_info
-                    
-                    # Broadcast every tick
-                    await manager.broadcast({
-                        "type": "data_update", 
-                        "data": latest_data,
-                        "trackers": get_all_tracker_status(),
-                        "timestamp": datetime.now().isoformat()
-                    })
+                if not latest_data:
+                    latest_data = {"macro_health": {"total_inverters": 36, "online": 0, "tripped": 0, "comms_lost": 0, "no_state": 0}}
+                
+                # Enrich with sensor history for sparklines
+                latest_data["sensor_history"] = get_daily_sensor_history(today)
+                latest_data["link_status"] = link_info
+                
+                # Broadcast every tick
+                await manager.broadcast({
+                    "type": "data_update", 
+                    "data": latest_data,
+                    "trackers": get_all_tracker_status(),
+                    "timestamp": datetime.now().isoformat()
+                })
             except Exception as e:
                 print(f"[DASHBOARD] Broadcast error: {e}")
         except Exception:
@@ -194,14 +206,16 @@ async def websocket_endpoint(websocket: WebSocket):
                 with open(link_status_path, "r") as f:
                     link_info = json.load(f)
             
-            if latest_data:
-                latest_data["sensor_history"] = get_daily_sensor_history(today)
-                latest_data["link_status"] = link_info
-                await websocket.send_json({
-                    "type": "data_update", 
-                    "data": latest_data, 
-                    "trackers": get_all_tracker_status()
-                })
+            if not latest_data:
+                latest_data = {"macro_health": {"total_inverters": 36, "online": 0, "tripped": 0, "comms_lost": 0, "no_state": 0}}
+            
+            latest_data["sensor_history"] = get_daily_sensor_history(today)
+            latest_data["link_status"] = link_info
+            await websocket.send_json({
+                "type": "data_update", 
+                "data": latest_data, 
+                "trackers": get_all_tracker_status()
+            })
         except Exception as e:
             print(f"[WS] Initial data error: {e}")
                 
