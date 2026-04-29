@@ -1,0 +1,170 @@
+{
+  "metadata": {
+    "plant_id": "mazara_01",
+    "plant_name": "Mazara 01 PV",
+    "plant_width": 1000,
+    "plant_height": 800,
+    "total_inverters": 36,
+    "total_sections": 6,
+    "coordinate_system": "pixel-based (origin top-left)",
+    "total_trackers": 370,
+    "total_strings": 1110
+  },
+  "sections": [
+    {
+      "section_id": "section_1",
+      "section_number": 1,
+      "name": "South Center",
+      "bounds": {
+        "x_min": 400,
+        "y_min": 620,
+        "x_max": 600,
+        "y_max": 740
+      },
+      "inverters": ["TX1-01", "TX1-02", "TX1-03", "TX1-04", "TX1-05", "TX1-06", "TX1-07"]
+    },
+    {
+      "section_id": "section_2",
+      "section_number": 2,
+      "name": "Center Main",
+      "bounds": {
+        "x_min": 300,
+        "y_min": 420,
+        "x_max": 600,
+        "y_max": 620
+      },
+      "inverters": ["TX1-08", "TX1-09", "TX1-10", "TX1-11", "TX1-12"]
+    },
+    {
+      "section_id": "section_3",
+      "section_number": 3,
+      "name": "South West",
+      "bounds": {
+        "x_min": 100,
+        "y_min": 500,
+        "x_max": 300,
+        "y_max": 700
+      },
+      "inverters": ["TX2-01", "TX2-02", "TX2-03", "TX2-04", "TX2-05"]
+    },
+    {
+      "section_id": "section_4",
+      "section_number": 4,
+      "name": "North West",
+      "bounds": {
+        "x_min": 150,
+        "y_min": 200,
+        "x_max": 400,
+        "y_max": 420
+      },
+      "inverters": ["TX2-06", "TX2-07", "TX2-08", "TX2-09", "TX2-10", "TX2-11", "TX2-12"]
+    },
+    {
+      "section_id": "section_5",
+      "section_number": 5,
+      "name": "North Center",
+      "bounds": {
+        "x_min": 400,
+        "y_min": 150,
+        "x_max": 700,
+        "y_max": 350
+      },
+      "inverters": ["TX3-01", "TX3-02", "TX3-03", "TX3-04", "TX3-05", "TX3-06", "TX3-07", "TX3-08", "TX3-09", "TX3-10", "TX3-11"]
+    },
+    {
+      "section_id": "section_6",
+      "section_number": 6,
+      "name": "East Field",
+      "bounds": {
+        "x_min": 700,
+        "y_min": 300,
+        "x_max": 900,
+        "y_max": 600
+      },
+      "inverters": ["TX3-12"]
+    }
+  ],
+  "inverter_locations": {
+    "TX1-01": {"x": 450, "y": 650, "section_id": "section_1", "section_name": "South Center"},
+    "TX1-02": {"x": 500, "y": 650, "section_id": "section_1", "section_name": "South Center"},
+    "TX1-03": {"x": 450, "y": 700, "section_id": "section_1", "section_name": "South Center"},
+    "TX1-04": {"x": 500, "y": 700, "section_id": "section_1", "section_name": "South Center"},
+    "TX1-05": {"x": 350, "y": 480, "section_id": "section_2", "section_name": "Center Main"},
+    "TX1-06": {"x": 420, "y": 480, "section_id": "section_2", "section_name": "Center Main"},
+    "TX1-07": {"x": 490, "y": 480, "section_id": "section_2", "section_name": "Center Main"},
+    "TX1-08": {"x": 560, "y": 480, "section_id": "section_2", "section_name": "Center Main"},
+    "TX1-09": {"x": 350, "y": 550, "section_id": "section_2", "section_name": "Center Main"},
+    "TX1-10": {"x": 420, "y": 550, "section_id": "section_2", "section_name": "Center Main"},
+    "TX1-11": {"x": 490, "y": 550, "section_id": "section_2", "section_name": "Center Main"},
+    "TX1-12": {"x": 560, "y": 550, "section_id": "section_2", "section_name": "Center Main"},
+    "TX2-01": {"x": 200, "y": 280, "section_id": "section_4", "section_name": "North West"},
+    "TX2-02": {"x": 270, "y": 280, "section_id": "section_4", "section_name": "North West"},
+    "TX2-03": {"x": 340, "y": 280, "section_id": "section_4", "section_name": "North West"},
+    "TX2-04": {"x": 200, "y": 350, "section_id": "section_4", "section_name": "North West"},
+    "TX2-05": {"x": 270, "y": 350, "section_id": "section_4", "section_name": "North West"},
+    "TX2-06": {"x": 340, "y": 350, "section_id": "section_4", "section_name": "North West"},
+    "TX2-07": {"x": 450, "y": 220, "section_id": "section_5", "section_name": "North Center"},
+    "TX2-08": {"x": 520, "y": 220, "section_id": "section_5", "section_name": "North Center"},
+    "TX2-09": {"x": 590, "y": 220, "section_id": "section_5", "section_name": "North Center"},
+    "TX2-10": {"x": 450, "y": 290, "section_id": "section_5", "section_name": "North Center"},
+    "TX2-11": {"x": 520, "y": 290, "section_id": "section_5", "section_name": "North Center"},
+    "TX2-12": {"x": 590, "y": 290, "section_id": "section_5", "section_name": "North Center"},
+    "TX3-01": {"x": 750, "y": 350, "section_id": "section_6", "section_name": "East Field"},
+    "TX3-02": {"x": 820, "y": 350, "section_id": "section_6", "section_name": "East Field"},
+    "TX3-03": {"x": 750, "y": 410, "section_id": "section_6", "section_name": "East Field"},
+    "TX3-04": {"x": 820, "y": 410, "section_id": "section_6", "section_name": "East Field"},
+    "TX3-05": {"x": 750, "y": 470, "section_id": "section_6", "section_name": "East Field"},
+    "TX3-06": {"x": 820, "y": 470, "section_id": "section_6", "section_name": "East Field"},
+    "TX3-07": {"x": 750, "y": 530, "section_id": "section_6", "section_name": "East Field"},
+    "TX3-08": {"x": 820, "y": 530, "section_id": "section_6", "section_name": "East Field"},
+    "TX3-09": {"x": 750, "y": 550, "section_id": "section_6", "section_name": "East Field"},
+    "TX3-10": {"x": 820, "y": 550, "section_id": "section_6", "section_name": "East Field"},
+    "TX3-11": {"x": 750, "y": 580, "section_id": "section_6", "section_name": "East Field"},
+    "TX3-12": {"x": 820, "y": 580, "section_id": "section_6", "section_name": "East Field"}
+  },
+  "inverter_details": {
+    "TX1-01": {
+      "x": 450,
+      "y": 650,
+      "section": "South Center",
+      "trackers": 10,
+      "strings": 30,
+      "mppts": 2
+    },
+    "TX1-02": {"x": 500, "y": 650, "section": "South Center", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX1-03": {"x": 450, "y": 700, "section": "South Center", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX1-04": {"x": 500, "y": 700, "section": "South Center", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX1-05": {"x": 350, "y": 480, "section": "Center Main", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX1-06": {"x": 420, "y": 480, "section": "Center Main", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX1-07": {"x": 490, "y": 480, "section": "Center Main", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX1-08": {"x": 560, "y": 480, "section": "Center Main", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX1-09": {"x": 350, "y": 550, "section": "Center Main", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX1-10": {"x": 420, "y": 550, "section": "Center Main", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX1-11": {"x": 490, "y": 550, "section": "Center Main", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX1-12": {"x": 560, "y": 550, "section": "Center Main", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX2-01": {"x": 200, "y": 280, "section": "North West", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX2-02": {"x": 270, "y": 280, "section": "North West", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX2-03": {"x": 340, "y": 280, "section": "North West", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX2-04": {"x": 200, "y": 350, "section": "North West", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX2-05": {"x": 270, "y": 350, "section": "North West", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX2-06": {"x": 340, "y": 350, "section": "North West", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX2-07": {"x": 450, "y": 220, "section": "North Center", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX2-08": {"x": 520, "y": 220, "section": "North Center", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX2-09": {"x": 590, "y": 220, "section": "North Center", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX2-10": {"x": 450, "y": 290, "section": "North Center", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX2-11": {"x": 520, "y": 290, "section": "North Center", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX2-12": {"x": 590, "y": 290, "section": "North Center", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX3-01": {"x": 750, "y": 350, "section": "East Field", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX3-02": {"x": 820, "y": 350, "section": "East Field", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX3-03": {"x": 750, "y": 410, "section": "East Field", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX3-04": {"x": 820, "y": 410, "section": "East Field", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX3-05": {"x": 750, "y": 470, "section": "East Field", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX3-06": {"x": 820, "y": 470, "section": "East Field", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX3-07": {"x": 750, "y": 530, "section": "East Field", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX3-08": {"x": 820, "y": 530, "section": "East Field", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX3-09": {"x": 750, "y": 550, "section": "East Field", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX3-10": {"x": 820, "y": 550, "section": "East Field", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX3-11": {"x": 750, "y": 580, "section": "East Field", "trackers": 10, "strings": 30, "mppts": 2},
+    "TX3-12": {"x": 820, "y": 580, "section": "East Field", "trackers": 10, "strings": 30, "mppts": 2}
+  }
+}
