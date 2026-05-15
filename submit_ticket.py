@@ -181,7 +181,22 @@ def main():
     hr("═")
 
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-    titolo  = f"[{fault_label}] {device} — Mazara 01"
+    
+    FAULT_TITLE_MAP = {
+        "INVERTER TRIP": "Inverter Trip",
+        "LOW PR": "Low PR",
+        "CRIT PR": "Critical PR",
+        "ISO FAULT": "Isolation Fault",
+        "COMM LOST": "Communication Lost",
+        "DC CRITICAL": "DC Critical",
+        "HIGH TEMP": "High Temperature",
+        "CRIT TEMP": "Critical Temperature",
+        "TRACKER OFFLINE": "Tracker Offline",
+        "GRID LIMIT CHANGE": "Grid Limit Change",
+    }
+    title_type = FAULT_TITLE_MAP.get(fault_label, fault_label.title())
+    inv_clean = device.replace("INV ", "").replace("Inverter ", "").strip()
+    titolo = f"Inverter {inv_clean} - {title_type}" if "TX" in inv_clean else f"{inv_clean} - {title_type}"
 
     causa = "\n".join([
         f"SCADA FAULT REPORT — Manually Submitted",

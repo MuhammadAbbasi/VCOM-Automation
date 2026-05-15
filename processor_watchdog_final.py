@@ -141,7 +141,7 @@ logging.basicConfig(
     format="%(asctime)s [WATCHDOG] %(levelname)s %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        RotatingFileHandler(LOG_PATH, maxBytes=1_000_000_000, backupCount=3, encoding="utf-8"),
+        RotatingFileHandler(LOG_PATH, maxBytes=10_000_000, backupCount=3, encoding="utf-8"),
     ],
 )
 logger = logging.getLogger("watchdog_final")
@@ -415,6 +415,7 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
     thresholds = settings.get("thresholds", DEFAULT_SETTINGS["thresholds"])
 
     inverter_health = {}
+    poa_val = 0 # Initialize here so it's available for the AC logic below
 
     # Get latest PR values
     pr_latest = {}
@@ -510,11 +511,11 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
             if len(potential_blocks) >= 5:
                 start_time = potential_blocks[0]["time"]
                 duration = len(potential_blocks)
+                poa_is_low = (poa_val < 30)
                 # Only report trailing drop if it starts before 18:00 (prime hours)
                 # AND only if POA is still high (meaning we SHOULD be producing)
-                # OR if it's still well before theoretical sunset.
-                poa_is_low = (poa_val < 30) if 'poa_val' in locals() else False
-                if potential_blocks[0]["ora"] < 18.0 and not poa_is_low and potential_blocks[0]["ora"] < (sunset - 0.5 if 'sunset' in locals() else 19.0):
+                # OR if it's still well before theoretical end of day.
+                if potential_blocks[0]["ora"] < 18.0 and not poa_is_low and potential_blocks[0]["ora"] < (daylight_end - 0.5):
                     plant_drop_history.append({
                         "type": "POST-PRODUCTION DROP",
                         "start": start_time,
@@ -1809,6 +1810,12 @@ def analyze_site(date_str: str) -> None:
 
 class MetricFileHandler(FileSystemEventHandler):
     """Watches for database or CSV file changes and triggers analysis."""
+    def __init__(self):
+        super().__init__()
+        self.last_run = 0
+        self.debounce_seconds = 10  # Minimum 10s between analysis runs
+        self.is_running = False
+
     def on_created(self, event):
         if event.is_directory:
             return
@@ -1819,39 +1826,54 @@ class MetricFileHandler(FileSystemEventHandler):
     def on_modified(self, event):
         if event.is_directory:
             return
+        # Ignore temporary files or the analysis snapshot table writes if possible
         if event.src_path.endswith(".csv") or event.src_path.endswith(".db"):
             self._check_and_analyze()
 
     def _check_and_analyze(self):
-        today = datetime.now().strftime("%Y-%m-%d")
+        if self.is_running:
+            return
         
-        # Check the database for available metrics first
+        now = time.time()
+        if now - self.last_run < self.debounce_seconds:
+            return
+
+        self.is_running = True
         try:
-            from db.db_manager import get_extraction_status
-            estatus = get_extraction_status(today)
-            if len(estatus) >= 5:  # At least 5 of 6 metrics extracted
-                logger.info(f"DB has {len(estatus)} metrics for {today}. Analyzing...")
+            today = datetime.now().strftime("%Y-%m-%d")
+            
+            # 1. Check database for available metrics
+            try:
+                from db.db_manager import get_extraction_status
+                estatus = get_extraction_status(today)
+                if len(estatus) >= 5:
+                    logger.info(f"DB has {len(estatus)} metrics for {today}. Analyzing...")
+                    analyze_site(today)
+                    self.last_run = time.time()
+                    return
+            except Exception as e:
+                logger.error(f"DB analysis check failed: {e}")
+
+            # 2. Fallback: check CSV files
+            required_prefixes = [
+                "PR inverter", "Potenza AC", "Corrente DC",
+                "Resistenza di isolamento", "Temperatura", "Irraggiamento"
+            ]
+
+            missing = []
+            for prefix in required_prefixes:
+                p1 = DATA_DIR / f"{prefix}_{today}.csv"
+                p2 = DATA_DIR / f"{prefix.replace(' ', '_')}_{today}.csv"
+                if not p1.exists() and not p2.exists():
+                    missing.append(prefix)
+
+            if not missing:
+                logger.info(f"Complete CSV set for {today}. Analyzing...")
                 analyze_site(today)
-                return
-        except Exception:
-            pass
-
-        # Fallback: check CSV files
-        required_prefixes = [
-            "PR inverter", "Potenza AC", "Corrente DC",
-            "Resistenza di isolamento", "Temperatura", "Irraggiamento"
-        ]
-
-        missing = []
-        for prefix in required_prefixes:
-            p1 = DATA_DIR / f"{prefix}_{today}.csv"
-            p2 = DATA_DIR / f"{prefix.replace(' ', '_')}_{today}.csv"
-            if not p1.exists() and not p2.exists():
-                missing.append(prefix)
-
-        if not missing:
-            logger.info(f"Complete CSV set for {today}. Analyzing...")
-            analyze_site(today)
+                self.last_run = time.time()
+        
+        finally:
+            self.is_running = False
 
 
 def main():
@@ -1871,15 +1893,19 @@ def main():
     observer.schedule(handler, str(DATA_DIR), recursive=False)
     
     # Also watch the DB directory for changes
-    db_dir = ROOT / "db"
-    db_dir.mkdir(parents=True, exist_ok=True)
-    observer.schedule(handler, str(db_dir), recursive=False)
+    # db_dir = ROOT / "db"
+    # db_dir.mkdir(parents=True, exist_ok=True)
+    # observer.schedule(handler, str(db_dir), recursive=False)
     
     observer.start()
 
     try:
         while True:
-            time.sleep(1)
+            time.sleep(60) # Check every minute
+            # Fallback: if no file change for 15 min, trigger analysis
+            if time.time() - handler.last_run > 900:
+                logger.info("[TIMER] Fallback: No file changes detected for 15m. Triggering analysis...")
+                handler._check_and_analyze()
     except KeyboardInterrupt:
         logger.info("Shutting down...")
         observer.stop()

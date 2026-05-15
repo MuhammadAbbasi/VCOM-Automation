@@ -41,6 +41,7 @@ analysis.log
 monitoring.log
 watchdog.log
 *.log
+*.log.*
 logs/
 
 # ============================================================================
@@ -145,6 +146,7 @@ browser_logs/
 *.trace
 *.har
 VCOM_Screenshots/
+playwright_profile/
 
 # ============================================================================
 # LOCAL DEVELOPMENT & SCRATCH FILES

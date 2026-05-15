@@ -285,10 +285,15 @@ def main() -> None:
     try:
         with sync_playwright() as p:
             is_headless = os.environ.get("VCOM_HEADLESS", "false").lower() == "true"
-            logger.info(f"Launching persistent browser (headless={is_headless})...")
-            browser = p.chromium.launch(headless=is_headless)
-            context = browser.new_context(viewport={"width": 1450, "height": 900})
-            page = context.new_page()
+            # Use a persistent context to save login cookies/session
+            user_data_dir = ROOT / "playwright_profile"
+            context = p.chromium.launch_persistent_context(
+                user_data_dir=str(user_data_dir),
+                headless=is_headless,
+                viewport={"width": 1450, "height": 900}
+            )
+            # Use existing page if context already has one, otherwise create new
+            page = context.pages[0] if context.pages else context.new_page()
 
             # Wait out remaining interval before first cycle (crash-resistant)
             interval = _get_interval_minutes()
@@ -296,11 +301,11 @@ def main() -> None:
             if not triggered:
                 logger.info("Starting initial extraction cycle...")
 
-            print("[EXTRACTION] Initial VCOM Login...", flush=True)
+            print("[EXTRACTION] Verifying VCOM Session...", flush=True)
             try:
-                login(page)
+                ensure_session(page)
             except Exception as e:
-                logger.error(f"Initial login failed: {e}. Will retry in main loop.")
+                logger.error(f"Initial session check failed: {e}. Will retry in main loop.")
                 # Don't raise, let the while loop handle it
             
             cycle_count = 1
@@ -338,7 +343,7 @@ def main() -> None:
 
                 cycle_count += 1
 
-            browser.close()
+            context.close()
 
     finally:
         if busy_path.exists():

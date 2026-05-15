@@ -129,7 +129,7 @@ class OdooClient:
         session_id: int | None = None,
     ) -> int:
         vals = {
-            "name":               self._next_seq("fv.intervento"),
+            "name":               titolo,
             "impianto_id":        FV_IMPIANTO_ID,
             "data_intervento":    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "tipo_intervento":    tipo_intervento,

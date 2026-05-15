@@ -101,7 +101,8 @@ def handle_sync_request(client, payload):
         
         if config and config.get("telegram", {}).get("enabled"):
             token = config["telegram"]["bot_token"]
-            chat_id = config["telegram"]["chat_id"]
+            # Use personal_id ONLY for tracker updates as requested
+            chat_id = config["telegram"].get("personal_id")
             
             # compute some stats from unique_data
             total_trackers = len(unique_data)

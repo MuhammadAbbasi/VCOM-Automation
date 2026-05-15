@@ -1,0 +1,50 @@
+[DWF6Version]
+Ver=1
+[DWF6MinorVersion]
+MinorVer=1
+[DWF6Sheet:Sfondo-Model]
+DWG=C:\Users\user\AppData\Local\Temp\AcPublish_124076\Sfondo.dwg
+Layout=Model
+Setup=
+OriginalSheetPath=\\s01\get\2025.01 Mazara 01 A2A\05 - Thermography\TERMOGRAFIE\2 Sfondo\Sfondo.dwg
+Has Plot Port=0
+SheetIdentifier=32A74D86-F781-4B83-B455-BFD4BAE4DA0E
+Has3DDWF=0
+[Target]
+Type=4
+DWF=C:\Users\user\Desktop\test.dwfx
+OUT=\\S01\2 privato\2025.042 - FV Castellammare Mammana\02 - PROG ESEC\00 - CONSEGNE\testate\
+PWD=
+[PdfOptions]
+IncludeHyperlinks=TRUE
+CreateBookmarks=TRUE
+CaptureFontsInDrawing=TRUE
+ConvertTextToGeometry=FALSE
+VectorResolution=1200
+RasterResolution=400
+[AutoCAD Block Data]
+IncludeBlockInfo=0
+BlockTmplFilePath=
+[SheetSet Properties]
+IsSheetSet=FALSE
+IsHomogeneous=FALSE
+SheetSet Name=
+NoOfCopies=0
+PlotStampOn=FALSE
+ViewFile=FALSE
+JobID=0
+SelectionSetName=
+AcadProfile=
+CategoryName=
+LogFilePath=C:\Users\user\AppData\Local\Digicorp Ingegneria\CADPILLAR 11.0\R11.0\ita\Registro di stampa e pubblicazione290426175731.CSV
+IncludeLayer=TRUE
+LineMerge=FALSE
+CurrentPrecision=
+PromptForDwfName=FALSE
+PwdProtectPublishedDWF=FALSE
+PromptForPwd=FALSE
+RepublishingMarkups=FALSE
+TempPC3Path=C:\Users\user\AppData\Local\Temp\_DWFx ePlot (XPS Compatible).pc3
+PublishSheetSetMetadata=FALSE
+PublishSheetMetadata=FALSE
+3DDWFOptions=0 0

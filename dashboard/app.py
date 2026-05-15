@@ -1,4 +1,4 @@
-"""
+﻿"""
 dashboard/app.py — FastAPI dashboard server for Mazara SCADA monitoring.
 
 Routes:
@@ -147,20 +147,18 @@ async def data_broadcaster():
             try:
                 from db.db_manager import load_latest_snapshot, get_daily_sensor_history, get_all_tracker_status
                 latest_data = load_latest_snapshot(today)
-                if not latest_data:
-                    latest_data = {"macro_health": {"total_inverters": 36, "online": 0, "tripped": 0, "comms_lost": 0, "no_state": 0}}
-                
-                # Enrich with sensor history for sparklines
-                latest_data["sensor_history"] = get_daily_sensor_history(today)
-                latest_data["link_status"] = link_info
-                
-                # Broadcast every tick
-                await manager.broadcast({
-                    "type": "data_update", 
-                    "data": latest_data,
-                    "trackers": get_all_tracker_status(),
-                    "timestamp": datetime.now().isoformat()
-                })
+                if latest_data:
+                    # Enrich with sensor history for sparklines
+                    latest_data["sensor_history"] = get_daily_sensor_history(today)
+                    latest_data["link_status"] = link_info
+                    
+                    # Broadcast every tick
+                    await manager.broadcast({
+                        "type": "data_update", 
+                        "data": latest_data,
+                        "trackers": get_all_tracker_status(),
+                        "timestamp": datetime.now().isoformat()
+                    })
             except Exception as e:
                 print(f"[DASHBOARD] Broadcast error: {e}")
         except Exception:
@@ -206,16 +204,14 @@ async def websocket_endpoint(websocket: WebSocket):
                 with open(link_status_path, "r") as f:
                     link_info = json.load(f)
             
-            if not latest_data:
-                latest_data = {"macro_health": {"total_inverters": 36, "online": 0, "tripped": 0, "comms_lost": 0, "no_state": 0}}
-            
-            latest_data["sensor_history"] = get_daily_sensor_history(today)
-            latest_data["link_status"] = link_info
-            await websocket.send_json({
-                "type": "data_update", 
-                "data": latest_data, 
-                "trackers": get_all_tracker_status()
-            })
+            if latest_data:
+                latest_data["sensor_history"] = get_daily_sensor_history(today)
+                latest_data["link_status"] = link_info
+                await websocket.send_json({
+                    "type": "data_update", 
+                    "data": latest_data, 
+                    "trackers": get_all_tracker_status()
+                })
         except Exception as e:
             print(f"[WS] Initial data error: {e}")
                 

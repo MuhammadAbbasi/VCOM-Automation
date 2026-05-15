@@ -47,7 +47,7 @@ logger = logging.getLogger("odoo_ticket_engine")
 # Odoo connection constants
 # ---------------------------------------------------------------------------
 
-ODOO_URL = "http://localhost:8069"
+ODOO_URL = "http://127.0.0.1:8069"
 ODOO_DB  = "odoo"
 ODOO_USER = "pietro.artale@gmail.com"
 ODOO_PASS = "odoo"
@@ -382,7 +382,21 @@ def open_ticket(client, fault_id: str, fault: dict, state: dict, session_id: int
     cfg = FAULT_ODOO_MAP.get(fault["type"], FAULT_ODOO_MAP["GRID LIMIT CHANGE"])
     first_detected = state.get(fault_id, {}).get("first_detected", datetime.now().isoformat())
 
-    titolo = f"[{fault['type']}] {fault['inverter']} — Mazara 01"
+    FAULT_TITLE_MAP = {
+        "INVERTER TRIP": "Inverter Trip",
+        "LOW PR": "Low PR",
+        "CRIT PR": "Critical PR",
+        "ISO FAULT": "Isolation Fault",
+        "COMM LOST": "Communication Lost",
+        "DC CRITICAL": "DC Critical",
+        "HIGH TEMP": "High Temperature",
+        "CRIT TEMP": "Critical Temperature",
+        "TRACKER": "Tracker Offline",
+        "GRID LIMIT CHANGE": "Grid Limit Change",
+    }
+    title_type = FAULT_TITLE_MAP.get(fault['type'], fault['type'].title())
+    inv_clean = fault['inverter'].replace("INV ", "").replace("Inverter ", "").strip()
+    titolo = f"Inverter {inv_clean} - {title_type}" if "TX" in inv_clean else f"{inv_clean} - {title_type}"
     descrizione = build_ticket_body(fault_id, fault, first_detected)
     causa_guasto = build_ticket_body(fault_id, fault, first_detected)
 
@@ -487,11 +501,21 @@ def run():
     active_faults = scan_active_faults(snapshot, stale_trackers)
     resolved_ids  = scan_resolved_faults(snapshot, state)
 
-    # 3. Connect to Odoo
+    # 3. Connect to Odoo (with retry)
     from db.odoo_client import OdooClient
     client = OdooClient(ODOO_URL, ODOO_DB, ODOO_USER, ODOO_PASS)
-    if not client.login():
-        logger.error("[ENGINE] Odoo login failed — aborting run.")
+    
+    logged_in = False
+    for attempt in range(1, 4):
+        if client.login():
+            logged_in = True
+            break
+        logger.warning(f"[ENGINE] Odoo connection attempt {attempt}/3 failed.")
+        if attempt < 3:
+            time.sleep(5)
+            
+    if not logged_in:
+        logger.error("[ENGINE] Odoo login failed after 3 attempts — aborting run.")
         return
 
     # 4. Update first_detected timestamps for newly seen faults
