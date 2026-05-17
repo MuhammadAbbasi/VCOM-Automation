@@ -479,7 +479,7 @@ def query_db(sql: str) -> str:
     # 3. Intercept grid limit queries and force the exact correct query
     sql_lower = sql.lower()
     if "potenza" in sql_lower and ("nominale" in sql_lower or "limit" in sql_lower):
-        sql = 'SELECT "Valore nominale potenza attiva [%]" FROM potenza_attiva ORDER BY _date DESC, Ora DESC LIMIT 1'
+        sql = 'SELECT "Valore nominale potenza attiva [%]" FROM potenza_attiva WHERE "Valore nominale potenza attiva [%]" IS NOT NULL ORDER BY _date DESC, CAST(Ora AS REAL) DESC LIMIT 1'
     else:
         # 4. Normalize known LLM hallucinations for the potenza_attiva table
         if "potenza_attiva" in sql:
@@ -498,10 +498,13 @@ def query_db(sql: str) -> str:
             for hallucinated, real in hallucinations.items():
                 if hallucinated in sql and real not in sql:
                     sql = sql.replace(hallucinated, real)
-            
-            # Handle ordering
-            sql = re.sub(r'order\s+by\s+_date\s+desc,\s+ora\s+desc', 'ORDER BY _date DESC, Ora DESC', sql, flags=re.IGNORECASE)
-            sql = re.sub(r'order\s+by\s+_date,\s+ora', 'ORDER BY _date, Ora', sql, flags=re.IGNORECASE)
+
+        # 5. Correct string sorting of Ora in SQLite (to prevent alphabetical order bugs e.g. "9.55" > "15.10")
+        sql = re.sub(r'\border\s+by\s+([_a-zA-Z0-9.]+)\s+desc,\s+ora\s+desc\b', r'ORDER BY \1 DESC, CAST(Ora AS REAL) DESC', sql, flags=re.IGNORECASE)
+        sql = re.sub(r'\border\s+by\s+([_a-zA-Z0-9.]+),\s+ora\b', r'ORDER BY \1, CAST(Ora AS REAL)', sql, flags=re.IGNORECASE)
+        sql = re.sub(r'\border\s+by\s+([_a-zA-Z0-9.]+)\s+desc,\s+ora\b', r'ORDER BY \1 DESC, CAST(Ora AS REAL)', sql, flags=re.IGNORECASE)
+        sql = re.sub(r'\border\s+by\s+ora\s+desc\b', 'ORDER BY CAST(Ora AS REAL) DESC', sql, flags=re.IGNORECASE)
+        sql = re.sub(r'\border\s+by\s+ora\b', 'ORDER BY CAST(Ora AS REAL)', sql, flags=re.IGNORECASE)
 
     conn = get_data_conn()
     df = pd.read_sql_query(sql, conn)
