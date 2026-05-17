@@ -597,6 +597,55 @@ def build_daily_analytics() -> dict:
 
 
 # ---------------------------------------------------------------------------
+# 7.5 Daily Deep AI Audit
+# ---------------------------------------------------------------------------
+
+def run_daily_ai_audit():
+    logger.info("[DOCTOR] Starting Daily Deep AI Audit...")
+    try:
+        sys.path.append(str(ROOT))
+        import llm_agent
+    except Exception as e:
+        logger.error(f"Failed to import llm_agent: {e}")
+        send_telegram(f"🚨 <b>Daily Deep AI Audit Error</b>\nFailed to import llm_agent: {e}")
+        return
+
+    questions = [
+        "1. Grid Limit & Curtailment: Analyze today's potenza_attiva table. What was the nominal grid limit today? Did the plant experience any curtailment or exceed the grid limit? Retrieve the latest nominal grid limit value.",
+        "2. Inverter Production: Check today's potenza_ac table. Are there any inverters with significantly lower production than others, or any suspicious flatline/zero-production intervals during daylight?",
+        "3. Tracker Anomalies: Review the tracker_status table. Are there missing trackers or trackers in 'No State'? Which NCUs are affected?",
+        "4. Process & Log Health: Search the logs using search_logs for 'error' or 'warning' from today. Are there any critical system software anomalies?"
+    ]
+    
+    report_sections = []
+    for q in questions:
+        logger.info(f"[DOCTOR] Asking AI: {q}")
+        try:
+            ans = llm_agent.ask_llm(q, {}, user_id="doctor_daily")
+            section_title = q.split(":")[0].strip()
+            report_sections.append(f"❓ <b>{section_title}</b>\n{ans}")
+        except Exception as e:
+            logger.error(f"AI Audit question failed: {e}")
+            section_title = q.split(":")[0].strip()
+            report_sections.append(f"❓ <b>{section_title}</b>\n⚠️ AI Error: {e}")
+            
+    header = f"🤖 <b>AI DAILY DEEP AUDIT REPORT</b>\n⏰ <code>{datetime.now().strftime('%Y-%m-%d %H:%M')}</code>\n\n"
+    
+    current_msg = ""
+    for section in report_sections:
+        if len(current_msg) + len(section) + 50 > 3800:
+            send_telegram(header + current_msg)
+            current_msg = section
+        else:
+            if current_msg:
+                current_msg += "\n\n" + section
+            else:
+                current_msg = section
+    if current_msg:
+        send_telegram(header + current_msg)
+
+
+# ---------------------------------------------------------------------------
 # 8. Main Doctor Run
 # ---------------------------------------------------------------------------
 
@@ -702,6 +751,27 @@ def run_doctor():
 
     logger.info(f"[DOCTOR] Report generated. Status: {overall_status}")
     send_telegram(report)
+
+    # Check if we should trigger the Daily Deep AI Audit (run at 20:00 every day)
+    try:
+        now = datetime.now()
+        audit_state_path = ROOT / "db" / "last_ai_audit.json"
+        last_date = ""
+        if audit_state_path.exists():
+            try:
+                with open(audit_state_path, encoding="utf-8") as f:
+                    last_date = json.load(f).get("date", "")
+            except:
+                pass
+        
+        today_str = now.strftime("%Y-%m-%d")
+        if now.hour >= 20 and last_date != today_str:
+            run_daily_ai_audit()
+            with open(audit_state_path, "w", encoding="utf-8") as f:
+                json.dump({"date": today_str}, f)
+    except Exception as e:
+        logger.error(f"Daily AI Audit trigger failed: {e}")
+
     return overall_status
 
 

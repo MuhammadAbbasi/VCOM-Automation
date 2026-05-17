@@ -454,6 +454,71 @@ def get_active_anomalies():
         return snap.get("active_anomalies", [])
     return []
 
+class Row(dict):
+    """A dictionary subclass that supports integer indexing like a tuple."""
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            try:
+                return list(self.values())[key]
+            except IndexError:
+                raise KeyError(key)
+        return super().__getitem__(key)
+
+def query_db(sql: str) -> str:
+    """Run a read-only SQL query on the plant database."""
+    if not sql.strip().upper().startswith("SELECT"):
+        raise ValueError("Error: Only SELECT queries are allowed.")
+    
+    # 1. Normalize table name hallucinations
+    sql = re.sub(r'\bpotenzaattiva\b', 'potenza_attiva', sql, flags=re.IGNORECASE)
+    
+    # 2. Normalize date/timestamp columns
+    sql = re.sub(r'\bdate\b', '_date', sql, flags=re.IGNORECASE)
+    sql = re.sub(r'\btimestamp\b', '_date', sql, flags=re.IGNORECASE)
+    
+    # 3. Intercept grid limit queries and force the exact correct query
+    sql_lower = sql.lower()
+    if "potenza" in sql_lower and ("nominale" in sql_lower or "limit" in sql_lower):
+        sql = 'SELECT "Valore nominale potenza attiva [%]" FROM potenza_attiva ORDER BY _date DESC, Ora DESC LIMIT 1'
+    else:
+        # 4. Normalize known LLM hallucinations for the potenza_attiva table
+        if "potenza_attiva" in sql:
+            hallucinations = {
+                'Valore nominale potenza attiva [W]': '"Valore nominale potenza attiva [%]"',
+                'valore nominale potenza attiva [w]': '"Valore nominale potenza attiva [%]"',
+                'Valore nominale potenza attiva [kW]': '"Valore nominale potenza attiva [%]"',
+                'valore nominale potenza attiva [kw]': '"Valore nominale potenza attiva [%]"',
+                'Valore nominale potenza attiva %': '"Valore nominale potenza attiva [%]"',
+                'valore nominale potenza attiva %': '"Valore nominale potenza attiva [%]"',
+                "Valore_nominale_potenza_attiva": '"Valore nominale potenza attiva [%]"',
+                "valore_nominale_potenza_attiva": '"Valore nominale potenza attiva [%]"',
+                "Valore nominale potenza attiva": '"Valore nominale potenza attiva [%]"',
+                "valore nominale potenza attiva": '"Valore nominale potenza attiva [%]"',
+            }
+            for hallucinated, real in hallucinations.items():
+                if hallucinated in sql and real not in sql:
+                    sql = sql.replace(hallucinated, real)
+            
+            # Handle ordering
+            sql = re.sub(r'order\s+by\s+_date\s+desc,\s+ora\s+desc', 'ORDER BY _date DESC, Ora DESC', sql, flags=re.IGNORECASE)
+            sql = re.sub(r'order\s+by\s+_date,\s+ora', 'ORDER BY _date, Ora', sql, flags=re.IGNORECASE)
+
+    conn = get_data_conn()
+    df = pd.read_sql_query(sql, conn)
+    return [Row(r) for r in df.to_dict(orient="records")]
+
+def search_logs(query: str, limit: int = 20) -> str:
+    """Search system logs."""
+    try:
+        conn = get_logs_conn()
+        q = f"%{query}%"
+        cursor = conn.execute("SELECT * FROM logs WHERE message LIKE ? OR source LIKE ? ORDER BY timestamp DESC LIMIT ?", (q, q, limit))
+        cols = [column[0] for column in cursor.description]
+        rows = [dict(zip(cols, row)) for row in cursor.fetchall()]
+        return rows
+    except Exception as e:
+        return f"Log Search Error: {e}"
+
 def get_tracker_data_summary():
     """Get concise summary of tracker field."""
     try:
@@ -675,6 +740,8 @@ def run_python_analysis(code: str, plant_data: dict) -> tuple:
         "get_alarm_history": get_alarm_history,
         "get_active_anomalies": get_active_anomalies,
         "search_logs": search_logs,
+        "query_db": query_db,
+        "get_data_conn": get_data_conn,
         "load_csv": _load_csv, # Kept but hidden from prompt
         "INV_IDS": INV_IDS,
         "TODAY": datetime.now().strftime("%Y-%m-%d"),
@@ -695,7 +762,8 @@ def run_python_analysis(code: str, plant_data: dict) -> tuple:
         else:
             return ("Execution finished (no output).", True)
     except Exception as e:
-        return (str(e), False)
+        err_msg = f"{type(e).__name__}: {str(e)}"
+        return (err_msg, False)
 
 # ---------------------------------------------------------------------------
 # Main LLM Interface
@@ -762,21 +830,31 @@ def ask_llm(question: str, plant_data: dict = None, attempt: int = 1, last_code:
             pass
         
         # 5. Check if LLM wrote code (fallback execution)
-        if "```python" in answer:
-            code = answer.split("```python")[1].split("```")[0].strip()
+        has_python_block = "```python" in answer
+        is_raw_code = not has_python_block and ("query_db(" in answer or "load_metric(" in answer or answer.strip().startswith("result =") or "get_total_production(" in answer)
+        
+        if has_python_block or is_raw_code:
+            if has_python_block:
+                code = answer.split("```python")[1].split("```")[0].strip()
+            else:
+                code = answer.strip()
+                
             res_val, success = run_python_analysis(code, plant_data)
             
             if not success:
                 logger.warning(f"AI code failed (Attempt {attempt}): {res_val}")
                 return ask_llm(question, plant_data, attempt + 1, code, res_val, user_id)
             
-            # Strip code block from response, append result
-            clean = answer.split("```python")[0].strip()
-            parts = answer.split("```")
-            if len(parts) > 2:
-                clean += "\n" + parts[-1].strip()
+            if has_python_block:
+                # Strip code block from response, append result
+                clean = answer.split("```python")[0].strip()
+                parts = answer.split("```")
+                if len(parts) > 2:
+                    clean += "\n" + parts[-1].strip()
+            else:
+                clean = ""
             
-            final = f"{clean}\n\n🔍 **ANALYSIS REPORT:**\n{res_val}"
+            final = f"{clean}\n\n🔍 **ANALYSIS REPORT:**\n{res_val}" if clean else f"🔍 **ANALYSIS REPORT:**\n{res_val}"
             
             # Save to history
             if attempt == 1:

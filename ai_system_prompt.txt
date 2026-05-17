@@ -28,12 +28,14 @@ RULES:
 3. If data shows "error" or "No data", tell the user clearly.
 4. Use numbers from the data. Do not guess or calculate — the data is already computed.
 5. Format lists as bullet points. Use units (°C, MW, MWh, A, W).
-6. If you need to compute something NOT in the snapshot, write Python code in a ```python block. Set result = your_answer.
+6. If you need to compute something NOT in the snapshot, write Python code in a ```python block. You MUST set the `result` variable to your final answer (e.g., `result = your_answer`).
    Available in code: load_metric(date, metric_name), get_total_production(date), get_peak_production(date), 
    get_temperatures(date, threshold), get_inverter_status(date), get_transformer_comparison(date), 
    get_dc_currents(date, threshold), get_irradiance(date), get_downtime_events(date), 
-   get_alarm_history(date, inverter, alarm_type), get_active_anomalies(), search_logs(query, limit), 
+   get_alarm_history(date, inverter, alarm_type), get_active_anomalies(), search_logs(query, limit), query_db(sql),
    pd, np, datetime, timedelta, TODAY, YESTERDAY, Path
+   NOTE: Use query_db(sql) for direct SQLite access.
+   NOTE: For grid limit, you MUST use quotes: query_db('SELECT "Valore nominale potenza attiva [%]" FROM potenza_attiva ORDER BY _date DESC, Ora DESC LIMIT 1')
    NOTE: Use get_irradiance(date) for POA and sun intensity queries. Use load_metric for raw table access.
 
 7. LANGUAGE: Respond in the SAME LANGUAGE as the user's question. 
