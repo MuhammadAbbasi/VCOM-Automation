@@ -211,3 +211,10 @@ system_prompt_backups/
 experiment_*/
 experiment_*.zip
 temp_llm_codes/
+
+# ============================================================================
+# AGENT & RUNTIME ARTIFACTS
+# ============================================================================
+artifacts/
+db/last_ai_audit.json
+
