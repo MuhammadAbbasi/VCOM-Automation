@@ -21,6 +21,7 @@ import re
 import sqlite3
 import traceback as tb_module
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 from threading import local as thread_local
 
@@ -240,6 +241,12 @@ def save_metric(df: pd.DataFrame, metric_name: str, date_str: str = None) -> Non
     else:
         _save_wide_metric(df, table_name, date_str)
 
+    # Clear query cache since database has new data
+    try:
+        _load_metric_cached.cache_clear()
+    except Exception:
+        pass
+
     logger.info(f"[DB] Saved {len(df)} rows -> {table_name} (date={date_str})")
 
 
@@ -315,6 +322,16 @@ def _save_corrente_dc(df: pd.DataFrame, date_str: str) -> None:
 # Load Metric Data
 # ---------------------------------------------------------------------------
 
+@lru_cache(maxsize=128)
+def _load_metric_cached(date_str: str, metric_name: str) -> pd.DataFrame | None:
+    table_name = _resolve_table_name(metric_name)
+
+    if table_name == "corrente_dc":
+        return _load_corrente_dc(date_str)
+    else:
+        return _load_wide_metric(table_name, date_str)
+
+
 def load_metric(date_str: str, metric_name: str) -> pd.DataFrame | None:
     """
     Load a metric from the database as a DataFrame.
@@ -324,12 +341,10 @@ def load_metric(date_str: str, metric_name: str) -> pd.DataFrame | None:
 
     Returns None if the metric is not found or the table doesn't exist.
     """
-    table_name = _resolve_table_name(metric_name)
-
-    if table_name == "corrente_dc":
-        return _load_corrente_dc(date_str)
-    else:
-        return _load_wide_metric(table_name, date_str)
+    df = _load_metric_cached(date_str, metric_name)
+    if df is not None:
+        return df.copy()
+    return None
 
 
 def _load_wide_metric(table_name: str, date_str: str) -> pd.DataFrame | None:
@@ -355,7 +370,7 @@ def _load_wide_metric(table_name: str, date_str: str) -> pd.DataFrame | None:
     if "Ora" in df.columns:
         df = df.drop_duplicates(subset=["Ora"], keep="last").reset_index(drop=True)
 
-    logger.info(f"[DB] Loaded {table_name} for {date_str} ({len(df)} rows)")
+    logger.debug(f"[DB] Loaded {table_name} for {date_str} ({len(df)} rows)")
     return df
 
 
@@ -407,7 +422,7 @@ def _load_corrente_dc(date_str: str) -> pd.DataFrame | None:
     if "Ora" in wide.columns:
         wide = wide.drop_duplicates(subset=["Ora"], keep="last").reset_index(drop=True)
 
-    logger.info(f"[DB] Loaded corrente_dc for {date_str} -> {wide.shape[0]} rows × {wide.shape[1]} cols")
+    logger.debug(f"[DB] Loaded corrente_dc for {date_str} -> {wide.shape[0]} rows × {wide.shape[1]} cols")
     return wide
 
 

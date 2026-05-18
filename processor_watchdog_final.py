@@ -136,24 +136,34 @@ def load_config() -> dict:
         return json.load(f)
 
 LOG_PATH = ROOT / "watchdog.log"
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [WATCHDOG] %(levelname)s %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        RotatingFileHandler(LOG_PATH, maxBytes=10_000_000, backupCount=3, encoding="utf-8"),
-    ],
-)
+
+# Avoid basicConfig if we're imported by dashboard/uvicorn to prevent file lock issues on Windows
+is_watchdog_proc = (__name__ == "__main__" or (len(sys.argv) > 0 and "processor_watchdog" in sys.argv[0]))
+
+if is_watchdog_proc:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [WATCHDOG] %(levelname)s %(message)s",
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            RotatingFileHandler(LOG_PATH, maxBytes=10_000_000, backupCount=3, encoding="utf-8"),
+        ],
+    )
+else:
+    # Dashboard or other process: only output to standard logs, do NOT open/lock watchdog.log
+    pass
+
 logger = logging.getLogger("watchdog_final")
 
-# Add SQLite log handler
-try:
-    from db.db_manager import SQLiteLogHandler
-    _sqlite_handler = SQLiteLogHandler(source_name="watchdog")
-    _sqlite_handler.setFormatter(logging.Formatter("%(asctime)s [WATCHDOG] %(levelname)s %(message)s"))
-    logger.addHandler(_sqlite_handler)
-except Exception:
-    pass  # DB module may not be ready yet
+if is_watchdog_proc:
+    # Add SQLite log handler for the watchdog process only
+    try:
+        from db.db_manager import SQLiteLogHandler
+        _sqlite_handler = SQLiteLogHandler(source_name="watchdog")
+        _sqlite_handler.setFormatter(logging.Formatter("%(asctime)s [WATCHDOG] %(levelname)s %(message)s"))
+        logger.addHandler(_sqlite_handler)
+    except Exception:
+        pass  # DB module may not be ready yet
 
 
 class NumpyEncoder(json.JSONEncoder):

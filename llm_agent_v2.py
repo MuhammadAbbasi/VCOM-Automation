@@ -40,6 +40,48 @@ def get_plant_summary(date: str = None, **kwargs) -> str:
     }
     return json.dumps(res)
 
+def get_temperatures(date: str = None, threshold: float = None, **kwargs) -> str:
+    """Get latest temperature readings for all inverters, optionally filtering above a threshold (e.g. threshold=50)."""
+    d = date or datetime.now().strftime("%Y-%m-%d")
+    thresh = float(threshold) if threshold is not None else None
+    return json.dumps(v1.get_temperatures(d, thresh), default=str)
+
+def get_dc_currents(date: str = None, threshold: float = None, **kwargs) -> str:
+    """Get DC currents for all strings, optionally filtering below a threshold (e.g. threshold=0.1)."""
+    d = date or datetime.now().strftime("%Y-%m-%d")
+    thresh = float(threshold) if threshold is not None else None
+    return json.dumps(v1.get_dc_currents(d, thresh), default=str)
+
+def get_inverter_status(date: str = None, **kwargs) -> str:
+    """Get the status of all inverters, identifying which are offline (OFF), low-power (LOW), or active (OK)."""
+    d = date or datetime.now().strftime("%Y-%m-%d")
+    return json.dumps(v1.get_inverter_status(d), default=str)
+
+def get_total_production(date: str = None, **kwargs) -> str:
+    """Get today's total plant energy production in MWh and average production in MW."""
+    d = date or datetime.now().strftime("%Y-%m-%d")
+    return json.dumps(v1.get_total_production(d), default=str)
+
+def get_peak_production(date: str = None, **kwargs) -> str:
+    """Get peak instantaneous power generation in Watts and the time it occurred, with corresponding POA."""
+    d = date or datetime.now().strftime("%Y-%m-%d")
+    return json.dumps(v1.get_peak_production(d), default=str)
+
+def get_transformer_comparison(date: str = None, **kwargs) -> str:
+    """Compare MWh production and active MW across the three transformers (TX1, TX2, TX3)."""
+    d = date or datetime.now().strftime("%Y-%m-%d")
+    return json.dumps(v1.get_transformer_comparison(d), default=str)
+
+def get_irradiance(date: str = None, **kwargs) -> str:
+    """Get latest, peak, and average solar irradiance (POA) readings for the day."""
+    d = date or datetime.now().strftime("%Y-%m-%d")
+    return json.dumps(v1.get_irradiance(d), default=str)
+
+def get_downtime_events(date: str = None, **kwargs) -> str:
+    """Identify which inverters went offline during daylight production hours and for how many minutes."""
+    d = date or datetime.now().strftime("%Y-%m-%d")
+    return json.dumps(v1.get_downtime_events(d), default=str)
+
 def analyze_alarms(date: str = None, inverter: str = None, type: str = None, **kwargs) -> str:
     """Search for historical alarms."""
     d = date or datetime.now().strftime("%Y-%m-%d")
@@ -52,12 +94,8 @@ def get_latest_readings(metric: str, date: str = None, **kwargs) -> str:
     if df is None or df.empty: return "No data."
     
     # Filter out rows that are completely empty/null (common in VCOM pre-populated tables)
-    # We ignore the 'Ora' and 'Timestamp Fetch' columns when checking for data
     data_cols = [c for c in df.columns if c not in ("Ora", "Timestamp Fetch")]
     if data_cols:
-        # Drop rows where all data columns are NaN or 0 (if we consider 0 as 'no data yet' for metrics like AC/POA)
-        # Note: For some metrics 0 is valid, but usually we want rows with actual updates.
-        # Let's just drop completely null rows first.
         df_valid = df.dropna(subset=data_cols, how='all')
         if not df_valid.empty:
             df = df_valid
@@ -68,7 +106,6 @@ def get_tracker_data(ncu: str = None, **kwargs) -> str:
     """Get status summary for trackers and NCUs."""
     summary = get_tracker_summary()
     if ncu:
-        # Normalize NCU name (NCU 01, NCU01, 1, etc)
         match = re.search(r'(\d+)', str(ncu))
         ncu_key = f"NCU {int(match.group(1)):02d}" if match else ncu
         stats = summary.get("ncu_stats", {}).get(ncu_key)
@@ -109,6 +146,14 @@ def list_data_files(**kwargs) -> str:
 
 TOOLS = {
     "get_plant_summary": get_plant_summary,
+    "get_temperatures": get_temperatures,
+    "get_dc_currents": get_dc_currents,
+    "get_inverter_status": get_inverter_status,
+    "get_total_production": get_total_production,
+    "get_peak_production": get_peak_production,
+    "get_transformer_comparison": get_transformer_comparison,
+    "get_irradiance": get_irradiance,
+    "get_downtime_events": get_downtime_events,
     "analyze_alarms": analyze_alarms,
     "get_latest_readings": get_latest_readings,
     "get_tracker_data": get_tracker_data,
@@ -126,10 +171,18 @@ AGENT_PROMPT = """You are the Mazara Plant Agentic AI.
 You have FULL ACCESS to the entire plant database and raw data files.
 Available Tools:
 - get_plant_summary(date="YYYY-MM-DD") -> High-level production overview.
+- get_temperatures(date="YYYY-MM-DD", threshold=50) -> Get latest temperatures for all inverters, optionally filtering for values above a threshold (yellow=50, red=55).
+- get_dc_currents(date="YYYY-MM-DD", threshold=0.1) -> Get DC currents for all strings, optionally filtering for values below a threshold.
+- get_inverter_status(date="YYYY-MM-DD") -> Get status of all inverters, listing OFF, LOW, and OK units.
+- get_total_production(date="YYYY-MM-DD") -> Get today's total plant MWh production and average MW during daylight.
+- get_peak_production(date="YYYY-MM-DD") -> Get peak instantaneous power generation in Watts, its time, and the corresponding POA.
+- get_transformer_comparison(date="YYYY-MM-DD") -> Compare production (MWh) and latest power (MW) across the three transformers (TX1, TX2, TX3).
+- get_irradiance(date="YYYY-MM-DD") -> Get latest, peak, and average solar irradiance (POA) readings.
+- get_downtime_events(date="YYYY-MM-DD") -> Find which inverters went offline during production daylight hours, and for how many minutes.
 - analyze_alarms(date="YYYY-MM-DD", inverter="TXx-xx") -> Search historical anomalies.
 - get_latest_readings(metric="METRIC_NAME", date="YYYY-MM-DD") -> Raw inverter/sensor data.
 - get_tracker_data(ncu="NCU 01") -> Tracker position and health.
-- query_db(sql="SELECT...") -> DIRECT SQL ACCESS. Use this for complex data joins or specific searches.
+- query_db(sql="SELECT...") -> DIRECT SQL ACCESS. Use this for custom analysis or data joins.
 - search_logs(query="ERROR") -> Search system logs for troubleshooting.
 - list_data_files() -> List raw CSV/JSON files in the extraction folder.
 
@@ -141,7 +194,7 @@ Thought: Now I see the specific units.
 Final Answer: The units with low insulation are TX1-04 and TX2-09.
 
 RULES:
-1. You have total visibility. Don't say "I don't have access". Use query_db if you need something specific.
+1. You have total visibility. Don't say "I don't have access". Use the available tools or query_db.
 2. Only call one tool at a time.
 3. If you have the answer, output "Final Answer: [your response]".
 """
@@ -208,11 +261,28 @@ def ask_agent(question: str, plant_data: dict = None, attempt: int = 1, last_cod
             tool_name = action_match.group(1)
             args_str = action_match.group(2)
             
-            # Simple parser for args
+            # Robust parser for args (handles key="val", key='val', key=val, key=TODAY, numbers, etc.)
             kwargs = {}
             if args_str:
-                pairs = re.findall(r'(\w+)="([^"]*)"', args_str)
-                kwargs = {k: v for k, v in pairs}
+                pattern = r'(\w+)\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([a-zA-Z0-9_\-\.]+))'
+                matches = re.findall(pattern, args_str)
+                for item in matches:
+                    k = item[0]
+                    val = item[1] or item[2] or item[3]
+                    
+                    if val is not None:
+                        val = val.strip()
+                        # Resolve TODAY and YESTERDAY constants
+                        if val.upper() == "TODAY":
+                            val = datetime.now().strftime("%Y-%m-%d")
+                        elif val.upper() == "YESTERDAY":
+                            val = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+                        elif re.match(r'^\-?\d+$', val):
+                            val = int(val)
+                        elif re.match(r'^\-?\d+\.\d+$', val):
+                            val = float(val)
+                        
+                        kwargs[k] = val
             
             logger.info(f"Executing tool: {tool_name} with {kwargs}")
             if tool_name in TOOLS:
@@ -232,10 +302,11 @@ def ask_agent(question: str, plant_data: dict = None, attempt: int = 1, last_cod
             ans = response.split("Final Answer:")[1].strip()
             v1._save_history(user_id, question, ans)
             return ans
-            # If no action and no final answer, something is wrong
-            if i == max_steps - 1:
-                return response
-            conversation += "Thought: I must either call a tool or give a Final Answer.\n"
+            
+        # If no action and no final answer, something is wrong
+        if i == max_steps - 1:
+            return response
+        conversation += "Thought: I must either call a tool using the 'Action: tool_name(key=\"val\")' format, or output a 'Final Answer: ...'.\n"
 
     return "⚠️ Agent reached maximum reasoning steps without a final answer."
 

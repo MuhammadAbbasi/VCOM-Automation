@@ -2,7 +2,7 @@
   "GRID_LIMIT_CHANGE": {
     "first_detected": "2026-04-29T10:39:59.765732",
     "type": "GRID LIMIT CHANGE",
-    "message": "Grid production limit dropped to 0.0% (Below plant max of 87.6%).",
+    "message": "Grid production limit is restricted to 41.0% (Below plant max of 87.6%).",
     "odoo_anomalia_id": 2,
     "odoo_intervento_id": 11,
     "notified": true,
@@ -13,7 +13,7 @@
   "TRACKER_OFFLINE": {
     "first_detected": "2026-04-29T16:45:10.484172",
     "type": "TRACKER",
-    "message": "605 tracker(s) stale >60 min. NCUs: NCU_03, NCU_01, NCU_02",
+    "message": "605 tracker(s) stale >60 min. NCUs: NCU_01, NCU_02, NCU_03",
     "odoo_anomalia_id": 21,
     "odoo_intervento_id": 23,
     "notified": true,
@@ -24,7 +24,7 @@
   "TEMP_TX3-11": {
     "first_detected": "2026-04-30T09:50:27.153176",
     "type": "HIGH TEMP",
-    "message": "Temperature yellow: 50.4°C",
+    "message": "Temperature yellow: 53.6°C",
     "odoo_anomalia_id": 34,
     "odoo_intervento_id": 36,
     "notified": true,
@@ -46,7 +46,7 @@
   "TEMP_TX3-05": {
     "first_detected": "2026-04-30T10:10:09.337884",
     "type": "HIGH TEMP",
-    "message": "Temperature yellow: 50.2°C",
+    "message": "Temperature yellow: 52.8°C",
     "odoo_anomalia_id": 32,
     "odoo_intervento_id": 34,
     "notified": true,
@@ -57,7 +57,7 @@
   "TEMP_TX3-06": {
     "first_detected": "2026-04-30T10:10:09.337884",
     "type": "HIGH TEMP",
-    "message": "Temperature yellow: 51.5°C",
+    "message": "Temperature yellow: 51.9°C",
     "odoo_anomalia_id": 33,
     "odoo_intervento_id": 35,
     "notified": true,
@@ -90,7 +90,7 @@
   "TEMP_TX1-03": {
     "first_detected": "2026-04-30T10:53:22.908458",
     "type": "HIGH TEMP",
-    "message": "Temperature yellow: 50.2°C",
+    "message": "Temperature yellow: 50.7°C",
     "odoo_anomalia_id": 37,
     "odoo_intervento_id": 39,
     "notified": true,
@@ -101,7 +101,7 @@
   "TEMP_TX1-04": {
     "first_detected": "2026-04-30T10:53:22.908458",
     "type": "HIGH TEMP",
-    "message": "Temperature yellow: 50.9°C",
+    "message": "Temperature yellow: 50.8°C",
     "odoo_anomalia_id": 38,
     "odoo_intervento_id": 40,
     "notified": true,
@@ -123,7 +123,7 @@
   "TEMP_TX1-07": {
     "first_detected": "2026-04-30T10:53:22.908458",
     "type": "HIGH TEMP",
-    "message": "Temperature yellow: 50.2°C",
+    "message": "Temperature yellow: 50.3°C",
     "odoo_anomalia_id": 48,
     "odoo_intervento_id": 50,
     "notified": true,
@@ -134,7 +134,7 @@
   "TEMP_TX1-08": {
     "first_detected": "2026-04-30T10:53:22.908458",
     "type": "HIGH TEMP",
-    "message": "Temperature yellow: 51.85°C",
+    "message": "Temperature yellow: 51.0°C",
     "odoo_anomalia_id": 49,
     "odoo_intervento_id": 51,
     "notified": true,
@@ -145,7 +145,7 @@
   "TEMP_TX1-09": {
     "first_detected": "2026-04-30T10:53:22.908458",
     "type": "HIGH TEMP",
-    "message": "Temperature yellow: 50.55°C",
+    "message": "Temperature yellow: 51.7°C",
     "odoo_anomalia_id": 50,
     "odoo_intervento_id": 52,
     "notified": true,
@@ -156,7 +156,7 @@
   "TEMP_TX1-12": {
     "first_detected": "2026-04-30T10:53:22.908458",
     "type": "HIGH TEMP",
-    "message": "Temperature yellow: 50.2°C",
+    "message": "Temperature yellow: 51.7°C",
     "odoo_anomalia_id": 41,
     "odoo_intervento_id": 43,
     "notified": true,
@@ -167,7 +167,7 @@
   "TEMP_TX2-01": {
     "first_detected": "2026-04-30T10:53:22.908458",
     "type": "HIGH TEMP",
-    "message": "Temperature yellow: 50.8°C",
+    "message": "Temperature yellow: 50.1°C",
     "odoo_anomalia_id": 42,
     "odoo_intervento_id": 44,
     "notified": true,
@@ -178,7 +178,7 @@
   "TEMP_TX2-02": {
     "first_detected": "2026-04-30T10:53:22.908458",
     "type": "HIGH TEMP",
-    "message": "Temperature yellow: 50.4°C",
+    "message": "Temperature yellow: 50.3°C",
     "odoo_anomalia_id": 43,
     "odoo_intervento_id": 45,
     "notified": true,
@@ -200,7 +200,7 @@
   "TEMP_TX2-04": {
     "first_detected": "2026-04-30T10:53:22.908458",
     "type": "HIGH TEMP",
-    "message": "Temperature yellow: 50.1°C",
+    "message": "Temperature yellow: 50.5°C",
     "odoo_anomalia_id": 45,
     "odoo_intervento_id": 47,
     "notified": true,
@@ -211,7 +211,7 @@
   "TEMP_TX2-05": {
     "first_detected": "2026-04-30T10:53:22.908458",
     "type": "HIGH TEMP",
-    "message": "Temperature yellow: 50.1°C",
+    "message": "Temperature yellow: 50.65°C",
     "odoo_anomalia_id": 54,
     "odoo_intervento_id": 56,
     "notified": true,
@@ -222,7 +222,7 @@
   "TEMP_TX2-06": {
     "first_detected": "2026-04-30T10:53:22.908458",
     "type": "HIGH TEMP",
-    "message": "Temperature yellow: 50.8°C",
+    "message": "Temperature yellow: 51.6°C",
     "odoo_anomalia_id": 46,
     "odoo_intervento_id": 48,
     "notified": true,
@@ -233,7 +233,7 @@
   "TEMP_TX3-04": {
     "first_detected": "2026-04-30T10:53:22.908458",
     "type": "HIGH TEMP",
-    "message": "Temperature yellow: 50.1°C",
+    "message": "Temperature yellow: 51.2°C",
     "odoo_anomalia_id": 47,
     "odoo_intervento_id": 49,
     "notified": true,
@@ -244,7 +244,7 @@
   "TEMP_TX3-09": {
     "first_detected": "2026-04-30T10:53:22.908458",
     "type": "HIGH TEMP",
-    "message": "Temperature yellow: 50.9°C",
+    "message": "Temperature yellow: 52.3°C",
     "odoo_anomalia_id": 55,
     "odoo_intervento_id": 57,
     "notified": true,
@@ -255,7 +255,7 @@
   "TEMP_TX2-07": {
     "first_detected": "2026-04-30T12:46:36.483523",
     "type": "HIGH TEMP",
-    "message": "Temperature yellow: 50.3°C",
+    "message": "Temperature yellow: 51.3°C",
     "odoo_anomalia_id": 51,
     "odoo_intervento_id": 53,
     "notified": true,
@@ -266,7 +266,7 @@
   "TEMP_TX2-08": {
     "first_detected": "2026-04-30T12:46:36.483523",
     "type": "HIGH TEMP",
-    "message": "Temperature yellow: 50.55°C",
+    "message": "Temperature yellow: 50.7°C",
     "odoo_anomalia_id": 52,
     "odoo_intervento_id": 54,
     "notified": true,
@@ -277,7 +277,7 @@
   "TEMP_TX3-03": {
     "first_detected": "2026-04-30T12:46:36.483523",
     "type": "HIGH TEMP",
-    "message": "Temperature yellow: 50.1°C",
+    "message": "Temperature yellow: 50.9°C",
     "odoo_anomalia_id": 53,
     "odoo_intervento_id": 55,
     "notified": true,
@@ -288,7 +288,7 @@
   "TEMP_TX1-11": {
     "first_detected": "2026-04-30T13:16:48.121681",
     "type": "HIGH TEMP",
-    "message": "Temperature yellow: 51.1°C",
+    "message": "Temperature yellow: 51.5°C",
     "odoo_anomalia_id": 56,
     "odoo_intervento_id": 58,
     "notified": true,
@@ -299,7 +299,7 @@
   "TEMP_TX2-12": {
     "first_detected": "2026-04-30T13:16:48.121681",
     "type": "HIGH TEMP",
-    "message": "Temperature yellow: 50.1°C",
+    "message": "Temperature yellow: 51.2°C",
     "odoo_anomalia_id": 57,
     "odoo_intervento_id": 59,
     "notified": true,
@@ -310,7 +310,7 @@
   "TEMP_TX3-07": {
     "first_detected": "2026-04-30T13:16:48.121681",
     "type": "HIGH TEMP",
-    "message": "Temperature yellow: 50.2°C",
+    "message": "Temperature yellow: 51.5°C",
     "odoo_anomalia_id": 58,
     "odoo_intervento_id": 60,
     "notified": true,
@@ -321,7 +321,7 @@
   "TEMP_TX1-10": {
     "first_detected": "2026-04-30T13:31:54.175982",
     "type": "HIGH TEMP",
-    "message": "Temperature yellow: 50.1°C",
+    "message": "Temperature yellow: 51.1°C",
     "odoo_anomalia_id": 59,
     "odoo_intervento_id": 61,
     "notified": true,
@@ -332,7 +332,7 @@
   "TEMP_TX2-09": {
     "first_detected": "2026-04-30T13:31:54.175982",
     "type": "HIGH TEMP",
-    "message": "Temperature yellow: 51.6°C",
+    "message": "Temperature yellow: 50.5°C",
     "odoo_anomalia_id": 60,
     "odoo_intervento_id": 62,
     "notified": true,
@@ -343,7 +343,7 @@
   "TEMP_TX2-10": {
     "first_detected": "2026-04-30T13:31:54.175982",
     "type": "HIGH TEMP",
-    "message": "Temperature yellow: 50.1°C",
+    "message": "Temperature yellow: 50.4°C",
     "odoo_anomalia_id": 61,
     "odoo_intervento_id": 63,
     "notified": true,
@@ -365,7 +365,7 @@
   "TEMP_TX3-01": {
     "first_detected": "2026-04-30T13:31:54.175982",
     "type": "HIGH TEMP",
-    "message": "Temperature yellow: 50.2°C",
+    "message": "Temperature yellow: 50.5°C",
     "odoo_anomalia_id": 63,
     "odoo_intervento_id": 65,
     "notified": true,
@@ -387,7 +387,7 @@
   "TEMP_TX3-10": {
     "first_detected": "2026-04-30T13:31:54.175982",
     "type": "HIGH TEMP",
-    "message": "Temperature yellow: 50.2°C",
+    "message": "Temperature yellow: 51.9°C",
     "odoo_anomalia_id": 65,
     "odoo_intervento_id": 67,
     "notified": true,
@@ -409,7 +409,7 @@
   "TEMP_TX3-02": {
     "first_detected": "2026-04-30T13:46:57.648160",
     "type": "HIGH TEMP",
-    "message": "Temperature yellow: 50.4°C",
+    "message": "Temperature yellow: 50.8°C",
     "odoo_anomalia_id": 67,
     "odoo_intervento_id": 69,
     "notified": true,
@@ -420,7 +420,7 @@
   "TX2-08_LOW_PR": {
     "first_detected": "2026-04-30T19:18:00.054241",
     "type": "LOW PR",
-    "message": "PR is 78.3% (Threshold: 75%)",
+    "message": "PR is 78.2% (Threshold: 75%)",
     "odoo_anomalia_id": 68,
     "odoo_intervento_id": 70,
     "notified": true,
@@ -431,7 +431,7 @@
   "TX2-09_LOW_PR": {
     "first_detected": "2026-05-01T11:19:00.008142",
     "type": "LOW PR",
-    "message": "PR is 79.7% (Threshold: 75%)",
+    "message": "PR is 78.2% (Threshold: 75%)",
     "odoo_anomalia_id": 69,
     "odoo_intervento_id": 71,
     "notified": true,
@@ -442,7 +442,7 @@
   "TX2-11_LOW_PR": {
     "first_detected": "2026-05-01T11:19:00.008142",
     "type": "LOW PR",
-    "message": "PR is 84.2% (Threshold: 75%)",
+    "message": "PR is 76.5% (Threshold: 75%)",
     "odoo_anomalia_id": 70,
     "odoo_intervento_id": 72,
     "notified": true,
@@ -453,7 +453,7 @@
   "TX2-12_LOW_PR": {
     "first_detected": "2026-05-01T11:19:00.008142",
     "type": "LOW PR",
-    "message": "PR is 80.5% (Threshold: 75%)",
+    "message": "PR is 77.0% (Threshold: 75%)",
     "odoo_anomalia_id": 71,
     "odoo_intervento_id": 73,
     "notified": true,
@@ -464,7 +464,7 @@
   "TX1-09_LOW_PR": {
     "first_detected": "2026-05-01T12:04:02.725378",
     "type": "LOW PR",
-    "message": "PR is 79.2% (Threshold: 75%)",
+    "message": "PR is 77.9% (Threshold: 75%)",
     "odoo_anomalia_id": 79,
     "odoo_intervento_id": 81,
     "notified": true,
@@ -475,7 +475,7 @@
   "TX1-10_LOW_PR": {
     "first_detected": "2026-05-01T12:04:02.725378",
     "type": "LOW PR",
-    "message": "PR is 83.5% (Threshold: 75%)",
+    "message": "PR is 76.8% (Threshold: 75%)",
     "odoo_anomalia_id": 80,
     "odoo_intervento_id": 82,
     "notified": true,
@@ -486,7 +486,7 @@
   "TX1-11_LOW_PR": {
     "first_detected": "2026-05-01T12:04:02.725378",
     "type": "LOW PR",
-    "message": "PR is 79.1% (Threshold: 75%)",
+    "message": "PR is 77.9% (Threshold: 75%)",
     "odoo_anomalia_id": 81,
     "odoo_intervento_id": 83,
     "notified": true,
@@ -497,7 +497,7 @@
   "TX2-02_LOW_PR": {
     "first_detected": "2026-05-01T12:04:02.725378",
     "type": "LOW PR",
-    "message": "PR is 78.2% (Threshold: 75%)",
+    "message": "PR is 75.1% (Threshold: 75%)",
     "odoo_anomalia_id": 100,
     "odoo_intervento_id": 102,
     "notified": true,
@@ -508,7 +508,7 @@
   "TX2-03_LOW_PR": {
     "first_detected": "2026-05-01T12:04:02.725378",
     "type": "LOW PR",
-    "message": "PR is 77.4% (Threshold: 75%)",
+    "message": "PR is 80.7% (Threshold: 75%)",
     "odoo_anomalia_id": 101,
     "odoo_intervento_id": 103,
     "notified": true,
@@ -519,7 +519,7 @@
   "TX2-06_LOW_PR": {
     "first_detected": "2026-05-01T12:04:02.725378",
     "type": "LOW PR",
-    "message": "PR is 84.5% (Threshold: 75%)",
+    "message": "PR is 77.2% (Threshold: 75%)",
     "odoo_anomalia_id": 86,
     "odoo_intervento_id": 88,
     "notified": true,
@@ -530,7 +530,7 @@
   "TX2-07_LOW_PR": {
     "first_detected": "2026-05-01T12:04:02.725378",
     "type": "LOW PR",
-    "message": "PR is 79.1% (Threshold: 75%)",
+    "message": "PR is 80.5% (Threshold: 75%)",
     "odoo_anomalia_id": 87,
     "odoo_intervento_id": 89,
     "notified": true,
@@ -541,7 +541,7 @@
   "TX2-10_LOW_PR": {
     "first_detected": "2026-05-01T12:04:02.725378",
     "type": "LOW PR",
-    "message": "PR is 81.8% (Threshold: 75%)",
+    "message": "PR is 80.3% (Threshold: 75%)",
     "odoo_anomalia_id": 88,
     "odoo_intervento_id": 90,
     "notified": true,
@@ -552,7 +552,7 @@
   "TX3-01_LOW_PR": {
     "first_detected": "2026-05-01T12:04:02.725378",
     "type": "LOW PR",
-    "message": "PR is 79.8% (Threshold: 75%)",
+    "message": "PR is 77.9% (Threshold: 75%)",
     "odoo_anomalia_id": 89,
     "odoo_intervento_id": 91,
     "notified": true,
@@ -563,7 +563,7 @@
   "TX3-02_LOW_PR": {
     "first_detected": "2026-05-01T12:04:02.725378",
     "type": "LOW PR",
-    "message": "PR is 75.0% (Threshold: 75%)",
+    "message": "PR is 77.5% (Threshold: 75%)",
     "odoo_anomalia_id": 102,
     "odoo_intervento_id": 104,
     "notified": true,
@@ -574,7 +574,7 @@
   "TX3-10_LOW_PR": {
     "first_detected": "2026-05-01T12:04:02.725378",
     "type": "LOW PR",
-    "message": "PR is 78.0% (Threshold: 75%)",
+    "message": "PR is 78.4% (Threshold: 75%)",
     "odoo_anomalia_id": 103,
     "odoo_intervento_id": 105,
     "notified": true,
@@ -585,7 +585,7 @@
   "TX3-11_LOW_PR": {
     "first_detected": "2026-05-01T12:04:02.725378",
     "type": "LOW PR",
-    "message": "PR is 78.6% (Threshold: 75%)",
+    "message": "PR is 78.7% (Threshold: 75%)",
     "odoo_anomalia_id": 97,
     "odoo_intervento_id": 99,
     "notified": true,
@@ -607,7 +607,7 @@
   "TX1-02_LOW_PR": {
     "first_detected": "2026-05-01T12:34:06.833443",
     "type": "LOW PR",
-    "message": "PR is 77.8% (Threshold: 75%)",
+    "message": "PR is 75.3% (Threshold: 75%)",
     "odoo_anomalia_id": 73,
     "odoo_intervento_id": 75,
     "notified": true,
@@ -618,7 +618,7 @@
   "TX1-03_LOW_PR": {
     "first_detected": "2026-05-01T12:34:06.833443",
     "type": "LOW PR",
-    "message": "PR is 79.3% (Threshold: 75%)",
+    "message": "PR is 76.0% (Threshold: 75%)",
     "odoo_anomalia_id": 74,
     "odoo_intervento_id": 76,
     "notified": true,
@@ -629,7 +629,7 @@
   "TX1-04_LOW_PR": {
     "first_detected": "2026-05-01T12:34:06.833443",
     "type": "LOW PR",
-    "message": "PR is 79.3% (Threshold: 75%)",
+    "message": "PR is 76.8% (Threshold: 75%)",
     "odoo_anomalia_id": 75,
     "odoo_intervento_id": 77,
     "notified": true,
@@ -640,7 +640,7 @@
   "TX1-05_LOW_PR": {
     "first_detected": "2026-05-01T12:34:06.833443",
     "type": "LOW PR",
-    "message": "PR is 79.3% (Threshold: 75%)",
+    "message": "PR is 76.3% (Threshold: 75%)",
     "odoo_anomalia_id": 76,
     "odoo_intervento_id": 78,
     "notified": true,
@@ -651,7 +651,7 @@
   "TX1-06_LOW_PR": {
     "first_detected": "2026-05-01T12:34:06.833443",
     "type": "LOW PR",
-    "message": "PR is 78.0% (Threshold: 75%)",
+    "message": "PR is 75.3% (Threshold: 75%)",
     "odoo_anomalia_id": 77,
     "odoo_intervento_id": 79,
     "notified": true,
@@ -662,7 +662,7 @@
   "TX1-07_LOW_PR": {
     "first_detected": "2026-05-01T12:34:06.833443",
     "type": "LOW PR",
-    "message": "PR is 78.6% (Threshold: 75%)",
+    "message": "PR is 75.6% (Threshold: 75%)",
     "odoo_anomalia_id": 78,
     "odoo_intervento_id": 80,
     "notified": true,
@@ -673,7 +673,7 @@
   "TX1-08_LOW_PR": {
     "first_detected": "2026-05-01T12:34:06.833443",
     "type": "LOW PR",
-    "message": "PR is 80.3% (Threshold: 75%)",
+    "message": "PR is 79.1% (Threshold: 75%)",
     "odoo_anomalia_id": 99,
     "odoo_intervento_id": 101,
     "notified": true,
@@ -684,7 +684,7 @@
   "TX1-12_LOW_PR": {
     "first_detected": "2026-05-01T12:34:06.833443",
     "type": "LOW PR",
-    "message": "PR is 81.1% (Threshold: 75%)",
+    "message": "PR is 80.5% (Threshold: 75%)",
     "odoo_anomalia_id": 82,
     "odoo_intervento_id": 84,
     "notified": true,
@@ -695,7 +695,7 @@
   "TX2-01_LOW_PR": {
     "first_detected": "2026-05-01T12:34:06.833443",
     "type": "LOW PR",
-    "message": "PR is 79.7% (Threshold: 75%)",
+    "message": "PR is 77.2% (Threshold: 75%)",
     "odoo_anomalia_id": 83,
     "odoo_intervento_id": 85,
     "notified": true,
@@ -706,7 +706,7 @@
   "TX2-04_LOW_PR": {
     "first_detected": "2026-05-01T12:34:06.833443",
     "type": "LOW PR",
-    "message": "PR is 77.8% (Threshold: 75%)",
+    "message": "PR is 76.5% (Threshold: 75%)",
     "odoo_anomalia_id": 84,
     "odoo_intervento_id": 86,
     "notified": true,
@@ -717,7 +717,7 @@
   "TX2-05_LOW_PR": {
     "first_detected": "2026-05-01T12:34:06.833443",
     "type": "LOW PR",
-    "message": "PR is 76.3% (Threshold: 75%)",
+    "message": "PR is 80.1% (Threshold: 75%)",
     "odoo_anomalia_id": 85,
     "odoo_intervento_id": 87,
     "notified": true,
@@ -728,7 +728,7 @@
   "TX3-03_LOW_PR": {
     "first_detected": "2026-05-01T12:34:06.833443",
     "type": "LOW PR",
-    "message": "PR is 78.6% (Threshold: 75%)",
+    "message": "PR is 75.3% (Threshold: 75%)",
     "odoo_anomalia_id": 90,
     "odoo_intervento_id": 92,
     "notified": true,
@@ -739,7 +739,7 @@
   "TX3-04_LOW_PR": {
     "first_detected": "2026-05-01T12:34:06.833443",
     "type": "LOW PR",
-    "message": "PR is 76.8% (Threshold: 75%)",
+    "message": "PR is 78.2% (Threshold: 75%)",
     "odoo_anomalia_id": 91,
     "odoo_intervento_id": 93,
     "notified": true,
@@ -750,7 +750,7 @@
   "TX3-05_LOW_PR": {
     "first_detected": "2026-05-01T12:34:06.833443",
     "type": "LOW PR",
-    "message": "PR is 84.8% (Threshold: 75%)",
+    "message": "PR is 77.2% (Threshold: 75%)",
     "odoo_anomalia_id": 92,
     "odoo_intervento_id": 94,
     "notified": true,
@@ -761,7 +761,7 @@
   "TX3-06_LOW_PR": {
     "first_detected": "2026-05-01T12:34:06.833443",
     "type": "LOW PR",
-    "message": "PR is 78.0% (Threshold: 75%)",
+    "message": "PR is 75.9% (Threshold: 75%)",
     "odoo_anomalia_id": 93,
     "odoo_intervento_id": 95,
     "notified": true,
@@ -772,7 +772,7 @@
   "TX3-07_LOW_PR": {
     "first_detected": "2026-05-01T12:34:06.833443",
     "type": "LOW PR",
-    "message": "PR is 80.3% (Threshold: 75%)",
+    "message": "PR is 75.3% (Threshold: 75%)",
     "odoo_anomalia_id": 94,
     "odoo_intervento_id": 96,
     "notified": true,
@@ -783,7 +783,7 @@
   "TX3-08_LOW_PR": {
     "first_detected": "2026-05-01T12:34:06.833443",
     "type": "LOW PR",
-    "message": "PR is 77.8% (Threshold: 75%)",
+    "message": "PR is 75.3% (Threshold: 75%)",
     "odoo_anomalia_id": 95,
     "odoo_intervento_id": 97,
     "notified": true,
@@ -794,7 +794,7 @@
   "TX3-09_LOW_PR": {
     "first_detected": "2026-05-01T12:34:06.833443",
     "type": "LOW PR",
-    "message": "PR is 79.2% (Threshold: 75%)",
+    "message": "PR is 76.1% (Threshold: 75%)",
     "odoo_anomalia_id": 96,
     "odoo_intervento_id": 98,
     "notified": true,
@@ -805,7 +805,7 @@
   "TX3-12_LOW_PR": {
     "first_detected": "2026-05-01T12:34:06.833443",
     "type": "LOW PR",
-    "message": "PR is 80.5% (Threshold: 75%)",
+    "message": "PR is 75.3% (Threshold: 75%)",
     "odoo_anomalia_id": 98,
     "odoo_intervento_id": 100,
     "notified": true,
