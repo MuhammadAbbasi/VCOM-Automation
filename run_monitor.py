@@ -31,6 +31,30 @@ if hasattr(sys.stdout, "reconfigure"):
         pass
 
 ROOT = Path(__file__).resolve().parent
+PID_FILE = ROOT / "run_monitor.pid"
+
+# ---------------------------------------------------------------------------
+# Single-instance lock — abort if another instance is already running
+# ---------------------------------------------------------------------------
+def _acquire_pid_lock() -> None:
+    if PID_FILE.exists():
+        try:
+            existing_pid = int(PID_FILE.read_text().strip())
+            import psutil
+            if psutil.pid_exists(existing_pid):
+                print(f"[ORCHESTRATOR] Already running (PID {existing_pid}). Exiting.", flush=True)
+                sys.exit(1)
+        except Exception:
+            pass  # Stale PID file — overwrite it
+    PID_FILE.write_text(str(os.getpid()))
+
+def _release_pid_lock() -> None:
+    try:
+        PID_FILE.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+_acquire_pid_lock()
 
 RESTART_COOLDOWN = 5
 _stop_event = threading.Event()
@@ -72,11 +96,13 @@ SERVICES = [
         "name": "BROKER",
         "cmd": [sys.executable, "-u", str(ROOT / "tracker_testing" / "broker.py")],
         "new_console": False,
+        "optional": True,
     },
     {
         "name": "TRACKER",
         "cmd": [sys.executable, "-u", str(ROOT / "tracker_testing" / "receiver.py")],
         "new_console": False,
+        "optional": True,
     },
     {
         "name": "DOCTOR",
@@ -221,7 +247,7 @@ def monitor_services() -> None:
 # ---------------------------------------------------------------------------
 
 def shutdown(signum=None, frame=None) -> None:
-    print("\n[ORCHESTRATOR] Shutting down all services…", flush=True)
+    print("\n[ORCHESTRATOR] Shutting down all services...", flush=True)
     _stop_event.set()
     for name, proc in list(_processes.items()):
         try:
@@ -230,6 +256,7 @@ def shutdown(signum=None, frame=None) -> None:
             print(f"[ORCHESTRATOR] {name} stopped", flush=True)
         except Exception as e:
             print(f"[ORCHESTRATOR] Could not stop {name}: {e}", flush=True)
+    _release_pid_lock()
     sys.exit(0)
 
 

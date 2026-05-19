@@ -1204,11 +1204,11 @@ def analyze_site(date_str: str) -> None:
 
         # --- TELEGRAM RE-FIRE RULES ---
         # To avoid spamming the technician:
-        # Critical (red): re-fire every 2 hours while active.
-        # Non-critical (yellow/grey): re-fire every 4 hours while active.
+        # Critical (red): re-fire every 4 hours while active.
+        # Non-critical (yellow/grey): re-fire every 8 hours while active.
         now_dt = datetime.fromisoformat(timestamp)
-        TG_REFIRE_CRIT_SEC = 7200    # 2 hours
-        TG_REFIRE_NONCRIT_SEC = 14400 # 4 hours
+        TG_REFIRE_CRIT_SEC = 14400   # 4 hours
+        TG_REFIRE_NONCRIT_SEC = 28800 # 8 hours
 
         def should_send_tg(alarm: dict) -> bool:
             """Decide whether to push a Telegram message for this active alarm now."""
