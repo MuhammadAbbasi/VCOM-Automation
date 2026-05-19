@@ -586,32 +586,52 @@ class SQLiteLogHandler(logging.Handler):
 
     def _get_conn(self) -> sqlite3.Connection:
         if self._conn is None:
-            DB_DIR.mkdir(parents=True, exist_ok=True)
-            self._conn = sqlite3.connect(
-                str(LOGS_DB_PATH), check_same_thread=False, timeout=30
-            )
-            self._conn.execute("PRAGMA journal_mode=WAL")
-            self._conn.execute("PRAGMA synchronous=NORMAL")
-            # Ensure table exists
-            self._conn.execute("""
-                CREATE TABLE IF NOT EXISTS logs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    timestamp TEXT NOT NULL,
-                    source TEXT NOT NULL,
-                    level TEXT NOT NULL,
-                    message TEXT NOT NULL,
-                    traceback TEXT,
-                    metadata TEXT
-                )
-            """)
-            self._conn.commit()
+            self._conn = self._open_conn()
         return self._conn
+
+    def _open_conn(self) -> sqlite3.Connection:
+        DB_DIR.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(
+            str(LOGS_DB_PATH), check_same_thread=False, timeout=30
+        )
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                source TEXT NOT NULL,
+                level TEXT NOT NULL,
+                message TEXT NOT NULL,
+                traceback TEXT,
+                metadata TEXT
+            )
+        """)
+        conn.commit()
+        return conn
+
+    def _reset_db(self) -> None:
+        """Close and delete the corrupted database file, then reconnect fresh."""
+        try:
+            if self._conn is not None:
+                self._conn.close()
+        except Exception:
+            pass
+        self._conn = None
+        try:
+            if LOGS_DB_PATH.exists():
+                LOGS_DB_PATH.unlink()
+        except Exception:
+            pass
+        try:
+            self._conn = self._open_conn()
+        except Exception:
+            pass
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
             conn = self._get_conn()
 
-            # Format the traceback if present
             traceback_str = None
             if record.exc_info and record.exc_info[0] is not None:
                 traceback_str = "".join(tb_module.format_exception(*record.exc_info))
@@ -628,6 +648,9 @@ class SQLiteLogHandler(logging.Handler):
                 )
             )
             conn.commit()
+        except sqlite3.DatabaseError:
+            # Database is corrupted — delete and recreate it silently
+            self._reset_db()
         except Exception:
             self.handleError(record)
 
