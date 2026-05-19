@@ -224,22 +224,27 @@ def analyze_dc_current(dc_df: pd.DataFrame, output_md_path: Path, date_str: str)
             series_filled = series.ffill()
             expected_current = expected_series
 
+            # real_mask: True only for rows where this series had actual data.
+            # Without this, ffill carries the last real value into future unextracted
+            # timestamp slots, making resolved faults look perpetually active.
+            real_mask = series.notna()
+
             # RULE: OPEN CIRCUIT (Critical)
             cond_openC = (series_filled < 0.1 * expected_current.ffill()) & (expected_current.ffill() > 1.0)
-            open_streak_m = get_current_streak_minutes(cond_openC, df["Ora"])
+            open_streak_m = get_current_streak_minutes(cond_openC.where(real_mask), df["Ora"])
 
             # RULE: SINGLE STRING LOSS
             ss_loss_m = 0
             if string_count == 2 and not inv_2str_median.isna().all():
                 cond_ssLoss = (series_filled >= 0.4 * inv_2str_median.ffill()) & (series_filled <= 0.6 * inv_2str_median.ffill()) & (inv_2str_median.ffill() > 2.0)
-                ss_loss_m = get_current_streak_minutes(cond_ssLoss, df["Ora"])
+                ss_loss_m = get_current_streak_minutes(cond_ssLoss.where(real_mask), df["Ora"])
 
             # RULE: UNDERPERFORMANCE ABSOLUTE
             up_m = 0
             same_inv_peer_median = inv_2str_median if string_count == 2 else (inv_2str_median / 2.0)
             if not same_inv_peer_median.isna().all():
                 cond_up = (series_filled < 0.75 * same_inv_peer_median.ffill()) & (series_filled > 0.0) & (same_inv_peer_median.ffill() > 1.0)
-                up_m = get_current_streak_minutes(cond_up, df["Ora"])
+                up_m = get_current_streak_minutes(cond_up.where(real_mask), df["Ora"])
 
             # RULE: CROSS-INVERTER DEVIATION
             domain_peer_cols = [f"Corrente DC MPPT {mppt_num} (INV {oi}) [A]" for oi, ocfg in MPPT_CONFIG.items() if oi[:3] == domain and ocfg[mppt_idx] == string_count and f"Corrente DC MPPT {mppt_num} (INV {oi}) [A]" in df.columns]
@@ -247,7 +252,7 @@ def analyze_dc_current(dc_df: pd.DataFrame, output_md_path: Path, date_str: str)
             if domain_peer_cols:
                 domain_median = df[domain_peer_cols].median(axis=1)
                 cond_cross = (series_filled < 0.65 * domain_median.ffill()) & (series_filled > 0.0) & (domain_median.ffill() > 2.0)
-                cross_m = get_current_streak_minutes(cond_cross, df["Ora"])
+                cross_m = get_current_streak_minutes(cond_cross.where(real_mask), df["Ora"])
 
             # Alarms
             if open_streak_m >= 15:
