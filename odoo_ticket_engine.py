@@ -33,11 +33,13 @@ DB_PATH = ROOT / "db" / "scada_data.db"
 SETTINGS_PATH = ROOT / "user_settings.json"
 CONFIG_PATH = ROOT / "config.json"
 
+_log_path = ROOT / "logs" / "odoo_tickets.log"
+_log_path.parent.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [TICKET] %(levelname)s %(message)s",
     handlers=[
-        logging.FileHandler(ROOT / "odoo_tickets.log", encoding="utf-8"),
+        logging.FileHandler(_log_path, encoding="utf-8"),
         logging.StreamHandler(sys.stdout),
     ],
 )

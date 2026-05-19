@@ -139,7 +139,6 @@ class OdooClient:
         }
         if session_id:
             vals["sessione_origine_id"] = session_id
-        print(f"DEBUG: create_intervento vals={vals}")
         intervento_id = self._rpc("fv.intervento", "create", [vals])
         logger.info(f"Created fv.intervento id={intervento_id} '{titolo}'")
         return intervento_id
