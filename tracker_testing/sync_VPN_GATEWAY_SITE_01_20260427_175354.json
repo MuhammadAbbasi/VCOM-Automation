@@ -1,0 +1,3332 @@
+[
+    {
+        "tcu": "TCU 01",
+        "tracker_no": "Tracker 001",
+        "target_angle": 109.1,
+        "actual_angle": 109.1,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 05",
+        "tracker_no": "Tracker 005",
+        "target_angle": 109.1,
+        "actual_angle": 109.1,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 09",
+        "tracker_no": "Tracker 009",
+        "target_angle": 109.3,
+        "actual_angle": 109.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 13",
+        "tracker_no": "Tracker 013",
+        "target_angle": 109.3,
+        "actual_angle": 109.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 17",
+        "tracker_no": "Tracker 017",
+        "target_angle": 109.3,
+        "actual_angle": 109.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 21",
+        "tracker_no": "Tracker 021",
+        "target_angle": 109.3,
+        "actual_angle": 109.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 25",
+        "tracker_no": "Tracker 025",
+        "target_angle": 109.2,
+        "actual_angle": 109.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 29",
+        "tracker_no": "Tracker 029",
+        "target_angle": 109.2,
+        "actual_angle": 109.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 33",
+        "tracker_no": "Tracker 033",
+        "target_angle": 109.2,
+        "actual_angle": 109.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 37",
+        "tracker_no": "Tracker 037",
+        "target_angle": 109.2,
+        "actual_angle": 109.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 41",
+        "tracker_no": "Tracker 041",
+        "target_angle": 109.2,
+        "actual_angle": 109.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 45",
+        "tracker_no": "Tracker 045",
+        "target_angle": 109.2,
+        "actual_angle": 109.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 49",
+        "tracker_no": "Tracker 049",
+        "target_angle": 109.2,
+        "actual_angle": 109.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 53",
+        "tracker_no": "Tracker 053",
+        "target_angle": 109.1,
+        "actual_angle": 109.1,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 02",
+        "tracker_no": "Tracker 002",
+        "target_angle": 109.1,
+        "actual_angle": 109.1,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 06",
+        "tracker_no": "Tracker 006",
+        "target_angle": 109.1,
+        "actual_angle": 109.1,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 10",
+        "tracker_no": "Tracker 010",
+        "target_angle": 109.3,
+        "actual_angle": 109.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 14",
+        "tracker_no": "Tracker 014",
+        "target_angle": 109.3,
+        "actual_angle": 109.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 18",
+        "tracker_no": "Tracker 018",
+        "target_angle": 109.3,
+        "actual_angle": 109.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 22",
+        "tracker_no": "Tracker 022",
+        "target_angle": 109.3,
+        "actual_angle": 109.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 26",
+        "tracker_no": "Tracker 026",
+        "target_angle": 109.2,
+        "actual_angle": 109.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 30",
+        "tracker_no": "Tracker 030",
+        "target_angle": 109.2,
+        "actual_angle": 109.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 34",
+        "tracker_no": "Tracker 034",
+        "target_angle": 109.2,
+        "actual_angle": 109.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 38",
+        "tracker_no": "Tracker 038",
+        "target_angle": 109.2,
+        "actual_angle": 109.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 42",
+        "tracker_no": "Tracker 042",
+        "target_angle": 109.2,
+        "actual_angle": 109.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 46",
+        "tracker_no": "Tracker 046",
+        "target_angle": 109.2,
+        "actual_angle": 109.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 50",
+        "tracker_no": "Tracker 050",
+        "target_angle": 109.1,
+        "actual_angle": 109.1,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 54",
+        "tracker_no": "Tracker 054",
+        "target_angle": 109.1,
+        "actual_angle": 109.1,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 03",
+        "tracker_no": "Tracker 003",
+        "target_angle": 109.1,
+        "actual_angle": 109.1,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 07",
+        "tracker_no": "Tracker 007",
+        "target_angle": 109.1,
+        "actual_angle": 109.1,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 11",
+        "tracker_no": "Tracker 011",
+        "target_angle": 109.3,
+        "actual_angle": 109.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 15",
+        "tracker_no": "Tracker 015",
+        "target_angle": 109.3,
+        "actual_angle": 109.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 19",
+        "tracker_no": "Tracker 019",
+        "target_angle": 109.3,
+        "actual_angle": 109.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 23",
+        "tracker_no": "Tracker 023",
+        "target_angle": 109.3,
+        "actual_angle": 109.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 27",
+        "tracker_no": "Tracker 027",
+        "target_angle": 109.2,
+        "actual_angle": 109.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 31",
+        "tracker_no": "Tracker 031",
+        "target_angle": 109.2,
+        "actual_angle": 109.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 35",
+        "tracker_no": "Tracker 035",
+        "target_angle": 109.2,
+        "actual_angle": 109.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 39",
+        "tracker_no": "Tracker 039",
+        "target_angle": 109.2,
+        "actual_angle": 109.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 43",
+        "tracker_no": "Tracker 043",
+        "target_angle": 109.2,
+        "actual_angle": 109.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 47",
+        "tracker_no": "Tracker 047",
+        "target_angle": 109.2,
+        "actual_angle": 109.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 51",
+        "tracker_no": "Tracker 051",
+        "target_angle": 109.1,
+        "actual_angle": 109.1,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 55",
+        "tracker_no": "Tracker 055",
+        "target_angle": 109.1,
+        "actual_angle": 109.1,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 04",
+        "tracker_no": "Tracker 004",
+        "target_angle": 109.1,
+        "actual_angle": 109.1,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 08",
+        "tracker_no": "Tracker 008",
+        "target_angle": 109.0,
+        "actual_angle": 109.0,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 12",
+        "tracker_no": "Tracker 012",
+        "target_angle": 109.3,
+        "actual_angle": 109.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 16",
+        "tracker_no": "Tracker 016",
+        "target_angle": 109.3,
+        "actual_angle": 109.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 20",
+        "tracker_no": "Tracker 020",
+        "target_angle": 109.3,
+        "actual_angle": 109.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 24",
+        "tracker_no": "Tracker 024",
+        "target_angle": 109.2,
+        "actual_angle": 109.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 28",
+        "tracker_no": "Tracker 028",
+        "target_angle": 109.2,
+        "actual_angle": 109.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 32",
+        "tracker_no": "Tracker 032",
+        "target_angle": 109.2,
+        "actual_angle": 109.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 36",
+        "tracker_no": "Tracker 036",
+        "target_angle": 109.2,
+        "actual_angle": 109.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 40",
+        "tracker_no": "Tracker 040",
+        "target_angle": 109.2,
+        "actual_angle": 109.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 44",
+        "tracker_no": "Tracker 044",
+        "target_angle": 109.2,
+        "actual_angle": 109.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 48",
+        "tracker_no": "Tracker 048",
+        "target_angle": 109.2,
+        "actual_angle": 109.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 52",
+        "tracker_no": "Tracker 052",
+        "target_angle": 109.1,
+        "actual_angle": 109.1,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 56",
+        "tracker_no": "Tracker 056",
+        "target_angle": 109.1,
+        "actual_angle": 109.1,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 57",
+        "tracker_no": "Tracker 057",
+        "target_angle": 109.1,
+        "actual_angle": 109.1,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 61",
+        "tracker_no": "Tracker 061",
+        "target_angle": 109.1,
+        "actual_angle": 109.1,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 65",
+        "tracker_no": "Tracker 065",
+        "target_angle": 107.4,
+        "actual_angle": 107.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 69",
+        "tracker_no": "Tracker 069",
+        "target_angle": 107.4,
+        "actual_angle": 107.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 73",
+        "tracker_no": "Tracker 073",
+        "target_angle": 107.4,
+        "actual_angle": 107.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 77",
+        "tracker_no": "Tracker 077",
+        "target_angle": 107.4,
+        "actual_angle": 107.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 81",
+        "tracker_no": "Tracker 081",
+        "target_angle": 107.4,
+        "actual_angle": 107.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 85",
+        "tracker_no": "Tracker 085",
+        "target_angle": 107.4,
+        "actual_angle": 107.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 89",
+        "tracker_no": "Tracker 089",
+        "target_angle": 107.3,
+        "actual_angle": 107.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 93",
+        "tracker_no": "Tracker 093",
+        "target_angle": 107.3,
+        "actual_angle": 107.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 97",
+        "tracker_no": "Tracker 097",
+        "target_angle": 107.3,
+        "actual_angle": 107.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 101",
+        "tracker_no": "Tracker 101",
+        "target_angle": 107.3,
+        "actual_angle": 107.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 58",
+        "tracker_no": "Tracker 058",
+        "target_angle": 109.1,
+        "actual_angle": 109.1,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 62",
+        "tracker_no": "Tracker 062",
+        "target_angle": 107.2,
+        "actual_angle": 107.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 66",
+        "tracker_no": "Tracker 066",
+        "target_angle": 107.4,
+        "actual_angle": 107.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 70",
+        "tracker_no": "Tracker 070",
+        "target_angle": 107.4,
+        "actual_angle": 107.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 74",
+        "tracker_no": "Tracker 074",
+        "target_angle": 107.4,
+        "actual_angle": 107.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 78",
+        "tracker_no": "Tracker 078",
+        "target_angle": 107.4,
+        "actual_angle": 107.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 82",
+        "tracker_no": "Tracker 082",
+        "target_angle": 107.4,
+        "actual_angle": 107.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 86",
+        "tracker_no": "Tracker 086",
+        "target_angle": 107.4,
+        "actual_angle": 107.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 90",
+        "tracker_no": "Tracker 090",
+        "target_angle": 107.3,
+        "actual_angle": 107.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 94",
+        "tracker_no": "Tracker 094",
+        "target_angle": 107.3,
+        "actual_angle": 107.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 98",
+        "tracker_no": "Tracker 098",
+        "target_angle": 107.3,
+        "actual_angle": 107.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 102",
+        "tracker_no": "Tracker 102",
+        "target_angle": 107.3,
+        "actual_angle": 107.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 59",
+        "tracker_no": "Tracker 059",
+        "target_angle": 109.1,
+        "actual_angle": 109.1,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 63",
+        "tracker_no": "Tracker 063",
+        "target_angle": 107.2,
+        "actual_angle": 107.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 67",
+        "tracker_no": "Tracker 067",
+        "target_angle": 107.4,
+        "actual_angle": 107.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 71",
+        "tracker_no": "Tracker 071",
+        "target_angle": 107.4,
+        "actual_angle": 107.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 75",
+        "tracker_no": "Tracker 075",
+        "target_angle": 107.4,
+        "actual_angle": 107.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 79",
+        "tracker_no": "Tracker 079",
+        "target_angle": 107.4,
+        "actual_angle": 107.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 83",
+        "tracker_no": "Tracker 083",
+        "target_angle": 107.4,
+        "actual_angle": 107.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 87",
+        "tracker_no": "Tracker 087",
+        "target_angle": 107.4,
+        "actual_angle": 107.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 91",
+        "tracker_no": "Tracker 091",
+        "target_angle": 107.3,
+        "actual_angle": 107.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 95",
+        "tracker_no": "Tracker 095",
+        "target_angle": 107.3,
+        "actual_angle": 107.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 99",
+        "tracker_no": "Tracker 099",
+        "target_angle": 107.3,
+        "actual_angle": 107.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 103",
+        "tracker_no": "Tracker 103",
+        "target_angle": 107.3,
+        "actual_angle": 107.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 60",
+        "tracker_no": "Tracker 060",
+        "target_angle": 109.1,
+        "actual_angle": 109.1,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 64",
+        "tracker_no": "Tracker 064",
+        "target_angle": 107.4,
+        "actual_angle": 107.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 68",
+        "tracker_no": "Tracker 068",
+        "target_angle": 107.4,
+        "actual_angle": 107.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 72",
+        "tracker_no": "Tracker 072",
+        "target_angle": 107.4,
+        "actual_angle": 107.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 76",
+        "tracker_no": "Tracker 076",
+        "target_angle": 107.6,
+        "actual_angle": 107.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 80",
+        "tracker_no": "Tracker 080",
+        "target_angle": 107.4,
+        "actual_angle": 107.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 84",
+        "tracker_no": "Tracker 084",
+        "target_angle": 107.4,
+        "actual_angle": 107.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 88",
+        "tracker_no": "Tracker 088",
+        "target_angle": 107.4,
+        "actual_angle": 107.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 92",
+        "tracker_no": "Tracker 092",
+        "target_angle": 107.3,
+        "actual_angle": 107.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 96",
+        "tracker_no": "Tracker 096",
+        "target_angle": 107.3,
+        "actual_angle": 107.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 100",
+        "tracker_no": "Tracker 100",
+        "target_angle": 107.3,
+        "actual_angle": 107.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 104",
+        "tracker_no": "Tracker 104",
+        "target_angle": 107.3,
+        "actual_angle": 107.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 105",
+        "tracker_no": "Tracker 105",
+        "target_angle": 107.3,
+        "actual_angle": 107.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 109",
+        "tracker_no": "Tracker 109",
+        "target_angle": 107.3,
+        "actual_angle": 107.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 113",
+        "tracker_no": "Tracker 113",
+        "target_angle": 107.2,
+        "actual_angle": 107.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 117",
+        "tracker_no": "Tracker 117",
+        "target_angle": 107.2,
+        "actual_angle": 107.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 121",
+        "tracker_no": "Tracker 121",
+        "target_angle": 107.2,
+        "actual_angle": 107.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 106",
+        "tracker_no": "Tracker 106",
+        "target_angle": 107.3,
+        "actual_angle": 106.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 110",
+        "tracker_no": "Tracker 110",
+        "target_angle": 107.3,
+        "actual_angle": 107.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 114",
+        "tracker_no": "Tracker 114",
+        "target_angle": 107.2,
+        "actual_angle": 107.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 118",
+        "tracker_no": "Tracker 118",
+        "target_angle": 107.2,
+        "actual_angle": 107.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 107",
+        "tracker_no": "Tracker 107",
+        "target_angle": 107.3,
+        "actual_angle": 106.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 111",
+        "tracker_no": "Tracker 111",
+        "target_angle": 107.3,
+        "actual_angle": 106.1,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 115",
+        "tracker_no": "Tracker 115",
+        "target_angle": 107.2,
+        "actual_angle": 106.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 119",
+        "tracker_no": "Tracker 119",
+        "target_angle": 107.2,
+        "actual_angle": 107.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 108",
+        "tracker_no": "Tracker 108",
+        "target_angle": 107.3,
+        "actual_angle": 106.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 112",
+        "tracker_no": "Tracker 112",
+        "target_angle": 107.2,
+        "actual_angle": 106.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 116",
+        "tracker_no": "Tracker 116",
+        "target_angle": 107.2,
+        "actual_angle": 106.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 120",
+        "tracker_no": "Tracker 120",
+        "target_angle": 109.0,
+        "actual_angle": 109.0,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_01"
+    },
+    {
+        "tcu": "TCU 01",
+        "tracker_no": "Tracker 001",
+        "target_angle": 102.5,
+        "actual_angle": 102.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 05",
+        "tracker_no": "Tracker 005",
+        "target_angle": 102.5,
+        "actual_angle": 102.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 09",
+        "tracker_no": "Tracker 009",
+        "target_angle": 102.5,
+        "actual_angle": 102.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 13",
+        "tracker_no": "Tracker 013",
+        "target_angle": 102.7,
+        "actual_angle": 102.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 17",
+        "tracker_no": "Tracker 017",
+        "target_angle": 102.6,
+        "actual_angle": 102.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 21",
+        "tracker_no": "Tracker 021",
+        "target_angle": 102.6,
+        "actual_angle": 102.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 25",
+        "tracker_no": "Tracker 025",
+        "target_angle": 102.6,
+        "actual_angle": 102.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 29",
+        "tracker_no": "Tracker 029",
+        "target_angle": 102.6,
+        "actual_angle": 102.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 33",
+        "tracker_no": "Tracker 033",
+        "target_angle": 102.6,
+        "actual_angle": 102.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 37",
+        "tracker_no": "Tracker 037",
+        "target_angle": 102.6,
+        "actual_angle": 102.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 41",
+        "tracker_no": "Tracker 041",
+        "target_angle": 102.6,
+        "actual_angle": 102.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 45",
+        "tracker_no": "Tracker 045",
+        "target_angle": 102.5,
+        "actual_angle": 102.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 49",
+        "tracker_no": "Tracker 049",
+        "target_angle": 102.5,
+        "actual_angle": 102.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 53",
+        "tracker_no": "Tracker 053",
+        "target_angle": 102.5,
+        "actual_angle": 102.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 02",
+        "tracker_no": "Tracker 002",
+        "target_angle": 102.5,
+        "actual_angle": 102.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 06",
+        "tracker_no": "Tracker 006",
+        "target_angle": 102.5,
+        "actual_angle": 102.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 10",
+        "tracker_no": "Tracker 010",
+        "target_angle": 102.7,
+        "actual_angle": 102.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 14",
+        "tracker_no": "Tracker 014",
+        "target_angle": 102.7,
+        "actual_angle": 102.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 18",
+        "tracker_no": "Tracker 018",
+        "target_angle": 102.6,
+        "actual_angle": 102.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 22",
+        "tracker_no": "Tracker 022",
+        "target_angle": 102.6,
+        "actual_angle": 102.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 26",
+        "tracker_no": "Tracker 026",
+        "target_angle": 102.6,
+        "actual_angle": 102.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 30",
+        "tracker_no": "Tracker 030",
+        "target_angle": 102.6,
+        "actual_angle": 102.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 34",
+        "tracker_no": "Tracker 034",
+        "target_angle": 102.6,
+        "actual_angle": 102.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 38",
+        "tracker_no": "Tracker 038",
+        "target_angle": 102.6,
+        "actual_angle": 102.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 42",
+        "tracker_no": "Tracker 042",
+        "target_angle": 102.6,
+        "actual_angle": 102.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 46",
+        "tracker_no": "Tracker 046",
+        "target_angle": 102.5,
+        "actual_angle": 102.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 50",
+        "tracker_no": "Tracker 050",
+        "target_angle": 102.5,
+        "actual_angle": 102.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 54",
+        "tracker_no": "Tracker 054",
+        "target_angle": 102.5,
+        "actual_angle": 102.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 03",
+        "tracker_no": "Tracker 003",
+        "target_angle": 102.5,
+        "actual_angle": 102.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 07",
+        "tracker_no": "Tracker 007",
+        "target_angle": 102.5,
+        "actual_angle": 102.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 11",
+        "tracker_no": "Tracker 011",
+        "target_angle": 102.7,
+        "actual_angle": 102.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 15",
+        "tracker_no": "Tracker 015",
+        "target_angle": 102.7,
+        "actual_angle": 102.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 19",
+        "tracker_no": "Tracker 019",
+        "target_angle": 102.6,
+        "actual_angle": 102.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 23",
+        "tracker_no": "Tracker 023",
+        "target_angle": 102.6,
+        "actual_angle": 102.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 27",
+        "tracker_no": "Tracker 027",
+        "target_angle": 102.6,
+        "actual_angle": 102.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 31",
+        "tracker_no": "Tracker 031",
+        "target_angle": 102.6,
+        "actual_angle": 102.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 35",
+        "tracker_no": "Tracker 035",
+        "target_angle": 102.6,
+        "actual_angle": 102.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 39",
+        "tracker_no": "Tracker 039",
+        "target_angle": 102.6,
+        "actual_angle": 102.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 43",
+        "tracker_no": "Tracker 043",
+        "target_angle": 102.6,
+        "actual_angle": 102.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 47",
+        "tracker_no": "Tracker 047",
+        "target_angle": 102.5,
+        "actual_angle": 102.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 51",
+        "tracker_no": "Tracker 051",
+        "target_angle": 102.5,
+        "actual_angle": 102.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 55",
+        "tracker_no": "Tracker 055",
+        "target_angle": 102.5,
+        "actual_angle": 102.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 04",
+        "tracker_no": "Tracker 004",
+        "target_angle": 102.5,
+        "actual_angle": 102.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 08",
+        "tracker_no": "Tracker 008",
+        "target_angle": 102.5,
+        "actual_angle": 102.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 12",
+        "tracker_no": "Tracker 012",
+        "target_angle": 102.7,
+        "actual_angle": 102.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 16",
+        "tracker_no": "Tracker 016",
+        "target_angle": 102.6,
+        "actual_angle": 102.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 20",
+        "tracker_no": "Tracker 020",
+        "target_angle": 102.6,
+        "actual_angle": 102.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 24",
+        "tracker_no": "Tracker 024",
+        "target_angle": 102.6,
+        "actual_angle": 102.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 28",
+        "tracker_no": "Tracker 028",
+        "target_angle": 102.6,
+        "actual_angle": 102.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 32",
+        "tracker_no": "Tracker 032",
+        "target_angle": 102.6,
+        "actual_angle": 102.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 36",
+        "tracker_no": "Tracker 036",
+        "target_angle": 102.6,
+        "actual_angle": 102.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 40",
+        "tracker_no": "Tracker 040",
+        "target_angle": 102.6,
+        "actual_angle": 102.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 44",
+        "tracker_no": "Tracker 044",
+        "target_angle": 102.6,
+        "actual_angle": 102.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 48",
+        "tracker_no": "Tracker 048",
+        "target_angle": 102.5,
+        "actual_angle": 102.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 52",
+        "tracker_no": "Tracker 052",
+        "target_angle": 102.5,
+        "actual_angle": 102.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 56",
+        "tracker_no": "Tracker 056",
+        "target_angle": 102.5,
+        "actual_angle": 102.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 57",
+        "tracker_no": "Tracker 057",
+        "target_angle": 102.5,
+        "actual_angle": 102.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 61",
+        "tracker_no": "Tracker 061",
+        "target_angle": 102.5,
+        "actual_angle": 102.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 65",
+        "tracker_no": "Tracker 065",
+        "target_angle": 105.8,
+        "actual_angle": 105.8,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 69",
+        "tracker_no": "Tracker 069",
+        "target_angle": 105.8,
+        "actual_angle": 105.8,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 73",
+        "tracker_no": "Tracker 073",
+        "target_angle": 105.7,
+        "actual_angle": 105.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 77",
+        "tracker_no": "Tracker 077",
+        "target_angle": 105.7,
+        "actual_angle": 105.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 81",
+        "tracker_no": "Tracker 081",
+        "target_angle": 105.7,
+        "actual_angle": 105.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 85",
+        "tracker_no": "Tracker 085",
+        "target_angle": 105.7,
+        "actual_angle": 105.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 89",
+        "tracker_no": "Tracker 089",
+        "target_angle": 105.7,
+        "actual_angle": 105.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 93",
+        "tracker_no": "Tracker 093",
+        "target_angle": 105.7,
+        "actual_angle": 105.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 97",
+        "tracker_no": "Tracker 097",
+        "target_angle": 105.7,
+        "actual_angle": 105.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 101",
+        "tracker_no": "Tracker 101",
+        "target_angle": 105.6,
+        "actual_angle": 105.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 58",
+        "tracker_no": "Tracker 058",
+        "target_angle": 102.5,
+        "actual_angle": 102.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 62",
+        "tracker_no": "Tracker 062",
+        "target_angle": 102.5,
+        "actual_angle": 102.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 66",
+        "tracker_no": "Tracker 066",
+        "target_angle": 105.8,
+        "actual_angle": 105.8,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 70",
+        "tracker_no": "Tracker 070",
+        "target_angle": 105.8,
+        "actual_angle": 105.8,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 74",
+        "tracker_no": "Tracker 074",
+        "target_angle": 105.7,
+        "actual_angle": 105.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 78",
+        "tracker_no": "Tracker 078",
+        "target_angle": 105.7,
+        "actual_angle": 105.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 82",
+        "tracker_no": "Tracker 082",
+        "target_angle": 105.7,
+        "actual_angle": 105.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 86",
+        "tracker_no": "Tracker 086",
+        "target_angle": 105.7,
+        "actual_angle": 105.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 90",
+        "tracker_no": "Tracker 090",
+        "target_angle": 105.7,
+        "actual_angle": 105.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 94",
+        "tracker_no": "Tracker 094",
+        "target_angle": 105.7,
+        "actual_angle": 105.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 98",
+        "tracker_no": "Tracker 098",
+        "target_angle": 105.6,
+        "actual_angle": 105.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 102",
+        "tracker_no": "Tracker 102",
+        "target_angle": 105.6,
+        "actual_angle": 105.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 59",
+        "tracker_no": "Tracker 059",
+        "target_angle": 102.5,
+        "actual_angle": 102.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 63",
+        "tracker_no": "Tracker 063",
+        "target_angle": 105.8,
+        "actual_angle": 105.8,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 67",
+        "tracker_no": "Tracker 067",
+        "target_angle": 105.8,
+        "actual_angle": 105.8,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 71",
+        "tracker_no": "Tracker 071",
+        "target_angle": 105.8,
+        "actual_angle": 105.8,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 75",
+        "tracker_no": "Tracker 075",
+        "target_angle": 105.7,
+        "actual_angle": 105.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 79",
+        "tracker_no": "Tracker 079",
+        "target_angle": 105.7,
+        "actual_angle": 105.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 83",
+        "tracker_no": "Tracker 083",
+        "target_angle": 105.7,
+        "actual_angle": 105.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 87",
+        "tracker_no": "Tracker 087",
+        "target_angle": 105.7,
+        "actual_angle": 105.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 91",
+        "tracker_no": "Tracker 091",
+        "target_angle": 105.7,
+        "actual_angle": 105.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 95",
+        "tracker_no": "Tracker 095",
+        "target_angle": 105.7,
+        "actual_angle": 105.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 99",
+        "tracker_no": "Tracker 099",
+        "target_angle": 105.6,
+        "actual_angle": 105.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 103",
+        "tracker_no": "Tracker 103",
+        "target_angle": 105.6,
+        "actual_angle": 105.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 60",
+        "tracker_no": "Tracker 060",
+        "target_angle": 102.5,
+        "actual_angle": 102.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 64",
+        "tracker_no": "Tracker 064",
+        "target_angle": 105.8,
+        "actual_angle": 105.8,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 68",
+        "tracker_no": "Tracker 068",
+        "target_angle": 105.8,
+        "actual_angle": 105.8,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 72",
+        "tracker_no": "Tracker 072",
+        "target_angle": 105.8,
+        "actual_angle": 105.8,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 76",
+        "tracker_no": "Tracker 076",
+        "target_angle": 105.7,
+        "actual_angle": 105.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 80",
+        "tracker_no": "Tracker 080",
+        "target_angle": 105.7,
+        "actual_angle": 105.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 84",
+        "tracker_no": "Tracker 084",
+        "target_angle": 105.7,
+        "actual_angle": 105.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 88",
+        "tracker_no": "Tracker 088",
+        "target_angle": 105.7,
+        "actual_angle": 105.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 92",
+        "tracker_no": "Tracker 092",
+        "target_angle": 105.7,
+        "actual_angle": 105.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 96",
+        "tracker_no": "Tracker 096",
+        "target_angle": 105.7,
+        "actual_angle": 105.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 100",
+        "tracker_no": "Tracker 100",
+        "target_angle": 105.6,
+        "actual_angle": 105.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 104",
+        "tracker_no": "Tracker 104",
+        "target_angle": 105.6,
+        "actual_angle": 105.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 105",
+        "tracker_no": "Tracker 105",
+        "target_angle": 105.6,
+        "actual_angle": 105.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 109",
+        "tracker_no": "Tracker 109",
+        "target_angle": 105.6,
+        "actual_angle": 105.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 113",
+        "tracker_no": "Tracker 113",
+        "target_angle": 105.6,
+        "actual_angle": 105.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 117",
+        "tracker_no": "Tracker 117",
+        "target_angle": 105.6,
+        "actual_angle": 105.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 121",
+        "tracker_no": "Tracker 121",
+        "target_angle": 105.6,
+        "actual_angle": 105.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 106",
+        "tracker_no": "Tracker 106",
+        "target_angle": 105.6,
+        "actual_angle": 105.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 110",
+        "tracker_no": "Tracker 110",
+        "target_angle": 105.6,
+        "actual_angle": 105.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 114",
+        "tracker_no": "Tracker 114",
+        "target_angle": 105.6,
+        "actual_angle": 105.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 118",
+        "tracker_no": "Tracker 118",
+        "target_angle": 105.6,
+        "actual_angle": 105.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 122",
+        "tracker_no": "Tracker 122",
+        "target_angle": 105.6,
+        "actual_angle": 105.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 107",
+        "tracker_no": "Tracker 107",
+        "target_angle": 105.6,
+        "actual_angle": 105.0,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 111",
+        "tracker_no": "Tracker 111",
+        "target_angle": 105.6,
+        "actual_angle": 105.0,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 115",
+        "tracker_no": "Tracker 115",
+        "target_angle": 105.6,
+        "actual_angle": 105.0,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 119",
+        "tracker_no": "Tracker 119",
+        "target_angle": 105.6,
+        "actual_angle": 105.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 108",
+        "tracker_no": "Tracker 108",
+        "target_angle": 105.6,
+        "actual_angle": 105.0,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 112",
+        "tracker_no": "Tracker 112",
+        "target_angle": 105.6,
+        "actual_angle": 105.1,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 116",
+        "tracker_no": "Tracker 116",
+        "target_angle": 105.6,
+        "actual_angle": 105.0,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 120",
+        "tracker_no": "Tracker 120",
+        "target_angle": 105.6,
+        "actual_angle": 105.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_02"
+    },
+    {
+        "tcu": "TCU 01",
+        "tracker_no": "Tracker 001",
+        "target_angle": 112.5,
+        "actual_angle": 112.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 05",
+        "tracker_no": "Tracker 005",
+        "target_angle": 112.5,
+        "actual_angle": 112.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 09",
+        "tracker_no": "Tracker 009",
+        "target_angle": 112.5,
+        "actual_angle": 112.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 13",
+        "tracker_no": "Tracker 013",
+        "target_angle": 112.5,
+        "actual_angle": 112.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 17",
+        "tracker_no": "Tracker 017",
+        "target_angle": 112.4,
+        "actual_angle": 112.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 21",
+        "tracker_no": "Tracker 021",
+        "target_angle": 112.4,
+        "actual_angle": 114.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 25",
+        "tracker_no": "Tracker 025",
+        "target_angle": 112.4,
+        "actual_angle": 113.8,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 29",
+        "tracker_no": "Tracker 029",
+        "target_angle": 112.4,
+        "actual_angle": 114.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 33",
+        "tracker_no": "Tracker 033",
+        "target_angle": 112.4,
+        "actual_angle": 112.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 37",
+        "tracker_no": "Tracker 037",
+        "target_angle": 112.3,
+        "actual_angle": 111.9,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 41",
+        "tracker_no": "Tracker 041",
+        "target_angle": 112.3,
+        "actual_angle": 111.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 45",
+        "tracker_no": "Tracker 045",
+        "target_angle": 112.3,
+        "actual_angle": 111.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 49",
+        "tracker_no": "Tracker 049",
+        "target_angle": 112.2,
+        "actual_angle": 111.1,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 53",
+        "tracker_no": "Tracker 053",
+        "target_angle": 112.2,
+        "actual_angle": 111.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 02",
+        "tracker_no": "Tracker 002",
+        "target_angle": 112.5,
+        "actual_angle": 112.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 06",
+        "tracker_no": "Tracker 006",
+        "target_angle": 112.5,
+        "actual_angle": 112.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 10",
+        "tracker_no": "Tracker 010",
+        "target_angle": 112.5,
+        "actual_angle": 112.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 14",
+        "tracker_no": "Tracker 014",
+        "target_angle": 112.5,
+        "actual_angle": 112.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 18",
+        "tracker_no": "Tracker 018",
+        "target_angle": 112.4,
+        "actual_angle": 112.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 22",
+        "tracker_no": "Tracker 022",
+        "target_angle": 112.4,
+        "actual_angle": 112.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 26",
+        "tracker_no": "Tracker 026",
+        "target_angle": 112.4,
+        "actual_angle": 112.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 30",
+        "tracker_no": "Tracker 030",
+        "target_angle": 112.4,
+        "actual_angle": 112.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 34",
+        "tracker_no": "Tracker 034",
+        "target_angle": 112.3,
+        "actual_angle": 112.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 38",
+        "tracker_no": "Tracker 038",
+        "target_angle": 112.3,
+        "actual_angle": 112.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 42",
+        "tracker_no": "Tracker 042",
+        "target_angle": 112.3,
+        "actual_angle": 112.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 46",
+        "tracker_no": "Tracker 046",
+        "target_angle": 112.3,
+        "actual_angle": 112.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 50",
+        "tracker_no": "Tracker 050",
+        "target_angle": 112.2,
+        "actual_angle": 112.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 54",
+        "tracker_no": "Tracker 054",
+        "target_angle": 112.6,
+        "actual_angle": 112.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 03",
+        "tracker_no": "Tracker 003",
+        "target_angle": 112.5,
+        "actual_angle": 113.9,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 07",
+        "tracker_no": "Tracker 007",
+        "target_angle": 112.5,
+        "actual_angle": 114.0,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 11",
+        "tracker_no": "Tracker 011",
+        "target_angle": 112.5,
+        "actual_angle": 114.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 15",
+        "tracker_no": "Tracker 015",
+        "target_angle": 112.5,
+        "actual_angle": 114.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 19",
+        "tracker_no": "Tracker 019",
+        "target_angle": 112.4,
+        "actual_angle": 114.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 23",
+        "tracker_no": "Tracker 023",
+        "target_angle": 112.4,
+        "actual_angle": 114.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 27",
+        "tracker_no": "Tracker 027",
+        "target_angle": 112.4,
+        "actual_angle": 112.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 31",
+        "tracker_no": "Tracker 031",
+        "target_angle": 112.4,
+        "actual_angle": 114.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 35",
+        "tracker_no": "Tracker 035",
+        "target_angle": 112.3,
+        "actual_angle": 113.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 39",
+        "tracker_no": "Tracker 039",
+        "target_angle": 112.3,
+        "actual_angle": 114.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 43",
+        "tracker_no": "Tracker 043",
+        "target_angle": 112.3,
+        "actual_angle": 111.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 47",
+        "tracker_no": "Tracker 047",
+        "target_angle": 112.3,
+        "actual_angle": 111.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 51",
+        "tracker_no": "Tracker 051",
+        "target_angle": 112.2,
+        "actual_angle": 113.0,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 55",
+        "tracker_no": "Tracker 055",
+        "target_angle": 112.6,
+        "actual_angle": 112.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 04",
+        "tracker_no": "Tracker 004",
+        "target_angle": 112.5,
+        "actual_angle": 112.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 08",
+        "tracker_no": "Tracker 008",
+        "target_angle": 112.5,
+        "actual_angle": 112.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 12",
+        "tracker_no": "Tracker 012",
+        "target_angle": 112.5,
+        "actual_angle": 112.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 16",
+        "tracker_no": "Tracker 016",
+        "target_angle": 112.5,
+        "actual_angle": 112.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 20",
+        "tracker_no": "Tracker 020",
+        "target_angle": 112.4,
+        "actual_angle": 112.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 24",
+        "tracker_no": "Tracker 024",
+        "target_angle": 112.4,
+        "actual_angle": 112.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 28",
+        "tracker_no": "Tracker 028",
+        "target_angle": 112.4,
+        "actual_angle": 112.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 32",
+        "tracker_no": "Tracker 032",
+        "target_angle": 112.4,
+        "actual_angle": 112.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 36",
+        "tracker_no": "Tracker 036",
+        "target_angle": 112.3,
+        "actual_angle": 112.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 40",
+        "tracker_no": "Tracker 040",
+        "target_angle": 112.3,
+        "actual_angle": 112.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 44",
+        "tracker_no": "Tracker 044",
+        "target_angle": 112.3,
+        "actual_angle": 112.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 48",
+        "tracker_no": "Tracker 048",
+        "target_angle": 112.2,
+        "actual_angle": 112.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 52",
+        "tracker_no": "Tracker 052",
+        "target_angle": 112.2,
+        "actual_angle": 112.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 56",
+        "tracker_no": "Tracker 056",
+        "target_angle": 112.6,
+        "actual_angle": 112.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 57",
+        "tracker_no": "Tracker 057",
+        "target_angle": 112.2,
+        "actual_angle": 112.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 61",
+        "tracker_no": "Tracker 061",
+        "target_angle": 112.6,
+        "actual_angle": 112.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 65",
+        "tracker_no": "Tracker 065",
+        "target_angle": 111.0,
+        "actual_angle": 111.0,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 69",
+        "tracker_no": "Tracker 069",
+        "target_angle": 110.9,
+        "actual_angle": 110.9,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 73",
+        "tracker_no": "Tracker 073",
+        "target_angle": 110.9,
+        "actual_angle": 110.9,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 77",
+        "tracker_no": "Tracker 077",
+        "target_angle": 110.9,
+        "actual_angle": 110.9,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 81",
+        "tracker_no": "Tracker 081",
+        "target_angle": 110.9,
+        "actual_angle": 110.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 85",
+        "tracker_no": "Tracker 085",
+        "target_angle": 110.9,
+        "actual_angle": 110.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 89",
+        "tracker_no": "Tracker 089",
+        "target_angle": 110.9,
+        "actual_angle": 110.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 93",
+        "tracker_no": "Tracker 093",
+        "target_angle": 110.8,
+        "actual_angle": 110.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 97",
+        "tracker_no": "Tracker 097",
+        "target_angle": 110.8,
+        "actual_angle": 110.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 101",
+        "tracker_no": "Tracker 101",
+        "target_angle": 111.1,
+        "actual_angle": 111.1,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 58",
+        "tracker_no": "Tracker 058",
+        "target_angle": 112.2,
+        "actual_angle": 111.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 62",
+        "tracker_no": "Tracker 062",
+        "target_angle": 112.6,
+        "actual_angle": 114.1,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 66",
+        "tracker_no": "Tracker 066",
+        "target_angle": 111.0,
+        "actual_angle": 110.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 70",
+        "tracker_no": "Tracker 070",
+        "target_angle": 110.9,
+        "actual_angle": 110.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 74",
+        "tracker_no": "Tracker 074",
+        "target_angle": 110.9,
+        "actual_angle": 110.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 78",
+        "tracker_no": "Tracker 078",
+        "target_angle": 110.9,
+        "actual_angle": 110.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 82",
+        "tracker_no": "Tracker 082",
+        "target_angle": 110.9,
+        "actual_angle": 110.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 86",
+        "tracker_no": "Tracker 086",
+        "target_angle": 110.9,
+        "actual_angle": 110.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 90",
+        "tracker_no": "Tracker 090",
+        "target_angle": 110.9,
+        "actual_angle": 110.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 94",
+        "tracker_no": "Tracker 094",
+        "target_angle": 110.8,
+        "actual_angle": 110.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 98",
+        "tracker_no": "Tracker 098",
+        "target_angle": 110.8,
+        "actual_angle": 110.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 102",
+        "tracker_no": "Tracker 102",
+        "target_angle": 111.1,
+        "actual_angle": 111.1,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 59",
+        "tracker_no": "Tracker 059",
+        "target_angle": 112.2,
+        "actual_angle": 112.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 63",
+        "tracker_no": "Tracker 063",
+        "target_angle": 112.6,
+        "actual_angle": 114.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 67",
+        "tracker_no": "Tracker 067",
+        "target_angle": 111.0,
+        "actual_angle": 110.2,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 71",
+        "tracker_no": "Tracker 071",
+        "target_angle": 110.9,
+        "actual_angle": 110.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 75",
+        "tracker_no": "Tracker 075",
+        "target_angle": 110.9,
+        "actual_angle": 110.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 79",
+        "tracker_no": "Tracker 079",
+        "target_angle": 110.9,
+        "actual_angle": 110.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 83",
+        "tracker_no": "Tracker 083",
+        "target_angle": 110.9,
+        "actual_angle": 110.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 87",
+        "tracker_no": "Tracker 087",
+        "target_angle": 110.9,
+        "actual_angle": 110.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 91",
+        "tracker_no": "Tracker 091",
+        "target_angle": 110.9,
+        "actual_angle": 110.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 95",
+        "tracker_no": "Tracker 095",
+        "target_angle": 110.8,
+        "actual_angle": 110.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 99",
+        "tracker_no": "Tracker 099",
+        "target_angle": 111.1,
+        "actual_angle": 110.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 103",
+        "tracker_no": "Tracker 103",
+        "target_angle": 111.1,
+        "actual_angle": 111.1,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 60",
+        "tracker_no": "Tracker 060",
+        "target_angle": 112.6,
+        "actual_angle": 114.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 64",
+        "tracker_no": "Tracker 064",
+        "target_angle": 112.5,
+        "actual_angle": 114.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 68",
+        "tracker_no": "Tracker 068",
+        "target_angle": 110.9,
+        "actual_angle": 110.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 72",
+        "tracker_no": "Tracker 072",
+        "target_angle": 110.9,
+        "actual_angle": 110.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 76",
+        "tracker_no": "Tracker 076",
+        "target_angle": 110.9,
+        "actual_angle": 110.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 80",
+        "tracker_no": "Tracker 080",
+        "target_angle": 110.9,
+        "actual_angle": 110.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 84",
+        "tracker_no": "Tracker 084",
+        "target_angle": 110.9,
+        "actual_angle": 110.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 88",
+        "tracker_no": "Tracker 088",
+        "target_angle": 110.9,
+        "actual_angle": 110.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 92",
+        "tracker_no": "Tracker 092",
+        "target_angle": 110.8,
+        "actual_angle": 110.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 96",
+        "tracker_no": "Tracker 096",
+        "target_angle": 110.8,
+        "actual_angle": 110.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 100",
+        "tracker_no": "Tracker 100",
+        "target_angle": 111.1,
+        "actual_angle": 110.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 104",
+        "tracker_no": "Tracker 104",
+        "target_angle": 111.1,
+        "actual_angle": 111.1,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 105",
+        "tracker_no": "Tracker 105",
+        "target_angle": 110.8,
+        "actual_angle": 110.8,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 109",
+        "tracker_no": "Tracker 109",
+        "target_angle": 110.8,
+        "actual_angle": 110.8,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 113",
+        "tracker_no": "Tracker 113",
+        "target_angle": 110.8,
+        "actual_angle": 110.8,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 117",
+        "tracker_no": "Tracker 117",
+        "target_angle": 111.0,
+        "actual_angle": 111.0,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 121",
+        "tracker_no": "Tracker 121",
+        "target_angle": 111.0,
+        "actual_angle": 111.0,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 125",
+        "tracker_no": "Tracker 125",
+        "target_angle": 111.0,
+        "actual_angle": 111.0,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 106",
+        "tracker_no": "Tracker 106",
+        "target_angle": 110.8,
+        "actual_angle": 110.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 110",
+        "tracker_no": "Tracker 110",
+        "target_angle": 110.8,
+        "actual_angle": 110.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 114",
+        "tracker_no": "Tracker 114",
+        "target_angle": 110.8,
+        "actual_angle": 110.5,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 118",
+        "tracker_no": "Tracker 118",
+        "target_angle": 111.0,
+        "actual_angle": 110.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 122",
+        "tracker_no": "Tracker 122",
+        "target_angle": 111.0,
+        "actual_angle": 110.3,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 126",
+        "tracker_no": "Tracker 126",
+        "target_angle": 111.0,
+        "actual_angle": 111.0,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 107",
+        "tracker_no": "Tracker 107",
+        "target_angle": 110.8,
+        "actual_angle": 110.8,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 111",
+        "tracker_no": "Tracker 111",
+        "target_angle": 110.8,
+        "actual_angle": 110.8,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 115",
+        "tracker_no": "Tracker 115",
+        "target_angle": 110.8,
+        "actual_angle": 110.8,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 119",
+        "tracker_no": "Tracker 119",
+        "target_angle": 111.0,
+        "actual_angle": 111.0,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 123",
+        "tracker_no": "Tracker 123",
+        "target_angle": 111.0,
+        "actual_angle": 111.0,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 127",
+        "tracker_no": "Tracker 127",
+        "target_angle": 111.0,
+        "actual_angle": 111.0,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 108",
+        "tracker_no": "Tracker 108",
+        "target_angle": 110.8,
+        "actual_angle": 110.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 112",
+        "tracker_no": "Tracker 112",
+        "target_angle": 110.8,
+        "actual_angle": 110.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 116",
+        "tracker_no": "Tracker 116",
+        "target_angle": 111.0,
+        "actual_angle": 110.6,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 120",
+        "tracker_no": "Tracker 120",
+        "target_angle": 111.0,
+        "actual_angle": 110.7,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    },
+    {
+        "tcu": "TCU 124",
+        "tracker_no": "Tracker 124",
+        "target_angle": 111.0,
+        "actual_angle": 110.4,
+        "alarm": "green",
+        "mode": "AM",
+        "ncu": "NCU_03"
+    }
+]

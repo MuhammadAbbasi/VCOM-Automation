@@ -42,7 +42,7 @@ from playwright.sync_api import sync_playwright
 # ---------------------------------------------------------------------------
 ROOT = Path(__file__).resolve().parent
 ERRORS_DIR = ROOT / "errors"
-LOG_PATH = ROOT / "logs" / "monitoring.log"
+LOG_PATH = ROOT / "monitoring.log"
 
 logging.basicConfig(
     level=logging.INFO,

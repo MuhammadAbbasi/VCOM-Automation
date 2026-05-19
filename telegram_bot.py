@@ -51,7 +51,7 @@ logging.basicConfig(
     format="%(asctime)s [BOT] %(levelname)s %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        RotatingFileHandler(ROOT / "logs" / "telegram_bot.log", maxBytes=1_000_000_000, backupCount=3, encoding="utf-8"),
+        RotatingFileHandler(ROOT / "telegram_bot.log", maxBytes=1_000_000_000, backupCount=3, encoding="utf-8"),
     ],
 )
 logger = logging.getLogger("telegram_bot")

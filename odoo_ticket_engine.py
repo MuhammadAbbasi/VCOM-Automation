@@ -37,7 +37,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [TICKET] %(levelname)s %(message)s",
     handlers=[
-        logging.FileHandler(ROOT / "logs" / "odoo_tickets.log", encoding="utf-8"),
+        logging.FileHandler(ROOT / "odoo_tickets.log", encoding="utf-8"),
         logging.StreamHandler(sys.stdout),
     ],
 )
