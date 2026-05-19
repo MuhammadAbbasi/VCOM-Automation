@@ -135,7 +135,7 @@ def load_config() -> dict:
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
 
-LOG_PATH = ROOT / "watchdog.log"
+LOG_PATH = ROOT / "logs" / "watchdog.log"
 
 # Avoid basicConfig if we're imported by dashboard/uvicorn to prevent file lock issues on Windows
 is_watchdog_proc = (__name__ == "__main__" or (len(sys.argv) > 0 and "processor_watchdog" in sys.argv[0]))

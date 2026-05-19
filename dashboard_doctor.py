@@ -11,22 +11,22 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
+ROOT = Path(__file__).resolve().parent
+
+# ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
     handlers=[
-        logging.FileHandler("dashboard_doctor.log", encoding="utf-8"),
+        logging.FileHandler(ROOT / "logs" / "dashboard_doctor.log", encoding="utf-8"),
         logging.StreamHandler()
     ]
 )
 logger = logging.getLogger("DashboardDoctor")
-
-# ---------------------------------------------------------------------------
-# Paths
-# ---------------------------------------------------------------------------
-ROOT = Path(__file__).resolve().parent
 DB_PATH = ROOT / "db" / "scada_data.db"
 LOGS_DB_PATH = ROOT / "db" / "scada_logs.db"
 LINK_STATUS_PATH = ROOT / "db" / "link_status.json"
