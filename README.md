@@ -1,4 +1,4 @@
-# 🌞 Mazara VCOM Automation — AI-Powered SCADA Monitoring Pipeline
+# 🌞 Mazara VCOM Automation - AI-Powered SCADA Monitoring Pipeline
 
 [![Local AI: Qwen 3.5 9B](https://img.shields.io/badge/Local%20AI-Qwen%203.5%209B-blueviolet)](https://ollama.com)
 [![Status: Production](https://img.shields.io/badge/Status-Production--Ready-success)](#)
