@@ -90,9 +90,10 @@ def export_metric(df: pd.DataFrame, prefix: str) -> None:
         logger.info(f"[OK] Saved {len(df)} rows -> DB ({prefix}, {date_str})")
 
         # Map the naming convention for extraction status tracking
-        key_name = prefix.replace(" ", "_") if prefix in ["PR inverter", "Potenza AC", "Corrente DC", "Resistenza di isolamento"] else prefix
+        key_name = prefix.replace(" ", "_") if prefix in ["PR inverter", "Potenza AC", "Corrente DC", "Resistenza di isolamento", "Potenza attiva", "Irraggiamento", "Temperatura"] else prefix
         if prefix == "Resistenza di isolamento": key_name = "Resistenza_Isolamento"
         if prefix == "PR inverter": key_name = "PR"
+        if prefix == "Potenza attiva": key_name = "Potenza_Attiva"
 
         save_extraction_status(date_str, key_name, "success")
     except Exception as e:
