@@ -9,4 +9,6 @@ jinja2
 python-multipart
 pyngrok
 requests
+paho-mqtt
+amqtt
 # sqlite3 — included in Python stdlib, no install needed

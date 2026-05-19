@@ -1,20 +1,155 @@
-version: '3.8'
+# ============================================================================
+# VCOM Automation System - Docker Compose Configuration
+# ============================================================================
+# Multi-service orchestration for SCADA monitoring, LLM agents, and dashboards
+#
+# Environment Setup:
+#   1. Copy .env.example to .env and configure your values
+#   2. Ensure host directories exist: extracted_data/, logs/, db/
+#   3. Mount config.json as a volume (do NOT commit to git)
+# ============================================================================
 
 services:
-  mazara-monitor:
-    build: .
-    container_name: mazara_vcom_automation
+  # Main VCOM Automation Container
+  # Runs: Orchestrator, Dashboard, Watchdog, Extraction, Telegram, Broker, Tracker, Doctor, Tickets
+  vcom-automation:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vcom_automation_system
+    hostname: vcom-automation
     restart: unless-stopped
+
+    # Network configuration
     ports:
-      - "8080:8080"
-    volumes:
-      - ./extracted_data:/app/extracted_data
-      - ./user_settings.json:/app/user_settings.json
-      - ./config.json:/app/config.json
-      - ./errors:/app/errors
-      - ./monitoring.log:/app/monitoring.log
-      - ./watchdog.log:/app/watchdog.log
+      - "${DASHBOARD_PORT:-8080}:8080"
+
+    # Environment variables - injected at runtime from .env file
     environment:
-      - VCOM_HEADLESS=false
-      - PYTHONUNBUFFERED=1
-    # If using network/local storage for persistence, ensure these folders are created on the host
+      # Core Settings
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      TZ: UTC
+      VCOM_HEADLESS: "${VCOM_HEADLESS:-false}"
+
+      # SCADA/VCOM System Settings
+      USERNAME: "${VCOM_USERNAME}"
+      PASSWORD: "${VCOM_PASSWORD}"
+      SYSTEM_URL: "${VCOM_SYSTEM_URL}"
+      NGROK_AUTH_TOKEN: "${NGROK_AUTH_TOKEN}"
+      DASHBOARD_USER: "${DASHBOARD_USER}"
+      DASHBOARD_PASS: "${DASHBOARD_PASS}"
+
+      # LLM Configuration (supports local Ollama, OpenAI, or Anthropic)
+      OLLAMA_URL: "${OLLAMA_URL:-http://localhost:11434/api/generate}"
+      OLLAMA_MODEL: "${OLLAMA_MODEL:-qwen2.5:7b}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
+      LLM_DEBUG_MODE: "${LLM_DEBUG_MODE:-false}"
+
+      # Telegram Bot Configuration
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
+      TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID}"
+
+      # Odoo/Ticket System Configuration
+      ODOO_URL: "${ODOO_URL}"
+      ODOO_DATABASE: "${ODOO_DATABASE}"
+      ODOO_USERNAME: "${ODOO_USERNAME}"
+      ODOO_PASSWORD: "${ODOO_PASSWORD}"
+      ODOO_API_KEY: "${ODOO_API_KEY}"
+
+    # Volume mounts for persistent data and configuration
+    volumes:
+      # Essential configuration (should exist on host before running)
+      - ./config.json:/app/config.json:ro
+      - ./user_settings.json:/app/user_settings.json:ro
+
+      # Persistent data directories (created by container if needed)
+      - vcom_extracted_data:/app/extracted_data
+      - vcom_logs:/app/logs
+      - vcom_database:/app/db
+      - vcom_errors:/app/errors
+      - vcom_artifacts:/app/artifacts
+
+    # Resource constraints (adjust based on your system)
+    deploy:
+      resources:
+        limits:
+          cpus: "${CONTAINER_CPU_LIMIT:-4}"
+          memory: "${CONTAINER_MEMORY_LIMIT:-4G}"
+        reservations:
+          cpus: "${CONTAINER_CPU_RESERVE:-2}"
+          memory: "${CONTAINER_MEMORY_RESERVE:-2G}"
+
+    # Health check - monitors dashboard availability
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/", "--max-time", "5"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"
+        labels: "service=vcom-automation"
+
+    # Signal handling for graceful shutdown
+    stop_grace_period: 30s
+    stop_signal: SIGTERM
+
+# ============================================================================
+# DOCKER VOLUMES - Persistent Data Storage
+# ============================================================================
+# These volumes persist data between container restarts
+# Use named volumes for better portability and management
+
+volumes:
+  vcom_extracted_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${EXTRACTED_DATA_HOST_PATH:-./extracted_data}
+
+  vcom_logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${LOGS_HOST_PATH:-./logs}
+
+  vcom_database:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATABASE_HOST_PATH:-./db}
+
+  vcom_errors:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${ERRORS_HOST_PATH:-./errors}
+
+  vcom_artifacts:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${ARTIFACTS_HOST_PATH:-./artifacts}
+
+# ============================================================================
+# NETWORK CONFIGURATION
+# ============================================================================
+# Default bridge network created automatically
+# Services can communicate using container names as hostnames
+
+networks:
+  default:
+    name: vcom-network
+    driver: bridge
