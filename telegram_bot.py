@@ -100,13 +100,13 @@ _FAULT_MENU = (
     "9️⃣ TRACKER OFFLINE\n"
     "🔟 GRID LIMIT CHANGE\n"
     "1️⃣1️⃣ CUSTOM\n\n"
-    "Rispondi con 1–11 oppure /cancel"
+    "Rispondi con 1-11 oppure /cancel"
 )
 
 _PRIO_MENU = (
     "⭐ *Priorità:*\n"
     "1️⃣ Bassa   2️⃣ Normale   3️⃣ Alta   4️⃣ Urgente\n\n"
-    "Rispondi con 1–4 oppure `ok` per usare il default"
+    "Rispondi con 1-4 oppure `ok` per usare il default"
 )
 
 _INTV_MENU = (
@@ -118,7 +118,7 @@ _INTV_MENU = (
     "5️⃣ Sfalcio / Pulizia\n"
     "6️⃣ Collaudo\n"
     "7️⃣ Altro\n\n"
-    "Rispondi con 1–7 oppure `ok` per usare il default"
+    "Rispondi con 1-7 oppure `ok` per usare il default"
 )
 
 # ticket_sessions[chat_id] = {"step": str, "data": dict}
@@ -194,7 +194,7 @@ def _handle_ticket_step(bot, chat_id: int, text: str) -> bool:
     # ── Step: fault_type ────────────────────────────────────────
     if step == "fault_type":
         if t not in FAULT_TYPES_TG:
-            bot.send_message(chat_id, "⚠️ Scelta non valida. Rispondi con 1–11 oppure /cancel")
+            bot.send_message(chat_id, "⚠️ Scelta non valida. Rispondi con 1-11 oppure /cancel")
             return True
         label, anom_tipo, intv_tipo, intv_prio, anom_prio = FAULT_TYPES_TG[t]
         data.update(fault_key=t, anom_tipo=anom_tipo, intv_tipo=intv_tipo,
@@ -242,7 +242,7 @@ def _handle_ticket_step(bot, chat_id: int, text: str) -> bool:
     if step == "priority":
         if t.lower() != "ok":
             if t not in PRIORITIES_TG:
-                bot.send_message(chat_id, "⚠️ Rispondi con 1–4 oppure `ok`.")
+                bot.send_message(chat_id, "⚠️ Rispondi con 1-4 oppure `ok`.")
                 return True
             data["intv_prio"] = PRIORITIES_TG[t]
             # Map 'normale' to 'media' for fv.anomalia model compatibility
@@ -258,7 +258,7 @@ def _handle_ticket_step(bot, chat_id: int, text: str) -> bool:
     if step == "intv_type":
         if t.lower() != "ok":
             if t not in INTERVENTION_TYPES_TG:
-                bot.send_message(chat_id, "⚠️ Rispondi con 1–7 oppure `ok`.")
+                bot.send_message(chat_id, "⚠️ Rispondi con 1-7 oppure `ok`.")
                 return True
             data["intv_tipo"] = INTERVENTION_TYPES_TG[t]
         session["step"] = "description"
