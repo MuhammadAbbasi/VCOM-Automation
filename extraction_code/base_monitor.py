@@ -94,7 +94,7 @@ def export_metric(df: pd.DataFrame, prefix: str) -> None:
         if prefix == "Resistenza di isolamento": key_name = "Resistenza_Isolamento"
         if prefix == "PR inverter": key_name = "PR"
         if prefix == "Potenza attiva": key_name = "Potenza_Attiva"
-
+        logger.info(f"[STATUS] Saving extraction status: prefix='{prefix}' -> key_name='{key_name}'")
         save_extraction_status(date_str, key_name, "success")
     except Exception as e:
         logger.error(f"[DB] Failed to save {prefix} to database: {e}")
