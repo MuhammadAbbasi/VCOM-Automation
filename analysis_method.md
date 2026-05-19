@@ -22,7 +22,7 @@ This document defines the **data structure, analysis workflow, and forensic rule
 
 - **Time resolution**: 1-minute intervals (06:00 → 19:00 typical operation window)
 - **Number of inverters**: 36 (TX1-01 → TX1-12, TX2-01 → TX2-12, TX3-01 → TX3-12)
-- **Number of strings**: 808 (ranging 21–23 per inverter, unevenly distributed)
+- **Number of strings**: 808 (ranging 21-23 per inverter, unevenly distributed)
 - **Dynamic Daylight**: Production START/STOP times are detected dynamically from the AC power stream (searching for non-zero production offsets from theoretical sunrise/sunset).
 - **Italian format**: decimal comma (`,`), thousands separator (`.`) → must convert to float.
 
@@ -125,8 +125,8 @@ For **each row (timestep)** and **each inverter**:
 
 ### Rule 1: Low Performance Ratio (Critical)
 ```
-Condition:  PR < 85% AND 09:00–17:00 (daylight peak)
-Threshold:  PR < 0.85 (or < 85 if already 0–100 scale)
+Condition:  PR < 85% AND 09:00-17:00 (daylight peak)
+Threshold:  PR < 0.85 (or < 85 if already 0-100 scale)
 Severity:   Critical
 Detail:     "PR: {pr_norm:.1f}%"
 Rationale:  Below-85% during peak sun indicates soiling, shading, or electrical fault
@@ -163,7 +163,7 @@ Calculation: site_median = median(all 36 inverters' AC at this timestep)
 
 ### Rule 5: Communication Loss (High)
 ```
-Condition:  AC power = NaN (no data) AND 07:00–19:00 (operation window)
+Condition:  AC power = NaN (no data) AND 07:00-19:00 (operation window)
 Threshold:  pd.isna(ac_val)
 Severity:   High
 Detail:     "No data stream"
@@ -172,7 +172,7 @@ Rationale:  Missing telemetry during operating hours = SCADA comms failure
 
 ### Rule 6: Inverter Trip (Critical)
 ```
-Condition:  AC power = 0 W AND Site_Median > 2000 W AND 07:00–19:00
+Condition:  AC power = 0 W AND Site_Median > 2000 W AND 07:00-19:00
 Threshold:  ac_val == 0.0 (exactly zero, not NaN)
 Severity:   Critical
 Detail:     "Zero production detected"
@@ -333,8 +333,8 @@ dashboard_data_{YYYY-MM-DD}.json
 
 ### Night Hours & Daylight Windows
 - Daylight windows vary by rule:
-  - **Peak sun (09:00–17:00)**: Rules 1 (PR), 4 (Deviation)
-  - **Operation window (07:00–19:00)**: Rules 5 (Comms), 6 (Trip)
+  - **Peak sun (09:00-17:00)**: Rules 1 (PR), 4 (Deviation)
+  - **Operation window (07:00-19:00)**: Rules 5 (Comms), 6 (Trip)
   - **24/7**: Rule 2 (Temperature), Rule 3 (DC Strings)
 - Rationale: Night hours have zero expected production → false alarms avoided
 
@@ -344,9 +344,9 @@ dashboard_data_{YYYY-MM-DD}.json
 - Reason: Different MPPT curve, separate performance baseline
 
 ### PR Scale Normalization
-- VCOM may report PR as 0–1 (e.g., 0.87) or 0–100 (e.g., 87%)
+- VCOM may report PR as 0-1 (e.g., 0.87) or 0-100 (e.g., 87%)
 - Detected: if PR ≤ 1.0 → multiply by 100
-- All rules use 0–100 scale internally
+- All rules use 0-100 scale internally
 
 ### DC Current as String Matrix
 - **Not time-merged** due to width (808 columns)

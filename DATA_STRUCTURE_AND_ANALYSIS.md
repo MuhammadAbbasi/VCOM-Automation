@@ -21,7 +21,7 @@ The VCOM automation system extracts 6 metrics every 10 minutes from the Mazara d
 |--------|------|-------------|
 | `Timestamp Fetch` | string | Extraction time (HH:MM:SS) |
 | `Inverter` | string | Inverter ID (e.g., "INV TX1-01") |
-| `PR` | float | Performance ratio (0.0–1.0 or 0–100 scale) |
+| `PR` | float | Performance ratio (0.0-1.0 or 0-100 scale) |
 
 **Sample rows**:
 ```
@@ -48,7 +48,7 @@ Pivot to wide (Inverter → columns) to match other metrics for rule evaluation.
 | Column | Type | Description |
 |--------|------|-------------|
 | `Timestamp Fetch` | string | Latest extraction time for this row |
-| `Ora` | float | Time in hours (0.0–23.99, decimal) |
+| `Ora` | float | Time in hours (0.0-23.99, decimal) |
 | `Potenza AC (INV TX1-01) [W]` | float | AC output power, Watts |
 | ... | float | (35 more inverter columns) |
 | `Potenza AC (INV TX3-12) [W]` | float | Last inverter |
@@ -62,9 +62,9 @@ Timestamp Fetch | Ora | Potenza AC (INV TX1-01) [W] | ... | Potenza AC (INV TX3-
 
 **Data characteristics**:
 - Collected every 1 minute
-- Ranges 0–50,000 W per inverter
-- Off-hours (00:00–06:59, 19:00–23:59): typically 0.0 W
-- Peak hours (09:00–17:00): 2000–15,000 W per inverter
+- Ranges 0-50,000 W per inverter
+- Off-hours (00:00-06:59, 19:00-23:59): typically 0.0 W
+- Peak hours (09:00-17:00): 2000-15,000 W per inverter
 - Missing data: NaN (pandas reads as float NaN)
 
 **Analysis use**:
@@ -92,7 +92,7 @@ Timestamp Fetch | Ora | Potenza AC (INV TX1-01) [W] | ... | Potenza AC (INV TX3-
 **Data characteristics**:
 - 12 MPPT trackers per inverter
 - Off-hours: 0.0 A
-- Peak hours: 5–30 A per MPPT
+- Peak hours: 5-30 A per MPPT
 - String failure detection: if any MPPT < 0.2 A while AC > 500 W
 
 **Analysis use**:
@@ -116,9 +116,9 @@ Timestamp Fetch | Ora | Potenza AC (INV TX1-01) [W] | ... | Potenza AC (INV TX3-
 | ... | float | (35 more inverters) |
 
 **Data characteristics**:
-- Ranges 15–50 °C typically
+- Ranges 15-50 °C typically
 - Correlates with solar irradiance
-- Sample: 23.3°C, 24.4°C, 25.8°C (morning) → peaks 35–45°C at midday
+- Sample: 23.3°C, 24.4°C, 25.8°C (morning) → peaks 35-45°C at midday
 
 **Analysis use**:
 - Rule 2: High Temperature warning (>40°C) and critical (>45°C)
@@ -140,7 +140,7 @@ Timestamp Fetch | Ora | Potenza AC (INV TX1-01) [W] | ... | Potenza AC (INV TX3-
 | ... | float | (35 more inverters) |
 
 **Data characteristics**:
-- Normal range: 50–100+ kOhm
+- Normal range: 50-100+ kOhm
 - Sample values: 67, 63, 51, 76, 94 kOhm
 - Used for inverter health monitoring (low values = insulation fault risk)
 
@@ -177,7 +177,7 @@ Timestamp Fetch | Ora | Potenza AC (INV TX1-01) [W] | ... | Potenza AC (INV TX3-
 
 **Data characteristics**:
 - Off-hours: 0.0 W/m²
-- Peak hours: 400–1000 W/m²
+- Peak hours: 400-1000 W/m²
 - Used for performance normalization
 
 **Analysis use**:
@@ -230,12 +230,12 @@ Each rule operates on a specific metric:
 
 | Rule | Metric | Condition | Severity |
 |------|--------|-----------|----------|
-| 1. Low PR | PR | < 85% during 09:00–17:00 | Critical |
+| 1. Low PR | PR | < 85% during 09:00-17:00 | Critical |
 | 2. High Temp | Temperatura | > 40°C (warning), > 45°C (critical) | Warning/Critical |
 | 3. DC String Failure | Corrente DC | Any MPPT < 0.2 A while AC > 500 W | Critical |
-| 4. AC Power Deviation | Potenza AC | Deviation > 3% from median when site > 5 kW, 09:00–17:00 | Critical |
-| 5. Comm Loss | Potenza AC | NaN during 07:00–19:00 | High |
-| 6. Inverter Trip | Potenza AC | 0 W while site > 2 kW, 07:00–19:00 | Critical |
+| 4. AC Power Deviation | Potenza AC | Deviation > 3% from median when site > 5 kW, 09:00-17:00 | Critical |
+| 5. Comm Loss | Potenza AC | NaN during 07:00-19:00 | High |
+| 6. Inverter Trip | Potenza AC | 0 W while site > 2 kW, 07:00-19:00 | Critical |
 
 ### Step 4: Deduplicate Anomalies
 
@@ -261,27 +261,27 @@ GREY   (#6b7280): No data / outside evaluation window
 
 **PR LED**:
 - Green: ≥ 85%
-- Yellow: 75–84%
+- Yellow: 75-84%
 - Red: < 75%
-- Grey: NaN or outside 09:00–17:00
+- Grey: NaN or outside 09:00-17:00
 
 **Temperature LED**:
 - Green: ≤ 40°C
-- Yellow: 40–45°C
+- Yellow: 40-45°C
 - Red: > 45°C
 - Grey: NaN
 
 **DC Current LED**:
 - Green: ≥ 85% of site median DC
-- Yellow: 50–85% of median
+- Yellow: 50-85% of median
 - Red: < 50% of median
 - Grey: NaN or outside daylight
 
 **AC Power LED**:
 - Green: ≥ 97% of site median AC
-- Yellow: 85–97% of median
+- Yellow: 85-97% of median
 - Red: < 85% or 0 W during daylight
-- Grey: NaN or outside 07:00–19:00
+- Grey: NaN or outside 07:00-19:00
 
 **Overall LED** = worst of 4 LEDs
 
@@ -340,25 +340,25 @@ timestamp,ora,inverter,rule_id,rule_name,severity,description,value
 
 ### Expected Patterns
 
-**Off-hours (00:00–06:59)**:
+**Off-hours (00:00-06:59)**:
 - Potenza AC: 0.0 W
 - Corrente DC: 0.0 A
-- Temperature: 15–25°C (night ambient)
+- Temperature: 15-25°C (night ambient)
 - PR: NaN or undefined (no generation)
 
-**Ramp-up (07:00–09:00)**:
+**Ramp-up (07:00-09:00)**:
 - AC power: 0 → 5,000 W
 - Temperature: 20°C → 30°C
 - PR: Stabilizes
 - DC current: Ramps up
 
-**Peak (10:00–16:00)**:
-- AC power: 8,000–20,000 W per inverter
-- Temperature: 35–50°C
-- PR: 0.8–1.0 (or 80–100%)
-- DC current: 20–40 A per MPPT
+**Peak (10:00-16:00)**:
+- AC power: 8,000-20,000 W per inverter
+- Temperature: 35-50°C
+- PR: 0.8-1.0 (or 80-100%)
+- DC current: 20-40 A per MPPT
 
-**Ramp-down (16:00–19:00)**:
+**Ramp-down (16:00-19:00)**:
 - AC power: 5,000 → 0 W
 - Temperature: dropping
 - DC current: dropping
@@ -366,12 +366,12 @@ timestamp,ora,inverter,rule_id,rule_name,severity,description,value
 ### Common Issues & Fixes
 
 **Issue**: PR values like 1.66, 70.64 (appear as percentages × 100 or ratios × 100)
-**Fix**: Normalize to 0–1 scale: `pr_normalized = pr_raw / 100 if pr_raw > 1 else pr_raw`
+**Fix**: Normalize to 0-1 scale: `pr_normalized = pr_raw / 100 if pr_raw > 1 else pr_raw`
 
 **Issue**: Missing data at specific times (NaN columns)
 **Fix**: Use `pd.fillna()` or `interpolate()` for interpolation, or mark as "grey" LED
 
-**Issue**: Ora column type (sometimes string "11:18:54", sometimes float 0.00–24.00)
+**Issue**: Ora column type (sometimes string "11:18:54", sometimes float 0.00-24.00)
 **Fix**: Convert with `pd.to_datetime()` if string, keep float if hours decimal
 
 ---
@@ -460,7 +460,7 @@ write_csv_audit_trail(anomalies)
 - `Potenza_AC_2026-04-02.csv` (280 KB)
 - ... (4 more CSV files)
 
-**Performance**: ~2–5 seconds for complete analysis of 1 day of data
+**Performance**: ~2-5 seconds for complete analysis of 1 day of data
 
 ---
 

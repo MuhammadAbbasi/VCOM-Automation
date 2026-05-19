@@ -184,8 +184,8 @@ DAYLIGHT_END = 19.0           # hours (19:00)
 ### Time-Aware DC Thresholds
 
 DC current expectations vary by time of day:
-- **Morning (07:00–12:00):** Green ≥10A, Yellow ≥2A
-- **Afternoon (12:00–19:00):** Green ≥5A, Yellow ≥0.5A
+- **Morning (07:00-12:00):** Green ≥10A, Yellow ≥2A
+- **Afternoon (12:00-19:00):** Green ≥5A, Yellow ≥0.5A
 - **Off-hours:** Grey (no generation expected)
 
 This prevents false alerts for normal late-afternoon power decline.
@@ -267,10 +267,10 @@ tail -f watchdog.log
 - **Fix:** Check network connectivity. Verify `VCOM_URL` in `.env` is reachable.
 
 **Issue:** "Valori minimi non disponibili" popup blocks extraction
-- **Fix:** This is normal — the code automatically dismisses it. Wait 2–3 seconds for data to load.
+- **Fix:** This is normal — the code automatically dismisses it. Wait 2-3 seconds for data to load.
 
 **Issue:** Dashboard shows all grey LEDs
-- **Fix:** Normal during off-hours (19:00–07:00). Check that `extracted_data/` contains today's Excel files.
+- **Fix:** Normal during off-hours (19:00-07:00). Check that `extracted_data/` contains today's Excel files.
 
 **Issue:** Memory usage grows over time
 - **Fix:** Logs and old JSON files accumulate. Manually clean `extracted_data/` files older than 7 days.
@@ -295,12 +295,12 @@ tail -f watchdog.log
 ## 🚀 Performance & Optimization
 
 ### Extraction Cycle
-- **Duration:** ~2–5 minutes per 10-minute cycle
+- **Duration:** ~2-5 minutes per 10-minute cycle
 - **Data Format:** Excel (openpyxl append mode)
 - **CSV Conversion:** Automatic (Excel→CSV for faster analysis)
 
 ### Analysis
-- **Memory:** ~200–400 MB (no massive merges)
+- **Memory:** ~200-400 MB (no massive merges)
 - **Duration:** <5 seconds per analysis run
 - **Method:** Potenza_AC master + on-demand metric lookups
 
