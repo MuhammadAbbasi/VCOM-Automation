@@ -268,13 +268,40 @@ def analyze_dc_current(dc_df: pd.DataFrame, output_md_path: Path, date_str: str)
                 faults.append({"Inverter": inv, "MPPT": mppt_num, "Strings": string_count, "Type": "UNDERPERFORMANCE", "Severity": "INFO", "Measured": f"{latest_val:.1f}" if latest_val is not None else "0.0", "Expected": f"{expected_val:.1f}" if expected_val is not None else "0.0", "Duration": int(up_m), "Deviation": "<75%", "Action": "Monitor"})
                 inv_summary[inv]["Info"] += 1
 
+    # Aggregate inverter-wide outages: if >=8 MPPTs on the same inverter are all OPEN CIRCUIT
+    # simultaneously, this is an inverter-level trip, not individual string failures.
+    # Collapse to a single "INVERTER DC OFFLINE" fault to avoid flooding with 12 tickets.
+    from collections import defaultdict
+    inv_open_circuit_faults = defaultdict(list)
+    for f in faults:
+        if f["Type"] == "OPEN CIRCUIT":
+            inv_open_circuit_faults[f["Inverter"]].append(f)
+
+    aggregated = []
+    suppressed_invs = set()
+    for inv, inv_faults in inv_open_circuit_faults.items():
+        if len(inv_faults) >= 8:
+            f0 = inv_faults[0]
+            aggregated.append({
+                "Inverter": inv, "MPPT": "ALL", "Strings": len(inv_faults),
+                "Type": "INVERTER DC OFFLINE", "Severity": "CRITICAL",
+                "Measured": "0.0", "Expected": f0["Expected"],
+                "Duration": f0["Duration"], "Deviation": "100%",
+                "Action": "Check inverter DC bus / trip reset"
+            })
+            suppressed_invs.add(inv)
+            inv_summary[inv]["Critical"] = 1  # Count as single critical event
+
+    faults = [f for f in faults if not (f["Type"] == "OPEN CIRCUIT" and f["Inverter"] in suppressed_invs)]
+    faults.extend(aggregated)
+
     # Formatting structured Markdown report
     md = [f"# Mazara PV Plant - DC MPPT Analysis Report ({date_str})\n", "## Section 1: Fault Table"]
     md.append("| Inverter | MPPT | Strings | Fault Type | Severity | Measured(A) | Expected(A) | Duration | Deviation | Action |")
     md.append("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |")
-    
+
     severity_rank = {"CRITICAL": 0, "WARNING": 1, "INFO": 2}
-    faults.sort(key=lambda x: (severity_rank.get(x["Severity"], 3), x["Inverter"], x["MPPT"]))
+    faults.sort(key=lambda x: (severity_rank.get(x["Severity"], 3), x["Inverter"], str(x["MPPT"])))
     
     for f in faults: md.append(f"| {f['Inverter']} | {f['MPPT']} | {f['Strings']} | {f['Type']} | {f['Severity']} | {f['Measured']} | {f['Expected']} | {format_duration(f['Duration'])} | {f['Deviation']} | {f['Action']} |")
     if not faults: md.append("| - | - | - | No faults detected | - | - | - | - | - | - |")

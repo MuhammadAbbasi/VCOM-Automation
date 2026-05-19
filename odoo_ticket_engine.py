@@ -68,7 +68,8 @@ FAULT_THRESHOLDS: dict[str, int] = {
     "CRIT PR":            60,
     "ISO FAULT":          30,
     "COMM LOST":          60,
-    "DC CRITICAL":        30,
+    "DC CRITICAL":        60,
+    "INVERTER DC OFFLINE": 60,
     "HIGH TEMP":          30,
     "CRIT TEMP":          30,
     "TRACKER":            60,
@@ -145,6 +146,13 @@ FAULT_ODOO_MAP: dict[str, dict] = {
         "anomalia_priorita":   "urgente",
         "intervento_tipo":     "ispezione",
         "intervento_priorita": "alta",
+        "intervento_richiesto": True,
+    },
+    "INVERTER DC OFFLINE": {
+        "anomalia_tipo":       "inverter_fault",
+        "anomalia_priorita":   "urgente",
+        "intervento_tipo":     "guasto",
+        "intervento_priorita": "urgente",
         "intervento_richiesto": True,
     },
 }
@@ -370,7 +378,8 @@ def _action_text(fault_type: str) -> str:
         "HIGH TEMP":          "Check inverter ventilation and ambient conditions.",
         "CRIT TEMP":          "URGENT: Risk of thermal shutdown. Inspect immediately.",
         "TRACKER":            "Check tracker NCU/TCU communication and power supply.",
-        "GRID LIMIT CHANGE":  "Grid operator has applied production curtailment.",
+        "GRID LIMIT CHANGE":    "Grid operator has applied production curtailment.",
+        "INVERTER DC OFFLINE":  "All MPPT inputs offline — check inverter DC bus, trip state, and string fuses.",
     }
     return actions.get(fault_type, "Inspect device and consult SCADA logs.")
 
