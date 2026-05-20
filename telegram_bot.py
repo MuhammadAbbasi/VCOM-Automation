@@ -753,6 +753,30 @@ def main() -> None:
                     data = get_latest_dashboard_json()
                     bot.send_message(chat_id, build_status_message(data) if data else "⚠️ No data.")
                 
+                elif text.lower().startswith("/approve") or text.lower().startswith("/deny"):
+                    # Admin approval flow: /approve <id> or /deny <id>
+                    parts = text.strip().split()
+                    if len(parts) >= 2:
+                        cmd = parts[0].lstrip("/")
+                        req_id = parts[1]
+                        try:
+                            from db.doctor import _load_approvals, _save_approvals
+                            approvals = _load_approvals()
+                            if req_id in approvals:
+                                approvals[req_id]["status"] = "approved" if cmd == "approve" else "denied"
+                                approvals[req_id]["acted_by"] = str(chat_id)
+                                approvals[req_id]["acted_at"] = datetime.utcnow().isoformat(timespec="seconds")
+                                _save_approvals(approvals)
+                                bot.send_message(chat_id, f"Request {req_id} marked as {approvals[req_id]['status']}")
+                            else:
+                                bot.send_message(chat_id, f"Request id {req_id} not found.")
+                        except Exception as e:
+                            logger.error(f"Approval handling error: {e}")
+                            bot.send_message(chat_id, "Failed to update approval state.")
+                    else:
+                        bot.send_message(chat_id, "Usage: /approve <id> or /deny <id>")
+                    continue
+
                 elif chat_id > 0:
                     bot.send_message(chat_id,
                         "🌞 *Mazara 01 — Commands*\n\n"
