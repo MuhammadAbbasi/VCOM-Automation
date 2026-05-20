@@ -1,6 +1,7 @@
 
 import os
 import json
+import re
 import shutil
 import time
 import logging
@@ -189,17 +190,23 @@ def check_trackers_granular(conn: sqlite3.Connection) -> dict:
         for r in rows:
             ncu_raw = r["ncu_id"] or ""
             ncu = ncu_raw.replace("_", " ").upper()
-            if "NCU 01" in ncu: ncu_key = "NCU 01"
-            elif "NCU 02" in ncu: ncu_key = "NCU 02"
-            elif "NCU 03" in ncu: ncu_key = "NCU 03"
-            else: continue
+            if "NCU 01" in ncu:
+                ncu_key = "NCU 01"
+            elif "NCU 02" in ncu:
+                ncu_key = "NCU 02"
+            elif "NCU 03" in ncu:
+                ncu_key = "NCU 03"
+            else:
+                continue
             
             tcu = r["tcu_id"]
             if tcu:
-                try:
-                    found[ncu_key].add(int(tcu))
-                except:
-                    pass
+                match = re.search(r"(\d+)", str(tcu))
+                if match:
+                    try:
+                        found[ncu_key].add(int(match.group(1)))
+                    except ValueError:
+                        pass
             
             if r["mode"] == "No State":
                 report["no_state"].append(f"{ncu_key}-TCU{tcu}")
@@ -607,10 +614,12 @@ def build_daily_analytics() -> dict:
         "peak_mw": None,
         "peak_time": None,
         "alarm_count_24h": 0,
+        "energy_date": None,
     }
     try:
         conn = _open_db()
         today = datetime.now().strftime("%Y-%m-%d")
+        data_date = today
 
         if _table_exists(conn, "potenza_ac"):
             cols_info = conn.execute("PRAGMA table_info(potenza_ac)").fetchall()
@@ -620,8 +629,19 @@ def build_daily_analytics() -> dict:
                 cols_sql = ", ".join(f'"{c}"' for c in inv_cols)
                 rows = conn.execute(
                     f'SELECT Ora, {cols_sql} FROM potenza_ac WHERE _date=? ORDER BY Ora ASC',
-                    (today,)
+                    (data_date,)
                 ).fetchall()
+
+                if not rows:
+                    latest_date_row = conn.execute(
+                        "SELECT DISTINCT _date FROM potenza_ac ORDER BY _date DESC LIMIT 1"
+                    ).fetchone()
+                    if latest_date_row and latest_date_row["_date"]:
+                        data_date = latest_date_row["_date"]
+                        rows = conn.execute(
+                            f'SELECT Ora, {cols_sql} FROM potenza_ac WHERE _date=? ORDER BY Ora ASC',
+                            (data_date,)
+                        ).fetchall()
 
                 total_wh = 0.0
                 peak_w = 0.0
@@ -644,6 +664,7 @@ def build_daily_analytics() -> dict:
                     h = int(peak_ora)
                     m = int(round((peak_ora - h) * 100))
                     analytics["peak_time"] = f"{h:02d}:{m:02d}"
+                analytics["energy_date"] = data_date
 
         conn.close()
     except Exception as e:
@@ -770,8 +791,14 @@ def run_doctor():
         "📊 <b>Daily Analytics:</b>",
     ]
 
+    energy_date = analytics.get("energy_date")
     if analytics["energy_mwh"] is not None:
-        lines.append(f"  ⚡ Energy today: <code>{analytics['energy_mwh']} MWh</code>")
+        if energy_date and energy_date != datetime.now().strftime("%Y-%m-%d"):
+            lines.append(
+                f"  ⚡ Energy on <code>{energy_date}</code>: <code>{analytics['energy_mwh']} MWh</code>"
+            )
+        else:
+            lines.append(f"  ⚡ Energy today: <code>{analytics['energy_mwh']} MWh</code>")
     else:
         lines.append("  ⚡ Energy today: <code>N/A</code>")
 
