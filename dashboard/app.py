@@ -25,6 +25,9 @@ import uvicorn
 import socket
 import asyncio
 import secrets
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks, Request, Depends, HTTPException, status
 from fastapi.responses import FileResponse, JSONResponse
@@ -110,9 +113,36 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+def fetch_broadcaster_data(today, link_status_path):
+    link_info = {"status": "offline", "last_heartbeat": None}
+    if link_status_path.exists():
+        try:
+            with open(link_status_path, "r") as f:
+                link_info = json.load(f)
+            last_heartbeat = link_info.get("last_heartbeat")
+            if last_heartbeat:
+                last_ts = datetime.fromisoformat(last_heartbeat)
+                # Treat tracker MQTT link as connected only if the last heartbeat is within 1 hour.
+                if (datetime.now() - last_ts).total_seconds() > 3600:
+                    link_info["status"] = "stale"
+        except Exception:
+            pass
+
+    latest_data = None
+    trackers = None
+    try:
+        from db.db_manager import load_latest_snapshot, get_daily_sensor_history, get_all_tracker_status
+        latest_data = load_latest_snapshot(today)
+        if latest_data:
+            latest_data["sensor_history"] = get_daily_sensor_history(today)
+            latest_data["link_status"] = link_info
+            trackers = get_all_tracker_status()
+    except Exception as e:
+        print(f"[DASHBOARD] Broadcast load error: {e}")
+    return latest_data, trackers
+
 # Background Task for Data Push
 async def data_broadcaster():
-    last_snapshot_ts = ""
     while True:
         try:
             today = datetime.now().strftime("%Y-%m-%d")
@@ -123,46 +153,23 @@ async def data_broadcaster():
             
             is_extracting = busy_path.exists()
             
-            # Broadcast extraction status every tick regardless of data change
             await manager.broadcast({
                 "type": "extraction_status", 
                 "is_extracting": is_extracting
             })
 
-            # Check Link Status (Heartbeat)
             link_status_path = ROOT / "db" / "link_status.json"
-            link_info = {"status": "offline", "last_heartbeat": None}
-            if link_status_path.exists():
-                try:
-                    with open(link_status_path, "r") as f:
-                        link_info = json.load(f)
-                    # Check if stale (more than 2 minutes)
-                    last_ts = datetime.fromisoformat(link_info["last_heartbeat"])
-                    if (datetime.now() - last_ts).total_seconds() > 120:
-                        link_info["status"] = "stale"
-                except Exception:
-                    pass
-
-            # Try loading from database first
-            try:
-                from db.db_manager import load_latest_snapshot, get_daily_sensor_history, get_all_tracker_status
-                latest_data = load_latest_snapshot(today)
-                if latest_data:
-                    # Enrich with sensor history for sparklines
-                    latest_data["sensor_history"] = get_daily_sensor_history(today)
-                    latest_data["link_status"] = link_info
-                    
-                    # Broadcast every tick
-                    await manager.broadcast({
-                        "type": "data_update", 
-                        "data": latest_data,
-                        "trackers": get_all_tracker_status(),
-                        "timestamp": datetime.now().isoformat()
-                    })
-            except Exception as e:
-                print(f"[DASHBOARD] Broadcast error: {e}")
-        except Exception:
-            pass
+            latest_data, trackers = await asyncio.to_thread(fetch_broadcaster_data, today, link_status_path)
+            
+            if latest_data:
+                await manager.broadcast({
+                    "type": "data_update", 
+                    "data": latest_data,
+                    "trackers": trackers,
+                    "timestamp": datetime.now().isoformat()
+                })
+        except Exception as e:
+            print(f"[DASHBOARD] Broadcast error: {e}")
         await asyncio.sleep(5)
 
 @app.post("/api/extraction/trigger")
@@ -187,38 +194,50 @@ async def index():
     return FileResponse(str(STATIC_DIR / "index.html"))
 
 
+def fetch_ws_initial_data(today, link_status_path):
+    latest_data = None
+    trackers = None
+    link_info = {"status": "offline"}
+    try:
+        from db.db_manager import load_latest_snapshot, get_daily_sensor_history, get_all_tracker_status
+        latest_data = load_latest_snapshot(today)
+        if link_status_path.exists():
+            with open(link_status_path, "r") as f:
+                link_info = json.load(f)
+        if latest_data:
+            latest_data["sensor_history"] = get_daily_sensor_history(today)
+            latest_data["link_status"] = link_info
+        trackers = get_all_tracker_status()
+    except Exception as e:
+        print(f"[WS] Error in fetch_ws_initial_data: {e}")
+    
+    settings = None
+    try:
+        from processor_watchdog_final import load_user_settings
+        settings = load_user_settings()
+    except Exception as e:
+        print(f"[WS] Error loading user settings: {e}")
+        
+    return latest_data, trackers, settings
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
-        # Send initial data immediately from database
         today = datetime.now().strftime("%Y-%m-%d")
-        try:
-            from db.db_manager import load_latest_snapshot, get_daily_sensor_history, get_all_tracker_status
-            latest_data = load_latest_snapshot(today)
+        link_status_path = ROOT / "db" / "link_status.json"
+        
+        latest_data, trackers, settings = await asyncio.to_thread(fetch_ws_initial_data, today, link_status_path)
+        
+        if latest_data:
+            await websocket.send_json({
+                "type": "data_update", 
+                "data": latest_data, 
+                "trackers": trackers
+            })
             
-            # Check Link Status
-            link_status_path = ROOT / "db" / "link_status.json"
-            link_info = {"status": "offline"}
-            if link_status_path.exists():
-                with open(link_status_path, "r") as f:
-                    link_info = json.load(f)
-            
-            if latest_data:
-                latest_data["sensor_history"] = get_daily_sensor_history(today)
-                latest_data["link_status"] = link_info
-                await websocket.send_json({
-                    "type": "data_update", 
-                    "data": latest_data, 
-                    "trackers": get_all_tracker_status()
-                })
-        except Exception as e:
-            print(f"[WS] Initial data error: {e}")
-                
-        # Send initial settings
-        from processor_watchdog_final import load_user_settings
-        settings = load_user_settings()
-        await websocket.send_json({"type": "config_update", "data": settings})
+        if settings:
+            await websocket.send_json({"type": "config_update", "data": settings})
         
         while True:
             # wait for messages from client (if needed)
@@ -495,4 +514,6 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=port,
         log_level="warning",
+        ws_ping_interval=60,
+        ws_ping_timeout=30,
     )

@@ -26,7 +26,7 @@ from pathlib import Path
 # Fix for Windows console encoding issues
 if hasattr(sys.stdout, "reconfigure"):
     try:
-        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stdout.reconfigure(encoding='utf-8')  # type: ignore
     except:
         pass
 
@@ -124,9 +124,10 @@ SERVICES = [
 def stream_output(proc: subprocess.Popen, prefix: str) -> None:
     print(f"[ORCHESTRATOR] Logging stream for {prefix} started.", flush=True)
     try:
-        for line in proc.stdout:
-            if line:
-                print(f"[{prefix}] {line}", end="", flush=True)
+        if proc.stdout is not None:
+            for line in proc.stdout:
+                if line:
+                    print(f"[{prefix}] {line}", end="", flush=True)
     except Exception as e:
         print(f"[ORCHESTRATOR] Error reading output from {prefix}: {e}", flush=True)
 

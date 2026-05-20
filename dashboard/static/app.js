@@ -156,6 +156,10 @@ function updateIngestion(data) {
   const grid = el("ingestion-grid");
   grid.innerHTML = "";
 
+  const linkStatus = data.link_status || {};
+  const linkFresh = String(linkStatus.status).toLowerCase() === "online";
+  const trackerTimestamp = linkStatus.last_heartbeat || null;
+
   Object.entries(FILE_LABELS).forEach(([key, label]) => {
     const info = fs[key] || {};
     const status = info.status || "pending";
@@ -174,15 +178,38 @@ function updateIngestion(data) {
   // Add Tracker Status Card
   if (lastTrackerData && lastTrackerData.length > 0) {
     const latest = [...lastTrackerData].sort((a,b) => (b.last_update || "").localeCompare(a.last_update || ""))[0];
-    const ts = latest.last_update ? latest.last_update.replace("T", " ").substring(11, 19) : "—";
+    const fallbackTs = latest && latest.last_update ? latest.last_update.replace("T", " ").substring(11, 19) : "—";
+    const ts = trackerTimestamp ? trackerTimestamp.replace("T", " ").substring(11, 19) : fallbackTs;
+    const status = linkFresh ? "connected" : "disconnected";
+    const styleClass = linkFresh ? "success" : "error";
+
+    // If the link is stale, show an age badge like "stale 65m" or "stale 1h5m"
+    let displayTs = ts;
+    if (!linkFresh && trackerTimestamp) {
+      try {
+        const dt = new Date(trackerTimestamp);
+        const ageMin = Math.floor((Date.now() - dt.getTime()) / 60000);
+        if (!isNaN(ageMin) && ageMin >= 0) {
+          if (ageMin >= 60) {
+            const hrs = Math.floor(ageMin / 60);
+            const mins = ageMin % 60;
+            displayTs = `${ts} (stale ${hrs}h${mins}m)`;
+          } else {
+            displayTs = `${ts} (stale ${ageMin}m)`;
+          }
+        }
+      } catch (e) {
+        // fallback: keep ts
+      }
+    }
     
     const card = document.createElement("div");
-    card.className = `card file-card success`;
-    card.style.borderLeft = "4px solid var(--accent)";
+    card.className = `card file-card ${styleClass}`;
+    card.style.borderLeft = linkFresh ? "4px solid var(--accent)" : "4px solid var(--danger)";
     card.innerHTML = `
       <span class="file-name">TRACKER FIELD</span>
-      <span class="file-status">connected</span>
-      <span class="file-time">${ts}</span>
+      <span class="file-status">${status}</span>
+      <span class="file-time">${displayTs}</span>
     `;
     grid.appendChild(card);
   }

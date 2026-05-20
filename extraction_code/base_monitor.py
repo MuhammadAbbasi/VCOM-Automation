@@ -329,17 +329,22 @@ def toggle_minute_values(page, metric_name: str) -> None:
     disponibili' popup — dismiss_popup() handles that.
     """
     try:
-        page.wait_for_selector('button[title="acceso"]:visible', timeout=10_000)
-        acceso_btn = page.locator('button[title="acceso"]:visible').first
+        acceso_locator = page.locator('button[title="acceso"]:visible')
+        if acceso_locator.count() == 0:
+            logger.info(f"No 'Valori in minuti' toggle found for {metric_name}. Skipping.")
+            logger.info(f"Out of toggle_minute_values for {metric_name}")
+            return
+
+        acceso_btn = acceso_locator.first
         cls = acceso_btn.get_attribute("class") or ""
         if "active" not in cls:
             logger.info(f"Toggling 'Valori in minuti' ON for {metric_name}...")
             print(f"Toggling 'Valori in minuti' ON for {metric_name}...")
             acceso_btn.click()
             dismiss_popup(page)  # handles Chiudi if it appears
-            time.sleep(3)
-    except Exception:
-        logger.warning(f"Could not toggle 'Valori in minuti' for {metric_name}.")
+            time.sleep(2)
+    except Exception as e:
+        logger.warning(f"Could not toggle 'Valori in minuti' for {metric_name}: {e}")
     logger.info(f"Out of toggle_minute_values for {metric_name}")
 
 
@@ -347,9 +352,9 @@ def refresh_chart(page) -> None:
     """Click 'Aggiorna grafico' if visible."""
     try:
         btn = page.locator('button:has-text("Aggiorna grafico"), button:has-text("Update chart")')
-        if btn.is_visible(timeout=3_000):
+        if btn.is_visible(timeout=2_000):
             btn.click()
-            time.sleep(2)
+            time.sleep(1.5)
     except Exception:
         pass
     logger.info("Out of refresh_chart")
@@ -381,15 +386,15 @@ def click_dati_tab(page, extra_wait: float = 0) -> None:
             tab = page.locator('text=/^\\s*(Dati|Data)\\s*$/i').last
             
             # Use wait_for first (doesn't require attached), then scroll
-            tab.wait_for(state="visible", timeout=15_000)
+            tab.wait_for(state="visible", timeout=10_000)
             
             try:
                 tab.scroll_into_view_if_needed()
             except Exception:
                 # If scroll fails (detached DOM), wait and re-query
-                time.sleep(1)
+                time.sleep(0.7)
                 tab = page.locator('text=/^\\s*(Dati|Data)\\s*$/i').last
-                tab.wait_for(state="visible", timeout=10_000)
+                tab.wait_for(state="visible", timeout=6_000)
             
             # Check if already active
             parent_cls = tab.evaluate("el => el.parentElement ? el.parentElement.className : ''")
@@ -411,13 +416,27 @@ def click_dati_tab(page, extra_wait: float = 0) -> None:
         except Exception as e:
             last_err = e
             if attempt < max_attempts:
-                logger.warning(f"click_dati_tab attempt {attempt} failed ({type(e).__name__}). Reloading page...")
+                url = ''
                 try:
-                    page.reload()
-                    time.sleep(5)
+                    url = page.url.lower()
                 except Exception:
                     pass
-                time.sleep(2)
+
+                if "valutazione" in url or "evaluation" in url or "index/index" in url:
+                    logger.warning(
+                        f"click_dati_tab attempt {attempt} failed ({type(e).__name__}). Retrying on same page..."
+                    )
+                    time.sleep(2)
+                else:
+                    logger.warning(
+                        f"click_dati_tab attempt {attempt} failed ({type(e).__name__}). Reloading page..."
+                    )
+                    try:
+                        page.reload()
+                        page.wait_for_load_state("networkidle", timeout=10_000)
+                    except Exception:
+                        pass
+                    time.sleep(2)
             else:
                 logger.error(f"Failed to click 'Dati' tab button after {max_attempts} attempts: {e}")
                 print(f"[!] FAILED to find 'Dati' tab button: {type(e).__name__}", flush=True)

@@ -378,8 +378,8 @@ def get_latest_dashboard_json() -> dict | None:
         
         # Fallback: check recent dates if today is empty
         if not latest_data:
-            from db.db_manager import _get_data_conn
-            conn = _get_data_conn()
+            from db.db_manager import get_data_conn
+            conn = get_data_conn()
             res = conn.execute("SELECT date FROM analysis_snapshots ORDER BY date DESC, timestamp DESC LIMIT 1").fetchone()
             if res:
                 latest_data = load_latest_snapshot(res[0])
@@ -404,34 +404,64 @@ def build_status_message(data: dict) -> str:
     except Exception:
         sync_time = datetime.now().strftime("%H:%M")
 
-    lines = [f"🌞 *Mazara 01 — Status* ({sync_time})"]
     inv_health = data.get("inverter_health", {})
-    
-    # Use precomputed macro stats if available, otherwise fallback
+
     total_mw = macro.get("total_ac_power_mw", 0.0)
-    avg_pr = macro.get("avg_pr", 0.0)
-    
     if not total_mw:
         total_w = sum(float(h.get("ac_v", 0) or 0) for h in inv_health.values())
         total_mw = total_w / 1_000_000.0
-    
-    lines.append(f"⚡ AC: {total_mw:.2f} MW")
-    lines.append(f"🟢 {macro.get('online', '—')} | 🔴 {macro.get('tripped', '—')} | 🔇 {macro.get('comms_lost', '—')}")
 
+    avg_pr = macro.get("avg_pr", 0.0)
     if not avg_pr:
         pr_vals = [float(h.get("pr_v", 0)) for h in inv_health.values() if h.get("pr_v") is not None]
-        avg_pr = sum(pr_vals)/len(pr_vals) if pr_vals else 0.0
-    
-    lines.append(f"📊 AVG PR: {avg_pr:.1f}%")
+        avg_pr = sum(pr_vals) / len(pr_vals) if pr_vals else 0.0
+
+    energy_mwh = macro.get("total_energy_mwh", 0.0)
+    poa = macro.get("poa", macro.get("avg_irradiance", 0.0))
+    online  = macro.get("online", "—")
+    tripped = macro.get("tripped", "—")
+    comms   = macro.get("comms_lost", "—")
+
+    lines = [
+        f"🌞 *Mazara 01 — Live Status*",
+        f"🕐 Last sync: *{sync_time}*",
+        f"━━━━━━━━━━━━━━━━━━━",
+        f"",
+        f"⚡ *Power:*    {total_mw:.2f} MW",
+        f"🔋 *Energy:*   {energy_mwh:.1f} MWh today",
+        f"📊 *Avg PR:*   {avg_pr:.1f}%",
+    ]
+    if poa:
+        lines.append(f"☀️ *Irrad:*    {poa:.0f} W/m²")
+
+    lines += [
+        f"",
+        f"🟢 Online: *{online}*   🔴 Tripped: *{tripped}*   🔇 Comms: *{comms}*",
+    ]
 
     alerts = data.get("active_anomalies", [])
     if alerts:
-        lines.append(f"\n🚨 *Alerts ({len(alerts)}):*")
-        for a in alerts[:3]:
-            lines.append(f" • {a.get('inverter')} - {a.get('type')}")
+        lines.append(f"")
+        lines.append(f"🚨 *Active Alerts ({len(alerts)}):*")
+        seen = set()
+        count = 0
+        for a in alerts:
+            inv = a.get("inverter", "?") if isinstance(a, dict) else str(a)
+            atype = a.get("rule", a.get("type", "Anomaly")) if isinstance(a, dict) else ""
+            entry = f" • {inv} — {atype}" if atype else f" • {inv}"
+            if entry not in seen:
+                seen.add(entry)
+                lines.append(entry)
+                count += 1
+                if count >= 5:
+                    remaining = len(alerts) - 5
+                    if remaining > 0:
+                        lines.append(f" _...and {remaining} more_")
+                    break
     else:
-        lines.append("\n✅ No active alerts")
-    
+        lines.append(f"")
+        lines.append(f"✅ No active alerts")
+
     return "\n".join(lines)
 
 # ---------------------------------------------------------------------------
@@ -462,14 +492,19 @@ class TelegramBot:
         if markdown: payload["parse_mode"] = "Markdown"
         if force_reply:
             payload["reply_markup"] = {"force_reply": True, "selective": True}
-            
+
+        preview = text.replace("\n", " ").strip()
+        if len(preview) > 120:
+            preview = preview[:117] + "..."
+        logger.info(f"[REPLY -> {chat_id}] {preview}")
+
         try:
             resp = requests.post(f"{self.base}/sendMessage", json=payload, timeout=API_TIMEOUT)
             if not resp.ok and markdown:
                 # Retry without markdown if it failed (parsing errors)
                 payload.pop("parse_mode")
                 resp = requests.post(f"{self.base}/sendMessage", json=payload, timeout=API_TIMEOUT)
-            
+
             if resp.ok:
                 return resp.json().get("result", {}).get("message_id")
         except Exception as e:
@@ -645,21 +680,34 @@ def main() -> None:
                     waiting_for_ai.pop(chat_id, None)
                     data = get_latest_dashboard_json()
                     if data and data.get("active_anomalies"):
-                        alert_lines = []
+                        critical_lines, other_lines = [], []
                         seen = set()
                         for a in data["active_anomalies"]:
                             if not isinstance(a, dict):
-                                line = f" {str(a)}"
+                                line = f" • {str(a)}"
+                                other_lines.append(line)
+                                continue
+                            inv_name = a.get("inverter", "Unknown")
+                            a_type   = a.get("rule", a.get("type", "Anomaly"))
+                            severity = str(a.get("severity", "")).upper()
+                            line = f" • *{inv_name}* — {a_type}"
+                            if line in seen:
+                                continue
+                            seen.add(line)
+                            if severity == "CRITICAL":
+                                critical_lines.append("🔴 " + line.strip())
                             else:
-                                inv_name = a.get("inverter", "Unknown")
-                                a_type = a.get("rule", a.get("type", "Anomaly"))
-                                line = f" {inv_name} - {a_type}"
-                            
-                            if line not in seen:
-                                seen.add(line)
-                                alert_lines.append(line)
-                        
-                        bot.send_message(chat_id, f"🚨 *Active Alerts:*\n\n" + "\n".join(alert_lines))
+                                other_lines.append("🟡 " + line.strip())
+
+                        total = len(critical_lines) + len(other_lines)
+                        out = [f"🚨 *Active Alerts ({total})*", f"━━━━━━━━━━━━━━━━━━━"]
+                        if critical_lines:
+                            out.append(f"\n*Critical:*")
+                            out.extend(critical_lines[:10])
+                        if other_lines:
+                            out.append(f"\n*Warnings:*")
+                            out.extend(other_lines[:10])
+                        bot.send_message(chat_id, "\n".join(out))
                     else:
                         bot.send_message(chat_id, "✅ No active alerts.")
 
@@ -668,12 +716,34 @@ def main() -> None:
                     data = get_latest_dashboard_json()
                     if data:
                         h = data.get("macro_health", {})
-                        msg = (f"📅 *Daily Report ({datetime.now().strftime('%d/%m/%Y')})*\n\n"
-                               f"⚡ Power: {h.get('total_ac_power_mw', 0):.2f} MW\n"
-                               f"🔋 Energy: {h.get('total_energy_mwh', 0):.2f} MWh\n"
-                               f"📈 Avg PR: {h.get('avg_pr', 0):.1f}%\n"
-                               f"✅ Inverters: {h.get('online', 0)}/36 Online\n"
-                               f"⏰ Last Sync: {h.get('last_sync', '—')}")
+                        last_sync = h.get("last_sync", "—")
+                        try:
+                            sync_fmt = datetime.fromisoformat(last_sync.replace("Z", "+00:00")).strftime("%H:%M")
+                        except Exception:
+                            sync_fmt = last_sync
+                        poa = h.get("poa", h.get("avg_irradiance", 0.0))
+                        online  = h.get("online", "—")
+                        tripped = h.get("tripped", 0)
+                        comms   = h.get("comms_lost", 0)
+                        today_str = datetime.now().strftime("%d/%m/%Y")
+                        msg = (
+                            f"📅 *Daily Report — {today_str}*\n"
+                            f"━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"⚡ *Current Power:* {h.get('total_ac_power_mw', 0):.2f} MW\n"
+                            f"🔋 *Energy Today:*  {h.get('total_energy_mwh', 0):.2f} MWh\n"
+                            f"📈 *Average PR:*    {h.get('avg_pr', 0):.1f}%\n"
+                        )
+                        if poa:
+                            msg += f"☀️ *Irradiance:*    {poa:.0f} W/m²\n"
+                        msg += (
+                            f"\n"
+                            f"🟢 Online: *{online}/36*\n"
+                        )
+                        if tripped:
+                            msg += f"🔴 Tripped: *{tripped}*\n"
+                        if comms:
+                            msg += f"🔇 Comms Lost: *{comms}*\n"
+                        msg += f"\n⏰ Last Sync: *{sync_fmt}*"
                         bot.send_message(chat_id, msg)
                     else:
                         bot.send_message(chat_id, "⚠️ Data not found.")

@@ -1,6 +1,7 @@
 
 import os
 import json
+import shutil
 import time
 import logging
 import subprocess
@@ -29,6 +30,8 @@ logger = logging.getLogger("DashboardDoctor")
 ROOT = Path(__file__).resolve().parent
 DB_PATH = ROOT / "db" / "scada_data.db"
 LOGS_DB_PATH = ROOT / "db" / "scada_logs.db"
+DB_BACKUP_DIR = ROOT / "db" / "backups"
+DB_BACKUP_STATE = ROOT / "db" / "last_db_backup.json"
 LINK_STATUS_PATH = ROOT / "db" / "link_status.json"
 EXTRACTION_BUSY_PATH = ROOT / ".extraction_busy"
 SETTINGS_PATH = ROOT / "user_settings.json"
@@ -99,6 +102,72 @@ def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
         "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,)
     ).fetchone()
     return row is not None
+
+
+def _load_backup_state() -> dict:
+    if not DB_BACKUP_STATE.exists():
+        return {}
+    try:
+        return json.loads(DB_BACKUP_STATE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _save_backup_state(state: dict) -> None:
+    DB_BACKUP_STATE.parent.mkdir(parents=True, exist_ok=True)
+    DB_BACKUP_STATE.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def backup_database() -> Path | None:
+    DB_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    now = datetime.now()
+    backup_name = f"scada_data_backup_{now.strftime('%Y%m%d_%H%M%S')}.db"
+    backup_path = DB_BACKUP_DIR / backup_name
+
+    try:
+        with sqlite3.connect(str(DB_PATH), timeout=30) as src, sqlite3.connect(str(backup_path), timeout=30) as dst:
+            src.backup(dst)
+
+        state = {
+            "date": now.strftime("%Y-%m-%d"),
+            "timestamp": now.isoformat(),
+            "backup_file": backup_name,
+        }
+        _save_backup_state(state)
+        logger.info(f"[DOCTOR] Database backup created: {backup_path}")
+        return backup_path
+    except Exception as e:
+        logger.error(f"[DOCTOR] Database backup failed: {e}")
+        try:
+            if backup_path.exists():
+                backup_path.unlink()
+        except Exception:
+            pass
+        return None
+
+
+def maybe_backup_database() -> None:
+    now = datetime.now()
+    today = now.strftime("%Y-%m-%d")
+    state = _load_backup_state()
+    if state.get("date") == today:
+        return
+
+    backup_path = backup_database()
+    if backup_path is not None:
+        send_telegram(
+            f"💾 <b>Daily Database Backup</b>\n"
+            f"File: <code>{backup_path.name}</code>\n"
+            f"Date: <code>{today}</code>\n"
+            f"Status: <b>SUCCESS</b>"
+        )
+    else:
+        send_telegram(
+            f"💾 <b>Daily Database Backup</b>\n"
+            f"Date: <code>{today}</code>\n"
+            f"Status: <b>FAILED</b>\n"
+            f"Please check dashboard_doctor.log for details."
+        )
 
 
 def check_trackers_granular(conn: sqlite3.Connection) -> dict:
@@ -783,6 +852,7 @@ if __name__ == "__main__":
     logger.info("[DOCTOR] Dashboard Doctor v3 started.")
     while True:
         try:
+            maybe_backup_database()
             run_doctor()
         except Exception as e:
             logger.error(f"[DOCTOR] Crashed: {e}", exc_info=True)

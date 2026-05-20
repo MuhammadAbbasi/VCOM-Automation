@@ -183,14 +183,28 @@ def save_state(state: dict):
 
 def get_latest_snapshot() -> dict | None:
     try:
-        conn = sqlite3.connect(str(DB_PATH), timeout=10)
+        from db.db_manager import get_data_conn
+        conn = get_data_conn()
         row = conn.execute(
             "SELECT snapshot_json FROM analysis_snapshots ORDER BY timestamp DESC LIMIT 1"
         ).fetchone()
-        conn.close()
         return json.loads(row[0]) if row else None
     except Exception as e:
         logger.error(f"Snapshot read error: {e}")
+
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    json_path = ROOT / "extracted_data" / f"dashboard_data_{date_str}.json"
+    if not json_path.exists():
+        return None
+    try:
+        with open(json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if not data:
+            return None
+        latest_key = sorted(data.keys())[-1]
+        return data[latest_key]
+    except Exception as e:
+        logger.error(f"Snapshot JSON fallback error: {e}")
         return None
 
 
@@ -256,8 +270,16 @@ def scan_active_faults(snapshot: dict, stale_trackers: list) -> dict[str, dict]:
     return faults
 
 
+_FAULT_TYPE_ALIASES: dict[str, str] = {
+    # Watchdog emits "INSULATION FAULT"; engine key is "ISO FAULT" — no substring overlap
+    "INSULATION FAULT": "ISO FAULT",
+}
+
+
 def _match_fault_type(raw: str) -> str | None:
     """Map snapshot type string to FAULT_THRESHOLDS key."""
+    if raw in _FAULT_TYPE_ALIASES:
+        return _FAULT_TYPE_ALIASES[raw]
     for key in FAULT_THRESHOLDS:
         if key in raw or raw in key:
             return key
@@ -404,6 +426,7 @@ def open_ticket(client, fault_id: str, fault: dict, state: dict, session_id: int
         "CRIT TEMP": "Critical Temperature",
         "TRACKER": "Tracker Offline",
         "GRID LIMIT CHANGE": "Grid Limit Change",
+        "INVERTER DC OFFLINE": "Inverter DC Offline",
     }
     title_type = FAULT_TITLE_MAP.get(fault['type'], fault['type'].title())
     inv_clean = fault['inverter'].replace("INV ", "").replace("Inverter ", "").strip()
@@ -572,8 +595,6 @@ def run():
 
         # Create shared session on first ticket of this run
         if session_id is None:
-            fault_count = sum(1 for f in active_faults.values()
-                              if not state.get(f.get("id", ""), {}).get("odoo_intervento_id"))
             session_id = client.create_scada_session(
                 fault_summary=f"Auto-session: {len(active_faults)} active fault(s)",
                 stato_impianto="alarm" if any(

@@ -34,6 +34,11 @@
   --ncu1: #3b82f6;
   --ncu2: #8b5cf6;
   --ncu3: #6366f1;
+
+  /* Glass utility surfaces */
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-dark:   rgba(0, 0, 0, 0.35);
+  --glass-glow:   rgba(59, 130, 246, 0.07);
 }
 
 html,
@@ -716,12 +721,12 @@ main {
 }
 
 section>h2 {
-  font-size: 0.85rem;
-  font-weight: 600;
+  font-size: 0.9rem;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--muted);
-  margin-bottom: 0.75rem;
+  color: #cbd5e1;
+  margin-bottom: 0.85rem;
 }
 
 /* ─── Cards (generic) ─────────────────────────────────────── */
@@ -1185,10 +1190,10 @@ section>h2 {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
-  padding: 0.4rem 0.6rem 0.4rem 1.2rem;
-  background: rgba(255, 255, 255, 0.015);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.025);
+  gap: 0.15rem;
+  padding: 0.55rem 0.75rem 0.55rem 1.3rem;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   transition: all 0.2s ease;
 }
 
@@ -1248,9 +1253,9 @@ section>h2 {
 
 .alert-title {
   font-weight: 700;
-  color: var(--text);
-  font-size: 0.75rem;
-  line-height: 1.2;
+  color: #f1f5f9;
+  font-size: 0.8rem;
+  line-height: 1.3;
 }
 
 .alert-time-small {
@@ -1261,10 +1266,9 @@ section>h2 {
 }
 
 .alert-body-text {
-  font-size: 0.7rem;
-  color: var(--text);
-  opacity: 0.85;
-  line-height: 1.3;
+  font-size: 0.72rem;
+  color: #cbd5e1;
+  line-height: 1.4;
 }
 
 .alert-id-pill {
