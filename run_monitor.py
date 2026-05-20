@@ -23,6 +23,8 @@ import time
 import signal
 from pathlib import Path
 
+from dashboard_doctor import maybe_backup_database, run_doctor
+
 # Fix for Windows console encoding issues
 if hasattr(sys.stdout, "reconfigure"):
     try:
@@ -103,11 +105,6 @@ SERVICES = [
         "cmd": [sys.executable, "-u", str(ROOT / "tracker_testing" / "receiver.py")],
         "new_console": False,
         "optional": True,
-    },
-    {
-        "name": "DOCTOR",
-        "cmd": [sys.executable, "-u", str(ROOT / "dashboard_doctor.py")],
-        "new_console": False,
     },
     {
         "name": "TICKETS",
@@ -192,6 +189,21 @@ def launch_service(svc: dict) -> subprocess.Popen:
         print(f"[ORCHESTRATOR] Started {name} (pid={proc.pid})", flush=True)
     
     return proc
+
+
+def doctor_scheduler(interval_seconds: int = 3600) -> None:
+    """Run the dashboard doctor cycle inside the orchestrator every hour."""
+    print("[ORCHESTRATOR] Starting doctor scheduler thread", flush=True)
+    next_run = time.time()
+    while not _stop_event.is_set():
+        if time.time() >= next_run:
+            try:
+                maybe_backup_database()
+                run_doctor()
+            except Exception as exc:
+                print(f"[ORCHESTRATOR] Doctor scheduler error: {exc}", flush=True)
+            next_run = time.time() + interval_seconds
+        time.sleep(5)
 
 
 # ---------------------------------------------------------------------------
@@ -313,6 +325,14 @@ def main() -> None:
     print("=" * 60, flush=True)
     print(f"[*] Root Directory: {ROOT}", flush=True)
     print("------------------------------------------------------------", flush=True)
+
+    # Start the periodic doctor scheduler thread inside this orchestrator.
+    doctor_thread = threading.Thread(
+        target=doctor_scheduler,
+        daemon=True,
+        name="doctor-scheduler",
+    )
+    doctor_thread.start()
 
     # Start the hot reloader
     # reloader_thread = threading.Thread(

@@ -12,6 +12,7 @@ Generates JSON snapshots (health flags) + optional CSV audit trails.
 import json
 import logging
 import os
+import signal
 import sys
 import time
 import re
@@ -24,6 +25,8 @@ from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 from mppt_dc_analyzer import analyze_dc_current
 from logging.handlers import RotatingFileHandler
+
+from db.snapshot_queue import shutdown_snapshot_worker
 
 # Ensure UTF-8 for console output on Windows
 if sys.platform == "win32":

@@ -95,16 +95,22 @@ def get_available_dates():
     """List all dates that have data in the database."""
     try:
         conn = get_data_conn()
-        # Check available dates across some major tables
-        tables = ["potenza_ac", "corrente_dc", "irraggiamento"]
         dates = set()
-        for t in tables:
+        # Wide tables use _date; corrente_dc uses date
+        wide_tables = ["potenza_ac", "irraggiamento", "pr_readings", "temperatura"]
+        for t in wide_tables:
             try:
-                res = conn.execute(f"SELECT DISTINCT date FROM {t}").fetchall()
+                res = conn.execute(f'SELECT DISTINCT _date FROM "{t}"').fetchall()
                 for r in res:
                     dates.add(r[0])
             except:
                 pass
+        try:
+            res = conn.execute("SELECT DISTINCT date FROM corrente_dc").fetchall()
+            for r in res:
+                dates.add(r[0])
+        except:
+            pass
         return sorted(dates, reverse=True)
     except Exception:
         return []
@@ -161,16 +167,20 @@ def get_peak_production(date_str=None):
     """Find peak instantaneous power and its time."""
     date_str = date_str or datetime.now().strftime("%Y-%m-%d")
     df = load_metric(date_str, "Potenza AC")
-    if df.empty:
+    if df is None or df.empty:
         return {"date": date_str, "error": "No data"}
-        
+
     ac_cols = [c for c in df.columns if "Potenza AC (INV" in c]
     if not ac_cols:
         return {"date": date_str, "error": "No inverter columns"}
-        
-    df["total_power"] = df[ac_cols].sum(axis=1)
+
+    df["total_power"] = pd.to_numeric(df[ac_cols].stack(), errors="coerce").unstack().sum(axis=1)
     peak_idx = df["total_power"].idxmax()
     peak_val = df.loc[peak_idx, "total_power"]
+
+    if pd.isna(peak_val):
+        return {"date": date_str, "error": "No valid power data for this date"}
+
     peak_ora = df.loc[peak_idx, "Ora"] if "Ora" in df.columns else "Unknown"
     
     # Format peak_ora (HH.mm -> HH:mm)
@@ -286,6 +296,27 @@ def get_inverter_production_detail(inv_id, date_str=None):
         return round(energy_wh / 1000.0, 2) # Convert to kWh
     except:
         return 0.0
+
+def get_pr_data(date_str=None):
+    """Get average and per-inverter PR (Performance Ratio) for a given date."""
+    date_str = date_str or datetime.now().strftime("%Y-%m-%d")
+    df = load_metric(date_str, "PR inverter")
+    if df is None or df.empty:
+        return {"date": date_str, "error": "No PR data for this date"}
+
+    pr_cols = [c for c in df.columns if c not in ("Ora", "Timestamp Fetch", "_date")]
+    if not pr_cols:
+        return {"date": date_str, "error": "No PR columns found"}
+
+    df_valid = df[pr_cols].apply(pd.to_numeric, errors="coerce").dropna(how="all")
+    if df_valid.empty:
+        return {"date": date_str, "error": "All PR rows are empty"}
+
+    avg_by_inverter = df_valid.mean().dropna()
+    result = {col: round(float(v), 2) for col, v in avg_by_inverter.items()}
+    plant_avg = round(float(avg_by_inverter.mean()), 2) if not avg_by_inverter.empty else None
+    return {"date": date_str, "plant_avg_pr": plant_avg, "by_inverter": result}
+
 
 def get_transformer_comparison(date_str=None):
     """Compare TX1, TX2, TX3 production."""
@@ -547,7 +578,7 @@ def build_data_snapshot(plant_data, question):
     # 1. Semantic Categories & Synonyms (Lite RAG Routing)
     CATEGORIES = {
         "TEMPERATURE": ["temperature", "temp", "hot", "°c", "caldo", "thermal", "heat", "warm", "fresco", "freddo", "gradi"],
-        "PRODUCTION": ["production", "energy", "mwh", "kwh", "produzione", "total", "power", "quanto", "generate", "yield", "peak", "massima", "picco", "potenza", "energia"],
+        "PRODUCTION": ["production", "energy", "mwh", "kwh", "produzione", "total", "power", "quanto", "generate", "yield", "peak", "massima", "picco", "potenza", "energia", "pr", "performance ratio", "performance"],
         "TRANSFORMERS": ["tx1", "tx2", "tx3", "transformer", "compare", "comparison", "confronto", "trasformatore", "trafi"],
         "DOWNTIME": ["off", "down", "zero", "offline", "stopped", "trip", "fault", "spento", "not working", "not producing", "fermo", "anomalia", "allarme"],
         "DC_STRINGS": ["current", "dc", "string", "mppt", "corrente", "amper", "stringhe"],
@@ -625,6 +656,19 @@ def build_data_snapshot(plant_data, question):
         
     pub = get_public_url() or "https://carl-perkiest-paniculately.ngrok-free.dev/"
     snapshot.append(f"DASHBOARD URL: {pub} (Local: http://localhost:8080)")
+    snapshot.append(
+        "DATABASE TABLES (use these exact names in query_db): "
+        "potenza_ac (_date,Ora,<inverter cols>), "
+        "corrente_dc (date,ora,inverter_id,mppt_number,value), "
+        "irraggiamento (_date,Ora,<sensor cols>), "
+        "temperatura (_date,Ora,<inverter cols>), "
+        "pr_readings (_date,Ora,<inverter cols>), "
+        "resistenza_isolamento (_date,Ora,<inverter cols>), "
+        "potenza_attiva (_date,Ora,'Valore nominale potenza attiva [%]'), "
+        "analysis_snapshots (date,timestamp,snapshot_json). "
+        "There is NO 'metrics' table."
+    )
+    snapshot.append(f"AVAILABLE DATES WITH DATA: {get_available_dates()[:10]}")
     
     # 5. Semantic Data Fetching
     if "TEMPERATURE" in active_cats:
@@ -634,8 +678,10 @@ def build_data_snapshot(plant_data, question):
     if "PRODUCTION" in active_cats:
         prod = get_total_production(target_date)
         peak = get_peak_production(target_date)
+        pr   = get_pr_data(target_date)
         snapshot.append(f"PRODUCTION: {json.dumps(prod, default=str)}")
         snapshot.append(f"PEAK: {json.dumps(peak, default=str)}")
+        snapshot.append(f"PR (Performance Ratio): {json.dumps(pr, default=str)}")
         
     if "TRANSFORMERS" in active_cats:
         data = get_transformer_comparison(target_date)
@@ -737,6 +783,7 @@ def run_python_analysis(code: str, plant_data: dict) -> tuple:
         "get_irradiance": get_irradiance,
         "get_downtime_events": get_downtime_events,
         "get_available_dates": get_available_dates,
+        "get_pr_data": get_pr_data,
         "get_tracker_summary": get_tracker_summary,
         "get_tracker_data": get_all_tracker_status,
         "get_tracker_data_summary": get_tracker_data_summary,

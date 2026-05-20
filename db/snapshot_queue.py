@@ -19,8 +19,9 @@ logger = logging.getLogger(__name__)
 
 # Bounded queue to avoid unlimited memory growth
 _Q_MAXSIZE = 256
-_snapshot_q: "queue.Queue[tuple[str, str, dict]]" = queue.Queue(maxsize=_Q_MAXSIZE)
+_snapshot_q: "queue.Queue[tuple[str, str, dict] | None]" = queue.Queue(maxsize=_Q_MAXSIZE)
 _worker_started = False
+_worker_thread: threading.Thread | None = None
 
 
 def _worker_loop() -> None:
@@ -49,11 +50,11 @@ def _worker_loop() -> None:
 
 def start_snapshot_worker() -> None:
     """Start the background worker thread (idempotent)."""
-    global _worker_started
+    global _worker_started, _worker_thread
     if _worker_started:
         return
-    t = threading.Thread(target=_worker_loop, name="snapshot-worker", daemon=True)
-    t.start()
+    _worker_thread = threading.Thread(target=_worker_loop, name="snapshot-worker", daemon=True)
+    _worker_thread.start()
     _worker_started = True
     logger.info("[SNAPSHOT-WORKER] Started snapshot worker thread")
 
@@ -69,3 +70,39 @@ def enqueue_snapshot(date_str: str, timestamp_str: str, snapshot: dict) -> None:
         _snapshot_q.put_nowait((date_str, timestamp_str, snapshot))
     except queue.Full:
         logger.error("[SNAPSHOT-WORKER] Snapshot queue full — dropping snapshot")
+
+
+def flush_snapshot_queue(timeout: float = 30.0) -> bool:
+    """Wait for all pending snapshots to be written."""
+    start_snapshot_worker()
+    try:
+        _snapshot_q.join()
+        return True
+    except Exception as e:
+        logger.warning(f"[SNAPSHOT-WORKER] Flush interrupted: {e}")
+        return False
+
+
+def shutdown_snapshot_worker(timeout: float = 30.0) -> bool:
+    """Gracefully stop the snapshot worker after flushing pending items."""
+    global _worker_started, _worker_thread
+    if not _worker_started:
+        return True
+    try:
+        _snapshot_q.put(None, timeout=5)
+    except queue.Full:
+        logger.warning("[SNAPSHOT-WORKER] Shutdown queue full; forcing stop")
+    try:
+        start = time.time()
+        while _worker_thread is not None and _worker_thread.is_alive() and time.time() - start < timeout:
+            time.sleep(0.1)
+        if _worker_thread is not None and _worker_thread.is_alive():
+            logger.warning("[SNAPSHOT-WORKER] Worker did not stop cleanly within timeout")
+            return False
+        return True
+    except Exception as e:
+        logger.warning(f"[SNAPSHOT-WORKER] Shutdown failed: {e}")
+        return False
+    finally:
+        _worker_started = False
+        _worker_thread = None
