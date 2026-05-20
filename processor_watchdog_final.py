@@ -1782,13 +1782,13 @@ def analyze_site(date_str: str) -> None:
             "sensor_data": sensor_data
         }
 
-        # Save snapshot to database
+        # Save snapshot to database via background single-writer queue
         try:
-            from db.db_manager import save_analysis_snapshot
-            save_analysis_snapshot(date_str, timestamp, snapshot)
-            logger.info(f"Saved analysis snapshot to DB for {date_str} at {timestamp}")
+            from db.snapshot_queue import enqueue_snapshot
+            enqueue_snapshot(date_str, timestamp, snapshot)
+            logger.info(f"Enqueued analysis snapshot for {date_str} at {timestamp}")
         except Exception as e:
-            logger.error(f"Failed to save snapshot to DB: {e}")
+            logger.error(f"Failed to enqueue snapshot: {e}")
             # Fallback: write JSON file
             json_path = DATA_DIR / f"dashboard_data_{date_str}.json"
             existing_data = {}
