@@ -2,7 +2,8 @@
 db/db_manager.py — SQLite database manager for Mazara SCADA monitoring system.
 
 Two separate databases:
-  scada_data.db  — Extracted SCADA measurements + analysis snapshots
+  scada_data.db  — Extracted SCADA measurements
+  scada_snapshots.db — Analysis snapshots
   scada_logs.db  — Application logs (extraction, watchdog, dashboard, telegram)
 
 Design:
@@ -37,6 +38,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DB_DIR = ROOT / "db"
 DATA_DB_PATH = DB_DIR / "scada_data.db"
 LOGS_DB_PATH = DB_DIR / "scada_logs.db"
+SNAPSHOT_DB_PATH = DB_DIR / "scada_snapshots.db"
 
 logger = logging.getLogger(__name__)
 
@@ -57,40 +59,71 @@ def _refresh_bound_method(func, args):
     if hasattr(func, "__self__") and hasattr(func, "__name__"):
         self_obj = func.__self__
         if isinstance(self_obj, sqlite3.Connection):
+            if self_obj is getattr(_thread_local, "snapshot_conn", None):
+                return getattr(_get_snapshot_conn(), func.__name__)
             return getattr(get_data_conn(), func.__name__)
     return func
 
 
 def _refresh_connection_args(args, kwargs):
-    """Replace any sqlite3.Connection objects in args/kwargs with a fresh connection."""
+    """Replace thread-local sqlite3.Connection objects in args/kwargs with a fresh connection."""
+    def resolve_connection(conn):
+        if conn is getattr(_thread_local, "snapshot_conn", None):
+            return _get_snapshot_conn()
+        return get_data_conn()
+
     new_args = []
     for arg in args:
         if isinstance(arg, sqlite3.Connection):
-            new_args.append(get_data_conn())
+            new_args.append(resolve_connection(arg))
         else:
             new_args.append(arg)
 
     new_kwargs = {}
     for key, value in kwargs.items():
         if isinstance(value, sqlite3.Connection):
-            new_kwargs[key] = get_data_conn()
+            new_kwargs[key] = resolve_connection(value)
         else:
             new_kwargs[key] = value
     return tuple(new_args), new_kwargs
 
 
 def _retry_data_operation(func, *args, retries: int = 6, delay: float = 0.25, **kwargs):
-    """Retry a database operation when SQLite reports a locked or closed database."""
+    """Retry a data database operation when SQLite reports a locked, closed, or corrupted database."""
     for attempt in range(1, retries + 1):
         try:
             return func(*args, **kwargs)
         except sqlite3.DatabaseError as exc:
             msg = str(exc).lower()
-            if "database is locked" in msg or "cannot operate on a closed database" in msg:
+            if any(keyword in msg for keyword in ("database is locked", "cannot operate on a closed database", "disk image is malformed", "file is not a database", "file is encrypted")):
                 if attempt == retries:
                     raise
+                if any(keyword in msg for keyword in ("disk image is malformed", "file is not a database", "file is encrypted")):
+                    logger.warning(f"[DB] Detected corrupted scada_data.db during operation: {exc}")
+                    _repair_data_db()
                 time.sleep(delay * attempt)
                 _reset_data_conn()
+                func = _refresh_bound_method(func, args)
+                args, kwargs = _refresh_connection_args(args, kwargs)
+                continue
+            raise
+
+
+def _retry_snapshot_operation(func, *args, retries: int = 6, delay: float = 0.25, **kwargs):
+    """Retry a snapshot database operation when SQLite reports a lock, closed, or corrupted database."""
+    for attempt in range(1, retries + 1):
+        try:
+            return func(*args, **kwargs)
+        except sqlite3.DatabaseError as exc:
+            msg = str(exc).lower()
+            if any(keyword in msg for keyword in ("database is locked", "cannot operate on a closed database", "disk image is malformed", "file is not a database", "file is encrypted")):
+                if attempt == retries:
+                    raise
+                if any(keyword in msg for keyword in ("disk image is malformed", "file is not a database", "file is encrypted")):
+                    logger.warning(f"[DB] Detected corrupted snapshot DB during operation: {exc}")
+                    _repair_snapshot_db()
+                time.sleep(delay * attempt)
+                _reset_snapshot_conn()
                 func = _refresh_bound_method(func, args)
                 args, kwargs = _refresh_connection_args(args, kwargs)
                 continue
@@ -120,6 +153,29 @@ def _repair_data_db() -> None:
     _reset_data_conn()
 
 
+def _repair_snapshot_db() -> None:
+    """Rename a corrupted snapshot database and prepare a fresh replacement."""
+    DB_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    if SNAPSHOT_DB_PATH.exists():
+        backup_path = SNAPSHOT_DB_PATH.with_name(f"{SNAPSHOT_DB_PATH.name}.corrupt_{timestamp}.bak")
+        try:
+            SNAPSHOT_DB_PATH.rename(backup_path)
+            logger.warning(f"[DB] Corrupted snapshot DB renamed to: {backup_path}")
+        except Exception as exc:
+            logger.error(f"[DB] Failed to backup corrupted snapshot DB: {exc}")
+    for suffix in ("-wal", "-shm"):
+        extra = SNAPSHOT_DB_PATH.with_name(f"{SNAPSHOT_DB_PATH.name}{suffix}")
+        if extra.exists():
+            backup_extra = extra.with_name(f"{extra.name}.corrupt_{timestamp}.bak")
+            try:
+                extra.rename(backup_extra)
+                logger.warning(f"[DB] Corrupted snapshot DB journal renamed to: {backup_extra}")
+            except Exception as exc:
+                logger.error(f"[DB] Failed to backup corrupted snapshot DB journal {extra}: {exc}")
+    _reset_snapshot_conn()
+
+
 def get_data_conn() -> sqlite3.Connection:
     """Get or create a thread-local connection to the data database."""
     conn = getattr(_thread_local, "data_conn", None)
@@ -128,7 +184,7 @@ def get_data_conn() -> sqlite3.Connection:
             conn.execute("SELECT 1").fetchone()
         except sqlite3.DatabaseError as exc:
             msg = str(exc).lower()
-            if "disk image is malformed" in msg or "cannot operate on a closed database" in msg or "file is not a database" in msg or "file is encrypted" in msg:
+            if any(keyword in msg for keyword in ("disk image is malformed", "cannot operate on a closed database", "file is not a database", "file is encrypted")):
                 logger.warning(f"[DB] Detected corrupted scada_data.db: {exc}")
                 _repair_data_db()
             _reset_data_conn()
@@ -145,7 +201,7 @@ def get_data_conn() -> sqlite3.Connection:
             conn.execute("SELECT 1").fetchone()
         except sqlite3.DatabaseError as exc:
             msg = str(exc).lower()
-            if "disk image is malformed" in msg or "file is not a database" in msg or "file is encrypted" in msg:
+            if any(keyword in msg for keyword in ("disk image is malformed", "file is not a database", "file is encrypted")):
                 logger.warning(f"[DB] Failed opening scada_data.db due corruption: {exc}")
                 if "conn" in locals() and conn is not None:
                     try:
@@ -187,15 +243,77 @@ def _get_fresh_data_conn() -> sqlite3.Connection:
     return conn
 
 
+def _get_snapshot_conn() -> sqlite3.Connection:
+    """Get or create a thread-local connection to the snapshot database."""
+    conn = getattr(_thread_local, "snapshot_conn", None)
+    if conn is not None:
+        try:
+            conn.execute("SELECT 1").fetchone()
+        except sqlite3.DatabaseError as exc:
+            msg = str(exc).lower()
+            if any(keyword in msg for keyword in ("disk image is malformed", "cannot operate on a closed database", "file is not a database", "file is encrypted")):
+                logger.warning(f"[DB] Detected corrupted snapshot DB: {exc}")
+                _repair_snapshot_db()
+            _reset_snapshot_conn()
+            conn = None
+
+    if conn is None:
+        DB_DIR.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(SNAPSHOT_DB_PATH), check_same_thread=False, timeout=DB_TIMEOUT_SECONDS)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute(f"PRAGMA busy_timeout={DB_BUSY_TIMEOUT_MS}")
+        conn.execute("PRAGMA cache_size=-64000")
+        _thread_local.snapshot_conn = conn
+    return conn
+
+
+def _get_fresh_snapshot_conn() -> sqlite3.Connection:
+    """Open a fresh connection to the snapshot database for single-shot writes."""
+    DB_DIR.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(SNAPSHOT_DB_PATH), check_same_thread=False, timeout=DB_TIMEOUT_SECONDS)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute(f"PRAGMA busy_timeout={DB_BUSY_TIMEOUT_MS}")
+    conn.execute("PRAGMA cache_size=-64000")
+    return conn
+
+
+def _reset_snapshot_conn() -> None:
+    conn = getattr(_thread_local, "snapshot_conn", None)
+    if conn is not None:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        _thread_local.snapshot_conn = None
+
+
 # ---------------------------------------------------------------------------
 # Database Initialization
 # ---------------------------------------------------------------------------
 
 def init_databases() -> None:
-    """Create both databases and all required tables/indexes."""
+    """Create all managed databases and required tables/indexes."""
     _init_data_db()
+    _init_snapshot_db()
     _init_logs_db()
     logger.info("Databases initialized successfully.")
+
+
+def _init_snapshot_db() -> None:
+    """Create the snapshot database tables."""
+    conn = _get_snapshot_conn()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS analysis_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL,
+            timestamp TEXT NOT NULL,
+            snapshot_json TEXT NOT NULL
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_snapshot_date ON analysis_snapshots(date)")
+    conn.commit()
 
 
 def _init_data_db() -> None:
@@ -231,17 +349,6 @@ def _init_data_db() -> None:
             PRIMARY KEY (ncu_id, tcu_id)
         )
     """)
-
-    # Analysis snapshots — stores full dashboard JSON per timestamp
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS analysis_snapshots (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            date TEXT NOT NULL,
-            timestamp TEXT NOT NULL,
-            snapshot_json TEXT NOT NULL
-        )
-    """)
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_snap_date ON analysis_snapshots(date)")
 
     # Extraction status — tracks which metrics were successfully extracted
     conn.execute("""
@@ -380,9 +487,18 @@ def _save_wide_metric(df: pd.DataFrame, table_name: str, date_str: str) -> None:
     except sqlite3.OperationalError:
         pass  # Table doesn't exist yet — to_sql will create it
 
-    # Write to DB (creates table on first call, appends on subsequent)
-    _retry_data_operation(df_out.to_sql, table_name, conn, if_exists="append", index=False)
-    _retry_data_operation(conn.commit)
+    # Write to DB in chunks to avoid long-held write locks
+    CHUNK = 200
+    for start in range(0, len(df_out), CHUNK):
+        chunk_df = df_out.iloc[start:start + CHUNK]
+        _retry_data_operation(chunk_df.to_sql, table_name, conn, if_exists="append", index=False)
+        _retry_data_operation(conn.commit)
+
+    # Keep WAL size bounded after high-volume writes
+    try:
+        conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
+    except Exception:
+        pass
 
 
 def _save_corrente_dc(df: pd.DataFrame, date_str: str) -> None:
@@ -427,9 +543,17 @@ def _save_corrente_dc(df: pd.DataFrame, date_str: str) -> None:
     # Delete existing data for this date
     _retry_data_operation(conn.execute, "DELETE FROM corrente_dc WHERE date = ?", (date_str,))
 
-    # Bulk insert
-    _retry_data_operation(result.to_sql, "corrente_dc", conn, if_exists="append", index=False)
-    _retry_data_operation(conn.commit)
+    # Bulk insert in chunks to avoid long-held write locks
+    CHUNK = 2000
+    for start in range(0, len(result), CHUNK):
+        chunk_df = result.iloc[start:start + CHUNK]
+        _retry_data_operation(chunk_df.to_sql, "corrente_dc", conn, if_exists="append", index=False)
+        _retry_data_operation(conn.commit)
+
+    try:
+        conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
+    except Exception:
+        pass
 
     logger.info(f"[DB] Normalized {len(df)} wide rows -> {len(result)} DC readings")
 
@@ -568,12 +692,12 @@ class NumpyEncoder(json.JSONEncoder):
 
 
 def save_analysis_snapshot(date_str: str, timestamp_str: str, snapshot_data: dict) -> None:
-    """Save an analysis snapshot to the database."""
+    """Save an analysis snapshot to the snapshot database."""
     snapshot_json = json.dumps(snapshot_data, cls=NumpyEncoder)
 
     for attempt in range(1, 4):
         try:
-            with _get_fresh_data_conn() as conn:
+            with _get_fresh_snapshot_conn() as conn:
                 conn.execute("BEGIN IMMEDIATE")
                 conn.execute(
                     "INSERT INTO analysis_snapshots (date, timestamp, snapshot_json) VALUES (?, ?, ?)",
@@ -592,6 +716,10 @@ def save_analysis_snapshot(date_str: str, timestamp_str: str, snapshot_data: dic
                     (date_str, date_str)
                 )
                 conn.commit()
+                try:
+                    conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
+                except Exception:
+                    pass
             return
         except sqlite3.DatabaseError as exc:
             msg = str(exc).lower()
@@ -635,7 +763,7 @@ def load_latest_snapshot(date_str: str) -> dict | None:
     corrupted (e.g. 'disk image is malformed', 'database is locked').
     """
     try:
-        conn = get_data_conn()
+        conn = _get_snapshot_conn()
         row = conn.execute(
             "SELECT snapshot_json FROM analysis_snapshots "
             "WHERE date = ? ORDER BY timestamp DESC LIMIT 1",
@@ -644,18 +772,26 @@ def load_latest_snapshot(date_str: str) -> dict | None:
         if row is not None:
             return json.loads(row[0])
     except sqlite3.DatabaseError:
-        # DB is corrupted — reset connection so next caller gets a fresh one
-        logger.warning("[DB] scada_data.db error in load_latest_snapshot — resetting connection, falling back to JSON")
-        _reset_data_conn()
+        logger.warning("[DB] snapshot DB error in load_latest_snapshot — resetting connection, falling back to JSON")
+        _reset_snapshot_conn()
     except Exception:
         pass
 
     return _load_snapshot_from_json(date_str)
 
 
+def get_latest_snapshot_date() -> str | None:
+    """Return the most recent snapshot date available in the snapshot database."""
+    conn = _get_snapshot_conn()
+    row = conn.execute(
+        "SELECT date FROM analysis_snapshots ORDER BY date DESC, timestamp DESC LIMIT 1"
+    ).fetchone()
+    return row[0] if row else None
+
+
 def load_all_snapshots(date_str: str) -> dict:
     """Load all analysis snapshots for a given date as {timestamp: data}."""
-    conn =  get_data_conn()
+    conn = _get_snapshot_conn()
 
     try:
         rows = conn.execute(
@@ -674,9 +810,9 @@ def load_all_snapshots(date_str: str) -> dict:
 
 def delete_snapshots(date_str: str) -> None:
     """Delete all analysis snapshots for a given date (used by rescan)."""
-    conn = get_data_conn()
-    _retry_data_operation(conn.execute, "DELETE FROM analysis_snapshots WHERE date = ?", (date_str,))
-    _retry_data_operation(conn.commit)
+    conn = _get_snapshot_conn()
+    _retry_snapshot_operation(conn.execute, "DELETE FROM analysis_snapshots WHERE date = ?", (date_str,))
+    _retry_snapshot_operation(conn.commit)
 
 
 # ---------------------------------------------------------------------------

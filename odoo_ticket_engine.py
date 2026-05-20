@@ -183,12 +183,11 @@ def save_state(state: dict):
 
 def get_latest_snapshot() -> dict | None:
     try:
-        from db.db_manager import get_data_conn
-        conn = get_data_conn()
-        row = conn.execute(
-            "SELECT snapshot_json FROM analysis_snapshots ORDER BY timestamp DESC LIMIT 1"
-        ).fetchone()
-        return json.loads(row[0]) if row else None
+        from db.db_manager import load_latest_snapshot
+        today = datetime.now().strftime("%Y-%m-%d")
+        latest_data = load_latest_snapshot(today)
+        if latest_data:
+            return latest_data
     except Exception as e:
         logger.error(f"Snapshot read error: {e}")
 

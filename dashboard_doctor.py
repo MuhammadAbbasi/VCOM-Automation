@@ -451,6 +451,38 @@ def check_process_health() -> dict:
     return results
 
 
+def check_logs_health() -> dict:
+    results = {"status": "HEALTHY", "issues": [], "info": []}
+    try:
+        from db.doctor import scan_recent_logs, remediate_issues
+
+        issues = scan_recent_logs(hours=1)
+        if issues:
+            results["status"] = "WARNING"
+            for issue in issues:
+                source = issue.get("source") or "logs"
+                level = issue.get("level") or "ERROR"
+                message = issue.get("message") or ""
+                results["issues"].append(
+                    f"❌ Log {source} [{level}]: {message}"
+                )
+
+            remediate_results = remediate_issues(issues, ask_admin=False)
+            for item in remediate_results:
+                result = item.get("result", {})
+                if result.get("ok"):
+                    action = result.get("action") or result.get("service")
+                    if action:
+                        results["info"].append(f"Auto-healed: {action}")
+                else:
+                    err = result.get("error") or result.get("reason")
+                    if err:
+                        results["issues"].append(f"Auto-heal failed: {err}")
+    except Exception as e:
+        logger.warning(f"[LOG] check_logs_health failed: {e}")
+    return results
+
+
 # ---------------------------------------------------------------------------
 # 4. Flatline Detection
 # ---------------------------------------------------------------------------
@@ -747,13 +779,14 @@ def run_doctor():
     db_report = check_db_health()
     conn_report = check_connections()
     proc_report = check_process_health()
+    log_report = check_logs_health()
     ui_report = check_ui_state()
     flatlines = check_flatline()
     analytics = build_daily_analytics()
 
     all_statuses = [
         db_report["status"], conn_report["status"],
-        proc_report["status"], ui_report["status"]
+        proc_report["status"], log_report["status"], ui_report["status"]
     ]
     if "CRITICAL" in all_statuses:
         overall_status = "CRITICAL"
@@ -764,10 +797,12 @@ def run_doctor():
 
     all_issues = (
         db_report["issues"] + conn_report["issues"]
-        + proc_report["issues"] + ui_report["issues"]
+        + proc_report["issues"] + log_report["issues"] + ui_report["issues"]
     )
     for issue in all_issues:
         logger.warning(f"[ISSUE] {issue}")
+
+    all_info = db_report["info"] + conn_report["info"] + proc_report["info"] + log_report["info"] + ui_report["info"]
 
     # Self-heal if warranted (only during daylight for tracker issues)
     heal_actions = []

@@ -372,17 +372,15 @@ def load_settings() -> dict:
 def get_latest_dashboard_json() -> dict | None:
     """Retrieve the latest analysis snapshot and trackers from the database."""
     try:
-        from db.db_manager import load_latest_snapshot, get_all_tracker_status
+        from db.db_manager import get_latest_snapshot_date, load_latest_snapshot, get_all_tracker_status
         today = datetime.now().strftime("%Y-%m-%d")
         latest_data = load_latest_snapshot(today)
         
         # Fallback: check recent dates if today is empty
         if not latest_data:
-            from db.db_manager import get_data_conn
-            conn = get_data_conn()
-            res = conn.execute("SELECT date FROM analysis_snapshots ORDER BY date DESC, timestamp DESC LIMIT 1").fetchone()
-            if res:
-                latest_data = load_latest_snapshot(res[0])
+            latest_date = get_latest_snapshot_date()
+            if latest_date:
+                latest_data = load_latest_snapshot(latest_date)
         
         if latest_data:
             # Inject tracker status for AI context

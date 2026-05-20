@@ -63,8 +63,7 @@ def scan_recent_logs(
 
     The optional filters help unit tests and targeted diagnostics.
     """
-    cutoff = datetime.utcnow() - timedelta(hours=hours)
-    cutoff_iso = cutoff.isoformat(timespec="seconds")
+    cutoff = datetime.now() - timedelta(hours=hours)
     issues = []
 
     def _matches_filters(source: str | None, message: str | None) -> bool:
@@ -77,11 +76,16 @@ def scan_recent_logs(
     try:
         conn = get_logs_conn()
         rows = conn.execute(
-            "SELECT timestamp, source, level, message FROM logs WHERE timestamp >= ? ORDER BY timestamp ASC",
-            (cutoff_iso,)
+            "SELECT timestamp, source, level, message FROM logs ORDER BY timestamp ASC"
         ).fetchall()
         for ts, source, level, message in rows:
-            if level and level.upper() in ("ERROR", "CRITICAL") or "database is locked" in (message or "").lower():
+            try:
+                row_ts = datetime.fromisoformat(ts)
+            except Exception:
+                continue
+            if row_ts < cutoff:
+                continue
+            if (level and level.upper() in ("ERROR", "CRITICAL")) or "database is locked" in (message or "").lower():
                 if _matches_filters(source, message):
                     issues.append({
                         "timestamp": ts,
