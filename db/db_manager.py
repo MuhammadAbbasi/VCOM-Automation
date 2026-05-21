@@ -316,8 +316,37 @@ def _init_snapshot_db() -> None:
     conn.commit()
 
 
+def _apply_data_db_swap() -> None:
+    """If a pre-built replacement DB exists, swap it in before opening any connection.
+
+    Run `db/scada_data_new.db` past all active connections by waiting until the
+    process starts fresh.  Call this once at the top of `_init_data_db()`.
+    """
+    new_path = DATA_DB_PATH.with_name("scada_data_new.db")
+    if not new_path.exists():
+        return
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    old_backup = DATA_DB_PATH.with_name(f"scada_data.db.replaced_{timestamp}.bak")
+    try:
+        if DATA_DB_PATH.exists():
+            DATA_DB_PATH.rename(old_backup)
+            logger.warning(f"[DB] Swapped corrupted data DB → {old_backup.name}")
+        for suffix in ("-wal", "-shm"):
+            stale = DATA_DB_PATH.with_name(f"scada_data.db{suffix}")
+            if stale.exists():
+                try:
+                    stale.unlink()
+                except Exception:
+                    pass
+        new_path.rename(DATA_DB_PATH)
+        logger.info("[DB] scada_data_new.db promoted to scada_data.db")
+    except Exception as exc:
+        logger.error(f"[DB] DB swap failed: {exc}")
+
+
 def _init_data_db() -> None:
     """Create the data database tables."""
+    _apply_data_db_swap()
     conn = get_data_conn()
 
     # Corrente DC — normalized (one row per inverter/MPPT/timestamp)
