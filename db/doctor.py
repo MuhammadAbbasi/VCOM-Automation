@@ -23,7 +23,15 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from db.db_manager import get_logs_conn, get_data_conn, _repair_data_db, _reset_data_conn
+from db.db_manager import (
+    get_logs_conn,
+    get_data_conn,
+    _repair_data_db,
+    _repair_snapshot_db,
+    _reset_data_conn,
+    _reset_snapshot_conn,
+    _get_snapshot_conn,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 APPROVALS_PATH = ROOT / "telegram_approvals.json"
@@ -98,10 +106,14 @@ def scan_recent_logs(
 
     # Also scan plain log files for 'database is locked' patterns
     try:
-        logs_dir = ROOT / "logs"
         now = datetime.utcnow()
+        search_paths = [ROOT.glob("*.log")]
+        logs_dir = ROOT / "logs"
         if logs_dir.exists():
-            for f in logs_dir.glob("*.log"):
+            search_paths.append(logs_dir.glob("*.log"))
+
+        for path_iter in search_paths:
+            for f in path_iter:
                 try:
                     for line in f.read_text(encoding="utf-8", errors="ignore").splitlines():
                         if "database is locked" in line.lower() or "traceback" in line.lower() or "exception" in line.lower():
@@ -124,22 +136,44 @@ def _auto_remedy_db_lock() -> dict:
     """Attempt a non-destructive remediation for `database is locked` errors.
     Returns a result dict.
     """
+    data_result = {"ok": False}
+    snapshot_result = {"ok": False}
+
     try:
-        # Try a WAL checkpoint to flush writers
         conn = get_data_conn()
         try:
             conn.execute("PRAGMA wal_checkpoint(FULL)")
             conn.commit()
+            data_result = {"ok": True, "action": "wal_checkpoint_data_db"}
         except Exception:
-            # best-effort
             pass
-
-        # Reset thread-local connection so other threads reopen a fresh conn
+    except Exception as exc:
+        LOG.warning(f"_auto_remedy_db_lock data checkpoint failed: {exc}")
+    finally:
         _reset_data_conn()
-        return {"ok": True, "action": "wal_checkpoint_and_reset"}
-    except Exception as e:
-        LOG.error(f"_auto_remedy_db_lock failed: {e}")
-        return {"ok": False, "error": str(e)}
+
+    try:
+        conn = _get_snapshot_conn()
+        try:
+            conn.execute("PRAGMA wal_checkpoint(FULL)")
+            conn.commit()
+            snapshot_result = {"ok": True, "action": "wal_checkpoint_snapshot_db"}
+        except Exception:
+            pass
+    except Exception as exc:
+        LOG.warning(f"_auto_remedy_db_lock snapshot checkpoint failed: {exc}")
+    finally:
+        _reset_snapshot_conn()
+
+    if data_result["ok"] or snapshot_result["ok"]:
+        actions = []
+        if data_result["ok"]:
+            actions.append(data_result["action"])
+        if snapshot_result["ok"]:
+            actions.append(snapshot_result["action"])
+        return {"ok": True, "action": "+".join(actions)}
+
+    return {"ok": False, "error": "checkpoint_failed", "details": {"data": data_result, "snapshot": snapshot_result}}
 
 
 def _repair_corrupt_db() -> dict:
@@ -248,7 +282,11 @@ def remediate_issues(issues: list[dict], ask_admin: bool = True, admin_timeout: 
                 if not approved:
                     results.append({"issue": issue, "result": {"ok": False, "reason": "admin_denied"}})
                     continue
-            res = _repair_corrupt_db()
+
+            if "snapshot" in msg or "analysis_snapshots" in msg or "scada_snapshots.db" in msg:
+                res = _repair_snapshot_db()
+            else:
+                res = _repair_data_db()
             results.append({"issue": issue, "result": res})
             continue
 

@@ -13,7 +13,7 @@ import threading
 import time
 from typing import Any
 
-from db.db_manager import save_analysis_snapshot
+from db.db_manager import save_analysis_snapshot, save_snapshot_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -33,17 +33,24 @@ def _worker_loop() -> None:
 
         date_str, timestamp_str, snapshot = item
         try:
-            # Save with a few internal attempts to handle transient DB locks
-            for attempt in range(1, 5):
+            # Save with a longer backoff for transient DB locks
+            for attempt in range(1, 11):
                 try:
                     save_analysis_snapshot(date_str, timestamp_str, snapshot)
                     logger.info(f"[SNAPSHOT-WORKER] Saved snapshot {date_str} {timestamp_str}")
                     break
                 except Exception as e:
                     logger.warning(f"[SNAPSHOT-WORKER] Save attempt {attempt} failed: {e}")
-                    time.sleep(0.5 * attempt)
-            else:
-                logger.error(f"[SNAPSHOT-WORKER] Failed to save snapshot after retries: {date_str} {timestamp_str}")
+                    if attempt == 10:
+                        raise
+                    time.sleep(0.5 * attempt + random.random())
+        except Exception as exc:
+            logger.error(f"[SNAPSHOT-WORKER] Failed to save snapshot after retries: {date_str} {timestamp_str}: {exc}")
+            try:
+                fallback_path = save_snapshot_fallback(date_str, timestamp_str, snapshot)
+                logger.warning(f"[SNAPSHOT-WORKER] Snapshot fallback saved to JSON: {fallback_path}")
+            except Exception as fallback_exc:
+                logger.error(f"[SNAPSHOT-WORKER] Snapshot fallback failed: {fallback_exc}")
         finally:
             _snapshot_q.task_done()
 

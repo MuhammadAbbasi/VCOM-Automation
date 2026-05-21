@@ -695,7 +695,7 @@ def save_analysis_snapshot(date_str: str, timestamp_str: str, snapshot_data: dic
     """Save an analysis snapshot to the snapshot database."""
     snapshot_json = json.dumps(snapshot_data, cls=NumpyEncoder)
 
-    for attempt in range(1, 4):
+    for attempt in range(1, 11):
         try:
             with _get_fresh_snapshot_conn() as conn:
                 conn.execute("BEGIN IMMEDIATE")
@@ -723,9 +723,15 @@ def save_analysis_snapshot(date_str: str, timestamp_str: str, snapshot_data: dic
             return
         except sqlite3.DatabaseError as exc:
             msg = str(exc).lower()
-            if "database is locked" in msg and attempt < 3:
+            if "database is locked" in msg and attempt < 10:
                 time.sleep(1.5 * attempt + random.random())
                 continue
+            if any(keyword in msg for keyword in ("disk image is malformed", "file is not a database", "file is encrypted")):
+                logger.warning(f"[DB] Detected corrupted snapshot DB during save: {exc}")
+                _repair_snapshot_db()
+                if attempt < 10:
+                    time.sleep(1.5 * attempt + random.random())
+                    continue
             raise
 
 
@@ -754,6 +760,31 @@ def _load_snapshot_from_json(date_str: str) -> dict | None:
         return data[latest_key]
     except Exception:
         return None
+
+
+def save_snapshot_fallback(date_str: str, timestamp_str: str, snapshot_data: dict) -> str:
+    """Write a snapshot to the watchdog JSON fallback file when DB persistence fails."""
+    fallback_dir = ROOT / "extracted_data"
+    fallback_dir.mkdir(parents=True, exist_ok=True)
+    json_path = fallback_dir / f"dashboard_data_{date_str}.json"
+    existing_data = {}
+    if json_path.exists():
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                existing_data = json.load(f)
+        except Exception:
+            existing_data = {}
+
+    existing_data[timestamp_str] = snapshot_data
+    timestamps_sorted = sorted(existing_data.keys())
+    if len(timestamps_sorted) > 50:
+        for old_ts in timestamps_sorted[:-50]:
+            existing_data.pop(old_ts, None)
+
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(existing_data, f, indent=2, cls=NumpyEncoder)
+
+    return str(json_path)
 
 
 def load_latest_snapshot(date_str: str) -> dict | None:
