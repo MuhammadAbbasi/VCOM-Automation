@@ -140,7 +140,7 @@ def get_total_production(date_str=None):
     date_str = date_str or datetime.now().strftime("%Y-%m-%d")
     df = load_metric(date_str, "Potenza AC")
     
-    if df.empty:
+    if df is None or df.empty:
         return {"date": date_str, "total_mwh": None, "error": "No data"}
         
     ac_cols = [c for c in df.columns if "Potenza AC (INV" in c or "Potenza AC(INV" in c]
@@ -198,7 +198,7 @@ def get_peak_production(date_str=None):
     # Try to get POA at that time
     poa_val = None
     irr_df = load_metric(date_str, "Irraggiamento")
-    if not irr_df.empty and "Ora" in irr_df.columns:
+    if irr_df is not None and not irr_df.empty and "Ora" in irr_df.columns:
         # Find matching time in irradiance
         match = irr_df[irr_df["Ora"] == peak_ora]
         if not match.empty:
@@ -217,7 +217,7 @@ def get_temperatures(date_str=None, threshold=None):
     """Get latest temperature readings for all inverters."""
     date_str = date_str or datetime.now().strftime("%Y-%m-%d")
     df = load_metric(date_str, "Temperatura")
-    if df.empty:
+    if df is None or df.empty:
         return {"date": date_str, "error": "No temperature data"}
     temp_cols = [c for c in df.columns if "Temperatura inverter (INV" in c or "Temperatura (INV" in c]
     if not temp_cols:
@@ -250,7 +250,7 @@ def get_inverter_status(date_str=None):
     """Get latest power for each inverter, flag zeros/low."""
     date_str = date_str or datetime.now().strftime("%Y-%m-%d")
     df = load_metric(date_str, "Potenza AC")
-    if df.empty:
+    if df is None or df.empty:
         return {"date": date_str, "error": "No AC power data"}
     ac_cols = [c for c in df.columns if "Potenza AC (INV" in c]
     if not ac_cols:
@@ -322,9 +322,9 @@ def get_transformer_comparison(date_str=None):
     """Compare TX1, TX2, TX3 production."""
     date_str = date_str or datetime.now().strftime("%Y-%m-%d")
     df = load_metric(date_str, "Potenza AC")
-    if df.empty:
+    if df is None or df.empty:
         return {"date": date_str, "error": "No data"}
-    
+
     result = {}
     for tx in ["TX1", "TX2", "TX3"]:
         cols = [c for c in df.columns if f"(INV {tx}-" in c]
@@ -347,7 +347,7 @@ def get_dc_currents(date_str=None, threshold=None):
     """Get DC current info for strings/MPPTs."""
     date_str = date_str or datetime.now().strftime("%Y-%m-%d")
     df = load_metric(date_str, "Corrente DC")
-    if df.empty:
+    if df is None or df.empty:
         return {"date": date_str, "error": "No DC current data"}
     dc_cols = [c for c in df.columns if "Corrente DC" in c and "MPPT" in c]
     if not dc_cols:
@@ -385,7 +385,7 @@ def get_irradiance(date_str=None):
     """Get latest irradiance readings."""
     date_str = date_str or datetime.now().strftime("%Y-%m-%d")
     df = load_metric(date_str, "Irraggiamento")
-    if df.empty:
+    if df is None or df.empty:
         return {"date": date_str, "error": "No irradiance data"}
     irr_cols = [c for c in df.columns if "Irraggiamento" in c and c != "Ora" and c != "Timestamp Fetch"]
     if not irr_cols:
@@ -412,9 +412,9 @@ def get_downtime_events(date_str=None):
     """Check which inverters went offline during production hours."""
     date_str = date_str or datetime.now().strftime("%Y-%m-%d")
     df = load_metric(date_str, "Potenza AC")
-    if df.empty:
+    if df is None or df.empty:
         return {"date": date_str, "error": "No data"}
-    
+
     ac_cols = [c for c in df.columns if "Potenza AC (INV" in c]
     if not ac_cols or "Ora" not in df.columns:
         return {"date": date_str, "error": "Missing columns"}

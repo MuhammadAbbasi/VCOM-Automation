@@ -1894,7 +1894,11 @@ class MetricFileHandler(FileSystemEventHandler):
                 logger.info(f"Complete CSV set for {today}. Analyzing...")
                 analyze_site(today)
                 self.last_run = time.time()
-        
+            else:
+                # No data yet for today — still update last_run so the 15-min
+                # fallback timer doesn't fire every minute when data is absent.
+                self.last_run = time.time()
+
         finally:
             self.is_running = False
 
