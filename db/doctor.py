@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 import time
@@ -104,30 +105,56 @@ def scan_recent_logs(
     except Exception as e:
         LOG.warning(f"scan_recent_logs: logs DB read failed: {e}")
 
-    # Also scan plain log files for 'database is locked' patterns
+    # Also scan plain log files for 'database is locked' patterns.
+    # Only match lines that carry a parseable timestamp within the cutoff window
+    # to avoid re-processing the entire history on every doctor run.
+    _LOG_TS_RE = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
     try:
-        now = datetime.utcnow()
         search_paths = [ROOT.glob("*.log")]
         logs_dir = ROOT / "logs"
         if logs_dir.exists():
             search_paths.append(logs_dir.glob("*.log"))
 
+        seen_messages: set[str] = set()  # deduplicate identical lines across files
         for path_iter in search_paths:
             for f in path_iter:
                 try:
                     for line in f.read_text(encoding="utf-8", errors="ignore").splitlines():
-                        if "database is locked" in line.lower() or "traceback" in line.lower() or "exception" in line.lower():
-                            if _matches_filters(f.name, line):
-                                issues.append({
-                                    "timestamp": now.isoformat(timespec="seconds"),
-                                    "source": f.name,
-                                    "level": "ERROR",
-                                    "message": line.strip(),
-                                })
+                        lower = line.lower()
+                        if not ("database is locked" in lower or "traceback" in lower or "exception" in lower):
+                            continue
+                        # Parse the line timestamp; skip lines outside the cutoff window
+                        m = _LOG_TS_RE.match(line)
+                        if m:
+                            try:
+                                line_ts = datetime.fromisoformat(m.group(1))
+                            except ValueError:
+                                continue
+                            if line_ts < cutoff:
+                                continue
+                        else:
+                            # No parseable timestamp — skip to avoid processing ancient history
+                            continue
+                        msg_key = line.strip()
+                        if msg_key in seen_messages:
+                            continue
+                        seen_messages.add(msg_key)
+                        if _matches_filters(f.name, line):
+                            issues.append({
+                                "timestamp": m.group(1),
+                                "source": f.name,
+                                "level": "ERROR",
+                                "message": line.strip(),
+                            })
                 except Exception:
                     continue
     except Exception:
         pass
+
+    # Cap total issues to avoid overwhelming the remediator
+    MAX_ISSUES = 50
+    if len(issues) > MAX_ISSUES:
+        issues = issues[:MAX_ISSUES]
 
     return issues
 
@@ -268,10 +295,16 @@ def remediate_issues(issues: list[dict], ask_admin: bool = True, admin_timeout: 
     request admin approval if `ask_admin` is True.
     """
     results = []
+    # Run db-lock remedy at most once per batch to avoid hammering checkpoints
+    _db_lock_remedied = False
     for issue in issues:
         msg = (issue.get("message") or "").lower()
         if "database is locked" in msg:
-            res = _auto_remedy_db_lock()
+            if not _db_lock_remedied:
+                res = _auto_remedy_db_lock()
+                _db_lock_remedied = True
+            else:
+                res = {"ok": True, "action": "deduped_db_lock_remedy"}
             results.append({"issue": issue, "result": res})
             continue
 

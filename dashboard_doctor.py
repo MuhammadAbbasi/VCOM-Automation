@@ -472,12 +472,17 @@ def check_logs_health() -> dict:
                 result = item.get("result", {})
                 if result.get("ok"):
                     action = result.get("action") or result.get("service")
-                    if action:
+                    if action and action != "deduped_db_lock_remedy":
                         results["info"].append(f"Auto-healed: {action}")
                 else:
-                    err = result.get("error") or result.get("reason")
-                    if err:
-                        results["issues"].append(f"Auto-heal failed: {err}")
+                    reason = result.get("reason") or ""
+                    err = result.get("error") or ""
+                    # no_auto_action means no handler exists — not a new problem, skip logging
+                    if reason == "no_auto_action":
+                        continue
+                    msg = err or reason
+                    if msg:
+                        results["issues"].append(f"Auto-heal failed: {msg}")
     except Exception as e:
         logger.warning(f"[LOG] check_logs_health failed: {e}")
     return results
