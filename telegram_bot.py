@@ -786,11 +786,22 @@ def main() -> None:
                         "_Type /start for a full overview._"
                     )
 
+        except KeyboardInterrupt:
+            logger.info("[BOT] Stopping — KeyboardInterrupt received.")
+            break
         except Exception as e:
             logger.error(f"Loop error: {e}")
-            time.sleep(5)
-            
-        time.sleep(POLL_INTERVAL)
+            try:
+                time.sleep(5)
+            except KeyboardInterrupt:
+                logger.info("[BOT] Stopping — KeyboardInterrupt during error sleep.")
+                break
+
+        try:
+            time.sleep(POLL_INTERVAL)
+        except KeyboardInterrupt:
+            logger.info("[BOT] Stopping — KeyboardInterrupt during poll sleep.")
+            break
 
 if __name__ == "__main__":
     main()

@@ -146,12 +146,15 @@ def launch_dashboard() -> subprocess.Popen:
     return proc
 
 
+_stream_threads: list[threading.Thread] = []
+
+
 def launch_service(svc: dict) -> subprocess.Popen:
     """Launch a service. Dashboard gets a new console window; others pipe here."""
     name = svc["name"]
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
-    
+
     if svc.get("new_console"):
         # DASHBOARD specific: resolve port conflict if any
         if name == "DASHBOARD":
@@ -184,10 +187,12 @@ def launch_service(svc: dict) -> subprocess.Popen:
             env=env,
         )
         _processes[name] = proc
-        t = threading.Thread(target=stream_output, args=(proc, name), daemon=True)
+        # Non-daemon so stdout is fully drained before the process exits
+        t = threading.Thread(target=stream_output, args=(proc, name), daemon=False, name=f"stream-{name}")
         t.start()
+        _stream_threads.append(t)
         print(f"[ORCHESTRATOR] Started {name} (pid={proc.pid})", flush=True)
-    
+
     return proc
 
 
@@ -233,7 +238,23 @@ def kill_port_process(port: int):
 
 
 def monitor_services() -> None:
-    service_procs = {svc["name"]: launch_service(svc) for svc in SERVICES}
+    # Launch all services in parallel so they start simultaneously
+    service_procs: dict[str, subprocess.Popen] = {}
+    launch_lock = threading.Lock()
+
+    def _launch_one(svc: dict) -> None:
+        try:
+            proc = launch_service(svc)
+            with launch_lock:
+                service_procs[svc["name"]] = proc
+        except Exception as exc:
+            print(f"[ORCHESTRATOR] Failed to start {svc['name']}: {exc}", flush=True)
+
+    launch_threads = [threading.Thread(target=_launch_one, args=(svc,), daemon=True) for svc in SERVICES]
+    for t in launch_threads:
+        t.start()
+    for t in launch_threads:
+        t.join(timeout=30)
 
     while not _stop_event.is_set():
         time.sleep(1)
@@ -262,6 +283,16 @@ def monitor_services() -> None:
 def shutdown(signum=None, frame=None) -> None:
     print("\n[ORCHESTRATOR] Shutting down all services...", flush=True)
     _stop_event.set()
+
+    # Flush any pending snapshot writes before terminating the analysis process
+    try:
+        from db.snapshot_queue import flush_snapshot_queue
+        print("[ORCHESTRATOR] Flushing snapshot queue...", flush=True)
+        flush_snapshot_queue(timeout=15)
+        print("[ORCHESTRATOR] Snapshot queue flushed.", flush=True)
+    except Exception as exc:
+        print(f"[ORCHESTRATOR] Snapshot flush warning: {exc}", flush=True)
+
     for name, proc in list(_processes.items()):
         try:
             proc.terminate()
@@ -269,8 +300,12 @@ def shutdown(signum=None, frame=None) -> None:
             print(f"[ORCHESTRATOR] {name} stopped", flush=True)
         except Exception as e:
             print(f"[ORCHESTRATOR] Could not stop {name}: {e}", flush=True)
+
+    # Wait for stdout drain threads so no BufferedWriter is torn from under them
+    for t in _stream_threads:
+        t.join(timeout=5)
+
     _release_pid_lock()
-    sys.exit(0)
 
 
 # ---------------------------------------------------------------------------

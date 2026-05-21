@@ -709,6 +709,8 @@ if __name__ == "__main__":
     while True:
         try:
             run()
+        except KeyboardInterrupt:
+            break
         except Exception as e:
             logger.error(f"[ENGINE] Crashed: {e}", exc_info=True)
             try:
@@ -716,4 +718,8 @@ if __name__ == "__main__":
             except Exception:
                 pass
         logger.info("[ENGINE] Sleeping 15 min...")
-        time.sleep(900)
+        try:
+            time.sleep(900)
+        except KeyboardInterrupt:
+            break
+    logger.info("[ENGINE] Shutting down.")

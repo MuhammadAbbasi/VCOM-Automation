@@ -24,17 +24,37 @@ config = {
 }
 
 async def main():
-    broker = Broker(config)
-    try:
-        await broker.start()
-        print("[BROKER] MQTT Broker started on 0.0.0.0:1883")
-        while True:
-            await asyncio.sleep(3600)
-    except Exception as e:
-        print(f"[BROKER] Failed to start broker: {e}")
+    for attempt in range(5):
+        broker = Broker(config)
+        try:
+            await broker.start()
+            print("[BROKER] MQTT Broker started on 0.0.0.0:1883", flush=True)
+            while True:
+                await asyncio.sleep(60)
+        except (asyncio.CancelledError, KeyboardInterrupt):
+            break
+        except OSError as e:
+            # Port still in TIME_WAIT from previous run — retry
+            print(f"[BROKER] Port busy (attempt {attempt + 1}/5): {e}", flush=True)
+            if attempt < 4:
+                await asyncio.sleep(5)
+                continue
+            print("[BROKER] Could not bind after 5 attempts. Exiting.", flush=True)
+            break
+        except Exception as e:
+            print(f"[BROKER] Error: {e}", flush=True)
+            break
+        finally:
+            try:
+                await broker.shutdown()
+            except Exception:
+                pass
+        break
+
+    print("[BROKER] Broker stopped.", flush=True)
 
 if __name__ == '__main__':
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("[BROKER] Broker stopped.")
+        print("[BROKER] Broker stopped.", flush=True)
