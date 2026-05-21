@@ -103,6 +103,17 @@ def export_metric(df: pd.DataFrame, prefix: str) -> None:
         filepath = str(DATA_DIR / f"{prefix}_{today_str()}.csv")
         write_df_to_csv(filepath, df)
         logger.warning(f"[FALLBACK] Wrote CSV: {filepath}")
+        # Still record the extraction status so the dashboard doesn't show PENDING
+        try:
+            from db.db_manager import save_extraction_status
+            date_str = today_str()
+            key_name = prefix.replace(" ", "_")
+            if prefix == "Resistenza di isolamento": key_name = "Resistenza_Isolamento"
+            if prefix == "PR inverter": key_name = "PR"
+            if prefix == "Potenza attiva": key_name = "Potenza_Attiva"
+            save_extraction_status(date_str, key_name, "error")
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------

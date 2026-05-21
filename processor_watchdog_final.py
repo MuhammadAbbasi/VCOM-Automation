@@ -386,7 +386,7 @@ def load_metric(date_str: str, metric_prefix: str) -> pd.DataFrame:
 
     if csv_path:
         try:
-            df = pd.read_csv(str(csv_path), sep=None, engine='python', encoding="utf-8")
+            df = pd.read_csv(str(csv_path), sep=",", encoding="utf-8")
             
             if not df.empty and "Ora" in df.columns:
                 df = df.drop_duplicates(subset=["Ora"], keep="last").reset_index(drop=True)
