@@ -1058,6 +1058,15 @@ def analyze_site(date_str: str) -> None:
     try:
         logger.info(f"Starting analysis for {date_str}...")
 
+        # Invalidate the cross-process LRU cache so every watchdog cycle reads
+        # fresh data. The extraction process clears it on its side but that
+        # does not affect this separate process's in-memory cache.
+        try:
+            from db.db_manager import _load_metric_cached
+            _load_metric_cached.cache_clear()
+        except Exception:
+            pass
+
         # Load metrics
         logger.info("Loading metrics...")
         ac_df = load_metric(date_str, "Potenza_AC")
