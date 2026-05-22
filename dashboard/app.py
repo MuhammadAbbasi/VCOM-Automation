@@ -491,19 +491,28 @@ if __name__ == "__main__":
     print(f"[*] Local:   http://localhost:{port}", flush=True)
     print(f"[*] Network: http://{local_ip}:{port}\n", flush=True)
     
-    # Try to start Ngrok
+    # Try to start Ngrok asynchronously
     ngrok_token = cfg.get("NGROK_AUTH_TOKEN")
     if ngrok_token and ngrok_token != "YOUR_TOKEN_HERE":
-        print("[*] Starting Ngrok Tunnel...")
+        print("[*] Queueing Ngrok Tunnel startup in background thread...")
         ng_user = cfg.get("DASHBOARD_USER", "admin")
         ng_pass = cfg.get("DASHBOARD_PASS", "mazara2025")
         
-        public_url = setup_ngrok(ngrok_token, port, ng_user, ng_pass)
-        if public_url:
-            print(f"[*] Remote Access (Public): {public_url}\n", flush=True)
-            print(f"[*] Security Policy: Basic Auth (User: {ng_user})")
-        else:
-            print("[!] Ngrok failed: Is 'pyngrok' installed? Run: pip install pyngrok")
+        def run_ngrok_bg():
+            import time
+            time.sleep(3)  # Wait for uvicorn to start up
+            try:
+                public_url = setup_ngrok(ngrok_token, port, ng_user, ng_pass)
+                if public_url:
+                    print(f"\n[*] Remote Access (Public): {public_url}", flush=True)
+                    print(f"[*] Security Policy: Basic Auth (User: {ng_user})\n", flush=True)
+                else:
+                    print("\n[!] Ngrok failed to start in background thread.", flush=True)
+            except Exception as e:
+                print(f"\n[!] Ngrok background error: {e}", flush=True)
+
+        import threading
+        threading.Thread(target=run_ngrok_bg, daemon=True).start()
     else:
         print("[!] No NGROK_AUTH_TOKEN found in config.json. Remote access via Ngrok is disabled.")
     

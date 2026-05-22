@@ -14,16 +14,210 @@ Run with:
     python run_monitor.py
 """
 
+import platform
 import os
+import sys
+from pathlib import Path
+
+# Monkeypatch platform.machine and platform.uname to bypass socket import deadlock on Python 3.14
+platform.machine = lambda: 'AMD64'
+
+class UnameResult:
+    system = 'Windows'
+    node = 'localhost'
+    release = '10'
+    version = '10.0.19045'
+    machine = 'AMD64'
+    processor = 'Intel64 Family 6 Model 158 Stepping 10, GenuineIntel'
+    def __getitem__(self, item):
+        return [self.system, self.node, self.release, self.version, self.machine, self.processor][item]
+
+platform.uname = lambda: UnameResult()
+
+ROOT = Path(__file__).resolve().parent
+if "PYTHONPATH" not in os.environ:
+    os.environ["PYTHONPATH"] = str(ROOT)
+else:
+    os.environ["PYTHONPATH"] = f"{ROOT}{os.pathsep}{os.environ['PYTHONPATH']}"
+
 import socket
 import subprocess
-import sys
 import threading
 import time
 import signal
-from pathlib import Path
 
 from dashboard_doctor import maybe_backup_database, run_doctor
+
+import ctypes
+from ctypes import wintypes
+import psutil
+
+# Handle for keeping the Job Object alive
+_job_handle = None
+
+def check_interactive_terminal() -> None:
+    """Ensure the orchestrator only runs inside an interactive, user-defined terminal."""
+    # 1. Block agent environment execution
+    agent_envs = ["ANTIGRAVITY_AGENT", "ANTIGRAVITY_TRAJECTORY_ID", "AGENT_ID"]
+    if any(env in os.environ for env in agent_envs):
+        print("[ORCHESTRATOR] Error: Execution blocked. This script cannot be run by the AI agent.", file=sys.stderr, flush=True)
+        sys.exit(1)
+
+    # 2. Verify standard console window & TTY
+    if not sys.stdout.isatty():
+        print("[ORCHESTRATOR] Error: This script must be run from an interactive terminal.", file=sys.stderr, flush=True)
+        sys.exit(1)
+        
+    if sys.platform == 'win32':
+        import ctypes
+        if ctypes.windll.kernel32.GetConsoleWindow() == 0:
+            print("[ORCHESTRATOR] Error: No console window detected. Must run in an interactive terminal.", file=sys.stderr, flush=True)
+            sys.exit(1)
+
+        # 3. Verify parent/grandparent is an allowed shell/terminal
+        try:
+            import psutil
+            allowed_shells = {"powershell.exe", "cmd.exe", "pwsh.exe", "bash.exe", "wsl.exe", "wt.exe", "conhost.exe"}
+            p = psutil.Process(os.getpid())
+            
+            ancestor_names = []
+            curr = p.parent()
+            while curr:
+                ancestor_names.append(curr.name().lower())
+                curr = curr.parent()
+                
+            agent_processes = {"language_server_windows_x64.exe", "language_server", "agent"}
+            if any(any(ap in name for ap in agent_processes) for name in ancestor_names):
+                print("[ORCHESTRATOR] Error: Execution blocked. Detected agent runner in process tree.", file=sys.stderr, flush=True)
+                sys.exit(1)
+                
+            parent = p.parent()
+            if parent:
+                parent_name = parent.name().lower()
+                if parent_name == "py.exe":
+                    grandparent = parent.parent()
+                    if grandparent:
+                        parent_name = grandparent.name().lower()
+                
+                if not any(shell in parent_name for shell in allowed_shells):
+                    print(f"[ORCHESTRATOR] Error: Execution blocked. Parent process '{parent_name}' is not an allowed interactive shell.", file=sys.stderr, flush=True)
+                    sys.exit(1)
+        except Exception as e:
+            print(f"[ORCHESTRATOR] Warning during terminal check: {e}", flush=True)
+
+def setup_job_object():
+    """Configure Windows Job Object to kill child processes when parent exits."""
+    if sys.platform != 'win32':
+        return
+    try:
+        # Windows Job Object Constants
+        JobObjectExtendedLimitInformation = 9
+        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000
+
+        class IO_COUNTERS(ctypes.Structure):
+            _fields_ = [
+                ('ReadOperationCount', ctypes.c_uint64),
+                ('WriteOperationCount', ctypes.c_uint64),
+                ('OtherOperationCount', ctypes.c_uint64),
+                ('ReadTransferCount', ctypes.c_uint64),
+                ('WriteTransferCount', ctypes.c_uint64),
+                ('OtherTransferCount', ctypes.c_uint64),
+            ]
+
+        class JOBOBJECT_BASIC_LIMIT_INFORMATION(ctypes.Structure):
+            _fields_ = [
+                ('LimitFlags', wintypes.DWORD),
+                ('MinimumWorkingSetSize', ctypes.c_size_t),
+                ('MaximumWorkingSetSize', ctypes.c_size_t),
+                ('ActiveProcessLimit', wintypes.DWORD),
+                ('Affinity', ctypes.c_size_t),
+                ('PriorityClass', wintypes.DWORD),
+                ('SchedulingClass', wintypes.DWORD),
+            ]
+
+        class JOBOBJECT_EXTENDED_LIMIT_INFORMATION(ctypes.Structure):
+            _fields_ = [
+                ('BasicLimitInformation', JOBOBJECT_BASIC_LIMIT_INFORMATION),
+                ('IoInfo', IO_COUNTERS),
+                ('ProcessMemoryLimit', ctypes.c_size_t),
+                ('JobMemoryLimit', ctypes.c_size_t),
+                ('PeakProcessMemoryUsed', ctypes.c_size_t),
+                ('PeakJobMemoryUsed', ctypes.c_size_t),
+            ]
+
+        kernel32 = ctypes.windll.kernel32
+        
+        # Create Job Object
+        job = kernel32.CreateJobObjectW(None, None)
+        if not job:
+            print("[ORCHESTRATOR] Warning: Failed to create Job Object.", flush=True)
+            return
+
+        # Enable Kill on Job Close
+        limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
+        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        
+        res = kernel32.SetInformationJobObject(
+            job,
+            JobObjectExtendedLimitInformation,
+            ctypes.byref(limits),
+            ctypes.sizeof(limits)
+        )
+        if not res:
+            print("[ORCHESTRATOR] Warning: Failed to set Job Object information.", flush=True)
+            return
+            
+        # Assign this process to the Job Object
+        current_proc = kernel32.GetCurrentProcess()
+        if not kernel32.AssignProcessToJobObject(job, current_proc):
+            print("[ORCHESTRATOR] Warning: Failed to assign process to Job Object.", flush=True)
+            return
+            
+        global _job_handle
+        _job_handle = job
+        print("[ORCHESTRATOR] Windows Job Object configured (automatic child process cleanup enabled).", flush=True)
+    except Exception as e:
+        print(f"[ORCHESTRATOR] Warning: Could not setup Job Object: {e}", flush=True)
+
+def kill_previous_scada_processes() -> None:
+    """Scan and kill all previous SCADA-related python processes."""
+    import psutil
+    current_pid = os.getpid()
+    target_scripts = [
+        "run_monitor.py",
+        "dashboard/app.py",
+        "dashboard\\app.py",
+        "processor_watchdog_final.py",
+        "vcom_monitor.py",
+        "telegram_bot.py",
+        "broker.py",
+        "receiver.py",
+        "odoo_ticket_engine.py"
+    ]
+    print("[ORCHESTRATOR] Cleaning up previous SCADA processes...", flush=True)
+    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+        try:
+            if proc.info['pid'] == current_pid:
+                continue
+            cmdline = proc.info['cmdline']
+            if not cmdline:
+                continue
+            cmdline_str = " ".join(cmdline).lower()
+            
+            is_scada_proc = False
+            # Check if it's a Python process running one of our target scripts
+            if "python" in proc.info['name'].lower() or "python" in cmdline[0].lower():
+                for script in target_scripts:
+                    script_name = os.path.basename(script).lower()
+                    if script_name in cmdline_str:
+                        is_scada_proc = True
+                        break
+            
+            if is_scada_proc:
+                print(f"[ORCHESTRATOR] Terminating existing process PID {proc.info['pid']} ({cmdline_str})", flush=True)
+                proc.kill()
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            pass
 
 # Fix for Windows console encoding issues
 if hasattr(sys.stdout, "reconfigure"):
@@ -44,10 +238,18 @@ def _acquire_pid_lock() -> None:
             existing_pid = int(PID_FILE.read_text().strip())
             import psutil
             if psutil.pid_exists(existing_pid):
-                print(f"[ORCHESTRATOR] Already running (PID {existing_pid}). Exiting.", flush=True)
-                sys.exit(1)
+                try:
+                    proc = psutil.Process(existing_pid)
+                    cmdline = proc.cmdline()
+                    if cmdline:
+                        cmdline_str = " ".join(cmdline).lower()
+                        if "run_monitor.py" in cmdline_str:
+                            print(f"[ORCHESTRATOR] Already running (PID {existing_pid}). Exiting.", flush=True)
+                            sys.exit(1)
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass # Stale lock or inaccessible process — treat as stale
         except Exception:
-            pass  # Stale PID file — overwrite it
+            pass  # Stale PID file format/read error — overwrite it
     PID_FILE.write_text(str(os.getpid()))
 
 def _release_pid_lock() -> None:
@@ -55,8 +257,6 @@ def _release_pid_lock() -> None:
         PID_FILE.unlink(missing_ok=True)
     except Exception:
         pass
-
-_acquire_pid_lock()
 
 RESTART_COOLDOWN = 5
 _stop_event = threading.Event()
@@ -352,6 +552,18 @@ def restart_all_services():
 # ---------------------------------------------------------------------------
 
 def main() -> None:
+    # 1. Enforce interactive terminal execution
+    check_interactive_terminal()
+
+    # 2. Terminate any previous SCADA processes to release ports and PID locks
+    kill_previous_scada_processes()
+
+    # 3. Now acquire the single-instance lock
+    _acquire_pid_lock()
+
+    # 4. Configure job object for automatic child process cleanup on exit
+    setup_job_object()
+
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
 

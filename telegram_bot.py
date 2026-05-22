@@ -472,13 +472,23 @@ class TelegramBot:
         self.base = f"https://api.telegram.org/bot{token}"
         self.offset = 0
 
-    def get_updates(self) -> list:
+    def get_updates(self) -> tuple[bool, list]:
+        """
+        Fetches updates from Telegram.
+        Returns: (success, list_of_updates)
+        If success is False, indicates a potential error/conflict.
+        """
         try:
             r = requests.get(f"{self.base}/getUpdates", params={"offset": self.offset, "timeout": 5}, timeout=15)
-            # Log error if not OK
-            if not r.ok: logger.error(f"Telegram error: {r.text}")
-            return r.json().get("result", []) if r.ok else []
-        except Exception: return []
+            if not r.ok:
+                logger.error(f"Telegram error: {r.text}")
+                if r.status_code == 409:
+                    # 409 Conflict
+                    return False, []
+            return r.ok, (r.json().get("result", []) if r.ok else [])
+        except Exception as e:
+            logger.error(f"Error fetching updates: {e}")
+            return False, []
 
     def delete_message(self, chat_id: str | int, message_id: int) -> None:
         try:
@@ -566,6 +576,7 @@ def main() -> None:
     # State for handling /ai question waiting
     waiting_for_ai = {} # {chat_id: {"prompt_msg_id": int}}
     
+    consecutive_conflicts = 0
     while True:
         try:
             # Reload settings dynamically to pick up new authorized IDs
@@ -579,7 +590,19 @@ def main() -> None:
             for tid in tg.get("trusted_ids", []):
                 ALLOWED_IDS.append(str(tid))
 
-            updates = bot.get_updates()
+            success, updates = bot.get_updates()
+            if not success:
+                consecutive_conflicts += 1
+                if consecutive_conflicts >= 5:
+                    logger.critical("Conflict: 5 consecutive 409 conflicts. Exiting bot process.")
+                    sys.exit(409)
+                backoff = min(300, 10 * (2 ** consecutive_conflicts))
+                logger.warning(f"Telegram conflict/error. Sleeping for {backoff}s before retry.")
+                time.sleep(backoff)
+                continue
+
+            consecutive_conflicts = 0  # reset on success
+
             for update in updates:
                 bot.offset = update["update_id"] + 1
                 msg = update.get("message") or update.get("channel_post")
@@ -660,13 +683,21 @@ def main() -> None:
                             continue
 
                         def run_and_reply():
+                            personal_id = str(settings.get("telegram", {}).get("personal_id", ""))
                             try:
                                 reply = llm_agent.ask_llm(question, data, user_id=f"TG_{chat_id}")
-                                bot.send_message(chat_id, reply)
+                                if reply.startswith("⚠️ Technical Error") or reply.startswith("⚠️ AI Agent error"):
+                                    bot.send_message(chat_id, "⚠️ Errore tecnico durante l'elaborazione. L'amministratore è stato notificato.")
+                                    if personal_id:
+                                        bot.send_message(personal_id, f"AI Error in chat {chat_id}:\n{reply}")
+                                else:
+                                    bot.send_message(chat_id, reply)
                             except Exception as ai_e:
                                 logger.error(f"Telegram AI Thread error: {ai_e}")
-                                error_msg = "⚠️ AI Agent failed to respond (Timeout)." if "timeout" in str(ai_e).lower() else f"⚠️ AI Agent error: {str(ai_e)[:50]}"
-                                bot.send_message(chat_id, error_msg)
+                                error_msg = "⚠️ AI Agent failed to respond (Timeout)." if "timeout" in str(ai_e).lower() else f"⚠️ AI Agent error: {str(ai_e)[:100]}"
+                                bot.send_message(chat_id, "⚠️ Errore tecnico durante l'elaborazione. L'amministratore è stato notificato.")
+                                if personal_id:
+                                    bot.send_message(personal_id, f"AI Exception in chat {chat_id}:\n{error_msg}")
                             finally:
                                 ai_semaphore.release()
 
