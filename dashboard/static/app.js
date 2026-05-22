@@ -1064,6 +1064,8 @@ function connectWebSocket() {
         applyConfig(msg.data);
       } else if (msg.type === "extraction_status") {
         updateExtractionUI(msg.is_extracting);
+      } else if (msg.type === "page_reload") {
+        window.location.reload();
       }
     } catch (err) {
       console.warn("WS message parse error:", err);

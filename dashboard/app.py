@@ -143,6 +143,7 @@ def fetch_broadcaster_data(today, link_status_path):
 
 # Background Task for Data Push
 async def data_broadcaster():
+    prev_is_extracting = False
     while True:
         try:
             today = datetime.now().strftime("%Y-%m-%d")
@@ -150,20 +151,27 @@ async def data_broadcaster():
             if not hasattr(manager, "_logged_path"):
                 print(f"[DASHBOARD] Monitoring busy flag at: {busy_path.absolute()}")
                 manager._logged_path = True
-            
+
             is_extracting = busy_path.exists()
-            
+
+            # Detect extraction cycle completion and trigger a page reload
+            if prev_is_extracting and not is_extracting:
+                print("[DASHBOARD] Extraction cycle completed — broadcasting page reload.")
+                await manager.broadcast({"type": "page_reload"})
+
+            prev_is_extracting = is_extracting
+
             await manager.broadcast({
-                "type": "extraction_status", 
+                "type": "extraction_status",
                 "is_extracting": is_extracting
             })
 
             link_status_path = ROOT / "db" / "link_status.json"
             latest_data, trackers = await asyncio.to_thread(fetch_broadcaster_data, today, link_status_path)
-            
+
             if latest_data:
                 await manager.broadcast({
-                    "type": "data_update", 
+                    "type": "data_update",
                     "data": latest_data,
                     "trackers": trackers,
                     "timestamp": datetime.now().isoformat()
