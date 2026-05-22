@@ -2,7 +2,7 @@
   "GRID_LIMIT_CHANGE": {
     "first_detected": "2026-04-29T10:39:59.765732",
     "type": "GRID LIMIT CHANGE",
-    "message": "Grid production limit is restricted to 41.0% (Below plant max of 87.6%).",
+    "message": "Grid production limit is restricted to 33.8% (Below plant max of 87.6%).",
     "odoo_anomalia_id": 2,
     "odoo_intervento_id": 11,
     "notified": true,
@@ -13,7 +13,7 @@
   "TRACKER_OFFLINE": {
     "first_detected": "2026-04-29T16:45:10.484172",
     "type": "TRACKER",
-    "message": "605 tracker(s) stale >60 min. NCUs: NCU_01, NCU_03, NCU_02",
+    "message": "605 tracker(s) stale >60 min. NCUs: NCU_02, NCU_01, NCU_03",
     "odoo_anomalia_id": 21,
     "odoo_intervento_id": 23,
     "notified": true,
@@ -585,7 +585,7 @@
   "TX3-11_LOW_PR": {
     "first_detected": "2026-05-01T12:04:02.725378",
     "type": "LOW PR",
-    "message": "PR is 83.9% (Threshold: 75%)",
+    "message": "PR is 83.8% (Threshold: 75%)",
     "odoo_anomalia_id": 97,
     "odoo_intervento_id": 99,
     "notified": true,
@@ -662,7 +662,7 @@
   "TX1-07_LOW_PR": {
     "first_detected": "2026-05-01T12:34:06.833443",
     "type": "LOW PR",
-    "message": "PR is 84.6% (Threshold: 75%)",
+    "message": "PR is 84.7% (Threshold: 75%)",
     "odoo_anomalia_id": 78,
     "odoo_intervento_id": 80,
     "notified": true,
@@ -728,7 +728,7 @@
   "TX3-03_LOW_PR": {
     "first_detected": "2026-05-01T12:34:06.833443",
     "type": "LOW PR",
-    "message": "PR is 80.4% (Threshold: 75%)",
+    "message": "PR is 81.3% (Threshold: 75%)",
     "odoo_anomalia_id": 90,
     "odoo_intervento_id": 92,
     "notified": true,
@@ -761,7 +761,7 @@
   "TX3-06_LOW_PR": {
     "first_detected": "2026-05-01T12:34:06.833443",
     "type": "LOW PR",
-    "message": "PR is 78.2% (Threshold: 75%)",
+    "message": "PR is 81.3% (Threshold: 75%)",
     "odoo_anomalia_id": 93,
     "odoo_intervento_id": 95,
     "notified": true,
@@ -772,7 +772,7 @@
   "TX3-07_LOW_PR": {
     "first_detected": "2026-05-01T12:34:06.833443",
     "type": "LOW PR",
-    "message": "PR is 79.1% (Threshold: 75%)",
+    "message": "PR is 78.8% (Threshold: 75%)",
     "odoo_anomalia_id": 94,
     "odoo_intervento_id": 96,
     "notified": true,
@@ -783,7 +783,7 @@
   "TX3-08_LOW_PR": {
     "first_detected": "2026-05-01T12:34:06.833443",
     "type": "LOW PR",
-    "message": "PR is 77.1% (Threshold: 75%)",
+    "message": "PR is 79.6% (Threshold: 75%)",
     "odoo_anomalia_id": 95,
     "odoo_intervento_id": 97,
     "notified": true,
@@ -794,7 +794,7 @@
   "TX3-09_LOW_PR": {
     "first_detected": "2026-05-01T12:34:06.833443",
     "type": "LOW PR",
-    "message": "PR is 78.5% (Threshold: 75%)",
+    "message": "PR is 78.8% (Threshold: 75%)",
     "odoo_anomalia_id": 96,
     "odoo_intervento_id": 98,
     "notified": true,
@@ -805,7 +805,7 @@
   "TX3-12_LOW_PR": {
     "first_detected": "2026-05-01T12:34:06.833443",
     "type": "LOW PR",
-    "message": "PR is 77.6% (Threshold: 75%)",
+    "message": "PR is 80.5% (Threshold: 75%)",
     "odoo_anomalia_id": 98,
     "odoo_intervento_id": 100,
     "notified": true,
@@ -2404,6 +2404,61 @@
     "odoo_anomalia_id": 231,
     "odoo_intervento_id": 233,
     "notified": true,
+    "assignment_notified": false,
+    "resolved": false,
+    "last_technician": null
+  },
+  "DC_TX1-01_MPPT_ALL": {
+    "first_detected": "2026-05-21T07:08:26.231038",
+    "type": "DC CRITICAL",
+    "message": "",
+    "odoo_anomalia_id": null,
+    "odoo_intervento_id": null,
+    "notified": false,
+    "assignment_notified": false,
+    "resolved": false,
+    "last_technician": null
+  },
+  "DC_TX1-02_MPPT_ALL": {
+    "first_detected": "2026-05-21T07:08:26.231038",
+    "type": "DC CRITICAL",
+    "message": "",
+    "odoo_anomalia_id": null,
+    "odoo_intervento_id": null,
+    "notified": false,
+    "assignment_notified": false,
+    "resolved": false,
+    "last_technician": null
+  },
+  "DC_TX1-03_MPPT_ALL": {
+    "first_detected": "2026-05-21T07:08:26.231038",
+    "type": "DC CRITICAL",
+    "message": "",
+    "odoo_anomalia_id": null,
+    "odoo_intervento_id": null,
+    "notified": false,
+    "assignment_notified": false,
+    "resolved": false,
+    "last_technician": null
+  },
+  "DC_TX3-07_MPPT_ALL": {
+    "first_detected": "2026-05-21T07:08:26.231038",
+    "type": "DC CRITICAL",
+    "message": "",
+    "odoo_anomalia_id": null,
+    "odoo_intervento_id": null,
+    "notified": false,
+    "assignment_notified": false,
+    "resolved": false,
+    "last_technician": null
+  },
+  "DC_TX3-09_MPPT_ALL": {
+    "first_detected": "2026-05-21T07:08:26.231038",
+    "type": "DC CRITICAL",
+    "message": "",
+    "odoo_anomalia_id": null,
+    "odoo_intervento_id": null,
+    "notified": false,
     "assignment_notified": false,
     "resolved": false,
     "last_technician": null
