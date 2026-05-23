@@ -244,9 +244,10 @@ def _acquire_pid_lock() -> None:
                     if cmdline:
                         cmdline_str = " ".join(cmdline).lower()
                         if "run_monitor.py" in cmdline_str:
-                            print(f"[ORCHESTRATOR] Already running (PID {existing_pid}). Exiting.", flush=True)
-                            sys.exit(1)
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            print(f"[ORCHESTRATOR] Found previous instance (PID {existing_pid}). Terminating it...", flush=True)
+                            proc.kill()
+                            proc.wait(timeout=5)
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
                     pass # Stale lock or inaccessible process — treat as stale
         except Exception:
             pass  # Stale PID file format/read error — overwrite it
@@ -318,13 +319,26 @@ SERVICES = [
 # Log streaming thread (for services running in this terminal)
 # ---------------------------------------------------------------------------
 
+import re
+ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+
 def stream_output(proc: subprocess.Popen, prefix: str) -> None:
     print(f"[ORCHESTRATOR] Logging stream for {prefix} started.", flush=True)
     try:
         if proc.stdout is not None:
             for line in proc.stdout:
                 if line:
-                    print(f"[{prefix}] {line}", end="", flush=True)
+                    # Strip ANSI escape codes
+                    clean_line = ANSI_ESCAPE.sub('', line)
+                    # For \r (progress bars), only keep the last segment to avoid console mangling
+                    segments = clean_line.split('\r')
+                    final_line = segments[-1]
+                    if final_line.strip():
+                        # Ensure it ends with a newline to prevent thread interleaving
+                        if not final_line.endswith('\n'):
+                            final_line += '\n'
+                        sys.stdout.write(f"[{prefix}] {final_line}")
+                        sys.stdout.flush()
     except Exception as e:
         print(f"[ORCHESTRATOR] Error reading output from {prefix}: {e}", flush=True)
 
