@@ -27,14 +27,14 @@ logging.basicConfig(
     ]
 )
 
-def on_connect(client, userdata, flags, rc):
-    if rc == 0:
+def on_connect(client, userdata, flags, reason_code, properties):
+    if reason_code == 0:
         logging.info("Connected to MQTT Broker successfully.")
         client.subscribe(TOPIC_REQUEST, qos=1)
         client.subscribe(TOPIC_HEARTBEAT, qos=0)
         logging.info(f"Subscribed to: {TOPIC_REQUEST} and {TOPIC_HEARTBEAT}")
     else:
-        logging.error(f"Connection failed with code {rc}")
+        logging.error(f"Connection failed with code {reason_code}")
 
 def on_message(client, userdata, msg):
     try:
@@ -162,7 +162,7 @@ def handle_sync_request(client, payload):
 
 # --- Main Initialization ---
 if __name__ == "__main__":
-    client = mqtt.Client(client_id="DASHBOARD_HOST_RECEIVER")
+    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="DASHBOARD_HOST_RECEIVER")
     client.on_connect = on_connect
     client.on_message = on_message
 

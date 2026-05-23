@@ -1,8 +1,11 @@
 import sys
 import asyncio
+import warnings
 
 if sys.platform == "win32":
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 import logging
 from amqtt.broker import Broker
@@ -17,14 +20,13 @@ config = {
             'bind': '0.0.0.0:1883',
         }
     },
-    'sys_interval': 10,
-    'auth': {
-        'allow-anonymous': True,
-    }
+    'plugins': [
+        'amqtt.plugins.authentication.AnonymousAuthPlugin',
+    ],
 }
 
 async def main():
-    for attempt in range(5):
+    for attempt in range(30):
         broker = Broker(config)
         try:
             await broker.start()
@@ -35,11 +37,11 @@ async def main():
             break
         except OSError as e:
             # Port still in TIME_WAIT from previous run — retry
-            print(f"[BROKER] Port busy (attempt {attempt + 1}/5): {e}", flush=True)
-            if attempt < 4:
+            print(f"[BROKER] Port busy (attempt {attempt + 1}/30): {e}", flush=True)
+            if attempt < 29:
                 await asyncio.sleep(5)
                 continue
-            print("[BROKER] Could not bind after 5 attempts. Exiting.", flush=True)
+            print("[BROKER] Could not bind after 30 attempts. Exiting.", flush=True)
             break
         except Exception as e:
             print(f"[BROKER] Error: {e}", flush=True)
