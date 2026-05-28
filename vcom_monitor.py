@@ -225,10 +225,34 @@ def _get_interval_minutes() -> int:
         return 15
 
 
-def _sleep_remaining(interval_minutes: int, trigger_path: Path) -> bool:
+DAILY_RESTART_HOUR = 2  # 2 AM
+
+
+def _should_daily_restart(start_date: str) -> bool:
+    """True once the clock is at or past DAILY_RESTART_HOUR on a new calendar day."""
+    now = datetime.now()
+    return now.hour >= DAILY_RESTART_HOUR and now.strftime("%Y-%m-%d") != start_date
+
+
+def _do_daily_restart() -> None:
+    """Back up the database then exit so the orchestrator relaunches with a fresh browser."""
+    logger.info("[DAILY RESTART] 2 AM daily restart triggered — backing up database...")
+    try:
+        from dashboard_doctor import backup_database
+        backup_database()
+        logger.info("[DAILY RESTART] Backup complete.")
+    except Exception as e:
+        logger.warning(f"[DAILY RESTART] Backup failed (continuing with restart): {e}")
+    logger.info("[DAILY RESTART] Exiting — orchestrator will relaunch with fresh session.")
+    sys.exit(0)
+
+
+def _sleep_remaining(interval_minutes: int, trigger_path: Path, start_date: str = "") -> str:
     """
     Sleep until the next cycle is due, checking once per second for a
-    manual trigger file. Returns True if woken by trigger, False if normal.
+    manual trigger file or the 2 AM daily-restart condition.
+
+    Returns: 'trigger' | 'restart' | 'normal'
 
     Crash-resistant: reads last_extraction.json so a restart mid-sleep
     resumes the remaining wait rather than running immediately.
@@ -247,16 +271,18 @@ def _sleep_remaining(interval_minutes: int, trigger_path: Path) -> bool:
         )
     else:
         logger.info("Interval elapsed — starting next cycle immediately.")
-        return False
+        return "normal"
 
     for _ in range(remaining):
         if trigger_path.exists():
             logger.info("Manual trigger detected — starting cycle now.")
             trigger_path.unlink(missing_ok=True)
-            return True
+            return "trigger"
+        if start_date and _should_daily_restart(start_date):
+            return "restart"
         time.sleep(1)
 
-    return False
+    return "normal"
 
 
 def main() -> None:
@@ -295,10 +321,17 @@ def main() -> None:
             # Use existing page if context already has one, otherwise create new
             page = context.pages[0] if context.pages else context.new_page()
 
+            # Track the calendar date this process was launched on.
+            # Used to detect when a new day has started for the 2 AM restart.
+            start_date = datetime.now().strftime("%Y-%m-%d")
+            logger.info(f"[DAILY RESTART] Process start date: {start_date}. Will restart after {DAILY_RESTART_HOUR:02d}:00.")
+
             # Wait out remaining interval before first cycle (crash-resistant)
             interval = _get_interval_minutes()
-            triggered = _sleep_remaining(interval, trigger_path)
-            if not triggered:
+            wake_reason = _sleep_remaining(interval, trigger_path, start_date)
+            if wake_reason == "restart":
+                _do_daily_restart()
+            elif wake_reason != "trigger":
                 logger.info("Starting initial extraction cycle...")
 
             print("[EXTRACTION] Verifying VCOM Session...", flush=True)
@@ -307,7 +340,7 @@ def main() -> None:
             except Exception as e:
                 logger.error(f"Initial session check failed: {e}. Will retry in main loop.")
                 # Don't raise, let the while loop handle it
-            
+
             cycle_count = 1
             while True:
                 busy_path.touch()
@@ -336,10 +369,15 @@ def main() -> None:
                     if busy_path.exists():
                         busy_path.unlink()
 
+                # Check for 2 AM daily restart before sleeping
+                if _should_daily_restart(start_date):
+                    _do_daily_restart()
+
                 # Sleep for the configured interval (crash-resistant)
                 interval = _get_interval_minutes()
                 logger.info(f"Cycle #{cycle_count} done. Sleeping {interval} min...")
-                _sleep_remaining(interval, trigger_path)
+                if _sleep_remaining(interval, trigger_path, start_date) == "restart":
+                    _do_daily_restart()
 
                 cycle_count += 1
 
