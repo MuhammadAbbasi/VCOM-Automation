@@ -235,8 +235,8 @@ def analyze_dc_current(dc_df: pd.DataFrame, output_md_path: Path, date_str: str)
 
             # RULE: SINGLE STRING LOSS
             ss_loss_m = 0
-            if string_count == 2 and not inv_2str_median.isna().all():
-                cond_ssLoss = (series_filled >= 0.4 * inv_2str_median.ffill()) & (series_filled <= 0.6 * inv_2str_median.ffill()) & (inv_2str_median.ffill() > 2.0)
+            if string_count == 2 and not expected_current.isna().all():
+                cond_ssLoss = (series_filled >= 0.4 * expected_current.ffill()) & (series_filled <= 0.6 * expected_current.ffill()) & (expected_current.ffill() > 2.0)
                 ss_loss_m = get_current_streak_minutes(cond_ssLoss.where(real_mask), df["Ora"])
 
             # RULE: UNDERPERFORMANCE ABSOLUTE
@@ -259,8 +259,8 @@ def analyze_dc_current(dc_df: pd.DataFrame, output_md_path: Path, date_str: str)
                 faults.append({"Inverter": inv, "MPPT": mppt_num, "Strings": string_count, "Type": "OPEN CIRCUIT", "Severity": "CRITICAL", "Measured": f"{latest_val:.1f}" if latest_val is not None else "0.0", "Expected": f"{expected_val:.1f}" if expected_val is not None else "0.0", "Duration": int(open_streak_m), "Deviation": "<10%", "Action": "Check connection"})
                 inv_summary[inv]["Critical"] += 1
             elif string_count == 2 and ss_loss_m >= 45:
-                faults.append({"Inverter": inv, "MPPT": mppt_num, "Strings": string_count, "Type": "SINGLE STRING LOSS", "Severity": "WARNING", "Measured": f"{latest_val:.1f}" if latest_val is not None else "0.0", "Expected": f"{expected_val:.1f}" if expected_val is not None else "0.0", "Duration": int(ss_loss_m), "Deviation": "~50%", "Action": "Check fuse"})
-                inv_summary[inv]["Warnings"] += 1
+                faults.append({"Inverter": inv, "MPPT": mppt_num, "Strings": string_count, "Type": "SINGLE STRING LOSS", "Severity": "CRITICAL", "Measured": f"{latest_val:.1f}" if latest_val is not None else "0.0", "Expected": f"{expected_val:.1f}" if expected_val is not None else "0.0", "Duration": int(ss_loss_m), "Deviation": "~50%", "Action": "String off status - maintenance team intervention required (check fuses/connections)"})
+                inv_summary[inv]["Critical"] += 1
             elif cross_m >= 60:
                 faults.append({"Inverter": inv, "MPPT": mppt_num, "Strings": string_count, "Type": "LOW CURRENT (vs PEERS)", "Severity": "WARNING", "Measured": f"{latest_val:.1f}" if latest_val is not None else "0.0", "Expected": f"{expected_val:.1f}" if expected_val is not None else "0.0", "Duration": int(cross_m), "Deviation": "<65%", "Action": "Check shading/strings"})
                 inv_summary[inv]["Warnings"] += 1

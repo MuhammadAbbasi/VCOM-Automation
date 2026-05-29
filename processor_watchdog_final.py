@@ -206,6 +206,9 @@ INVERTER_IDS = [
 DAYLIGHT_END = 20.0
 STABILIZATION_MINUTES = 30  # Wait 30m after production start before PR alarms
 
+# In-memory cache for the latest snapshot to avoid race conditions with async DB writes
+LATEST_SNAPSHOT_CACHE = {}
+
 def calculate_sunrise(date_str: str) -> float:
     """Calculate approximate sunrise for Mazara del Vallo (37.6N, 12.6E)."""
     try:
@@ -1183,12 +1186,14 @@ def analyze_site(date_str: str) -> None:
         # Build JSON snapshot and process anomalies
         timestamp = datetime.now().isoformat(timespec="seconds")
         
-        # Load previous state from database
-        try:
-            from db.db_manager import load_latest_snapshot
-            last_snap = load_latest_snapshot(date_str)
-        except Exception:
-            last_snap = None
+        # Load previous state (check in-memory cache first to avoid race conditions with background persistence)
+        last_snap = LATEST_SNAPSHOT_CACHE.get(date_str)
+        if last_snap is None:
+            try:
+                from db.db_manager import load_latest_snapshot
+                last_snap = load_latest_snapshot(date_str)
+            except Exception:
+                last_snap = None
                 
         historical_trail = []
         active_anomalies_prev = []
@@ -1793,6 +1798,9 @@ def analyze_site(date_str: str) -> None:
             "file_status": file_status,
             "sensor_data": sensor_data
         }
+        
+        # Update in-memory cache immediately to prevent race conditions during rapid re-runs
+        LATEST_SNAPSHOT_CACHE[date_str] = snapshot
 
         # Save snapshot to database via background single-writer queue
         try:
