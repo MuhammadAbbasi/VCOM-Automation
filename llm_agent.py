@@ -135,83 +135,132 @@ def calculate_sun_times(date_str=None):
     except:
         return 6.5, 19.5
 
+def _ora_hhmm_to_decimal(ora):
+    """Convert HH.MM Ora float (e.g. 6.30 = 6:30 AM) to decimal hours (6.5)."""
+    h = int(ora)
+    m = round((ora - h) * 100)
+    return h + m / 60.0
+
+
 def get_total_production(date_str=None):
-    """Total plant energy in MWh for a given date."""
+    """Total plant energy in MWh for a given date.
+
+    Primary source: potenza_attiva.Potenza [kW] — grid-side total, 5-min
+    resolution, matches VCOM's own Energia display exactly.
+    Fallback: sum of per-inverter Potenza AC (may be incomplete on days
+    where extraction missed some inverters).
+    """
     date_str = date_str or datetime.now().strftime("%Y-%m-%d")
+
+    # --- Primary: potenza_attiva ---
+    try:
+        conn = get_data_conn()
+        df_pa = pd.read_sql_query(
+            'SELECT "Ora", "Potenza [kW]" FROM potenza_attiva WHERE _date = ?',
+            conn, params=(date_str,)
+        )
+        if not df_pa.empty:
+            df_pa["kw"] = pd.to_numeric(df_pa["Potenza [kW]"], errors="coerce").fillna(0)
+            ora = pd.to_numeric(df_pa["Ora"], errors="coerce").dropna()
+            step = ora.diff().dropna().median() if len(ora) > 1 else 0.05
+            step_h = (step * 100) / 60.0  # HH.MM step → hours
+            total_kwh = round(float(df_pa["kw"].sum() * step_h), 1)
+            total_mwh = round(total_kwh / 1000.0, 3)
+            peak_kw = round(float(df_pa["kw"].max()), 1)
+
+            # Average MW during production hours
+            sunrise, sunset = calculate_sun_times(date_str)
+            df_pa["ora_dec"] = df_pa["Ora"].apply(
+                lambda x: _ora_hhmm_to_decimal(float(x)) if pd.notna(x) else 0
+            )
+            prod = df_pa[(df_pa["ora_dec"] >= sunrise) & (df_pa["ora_dec"] <= sunset)]
+            avg_mw = round(float(prod["kw"].mean()) / 1000.0, 3) if not prod.empty else 0.0
+
+            return {
+                "date": date_str,
+                "total_mwh": total_mwh,
+                "total_kwh": total_kwh,
+                "peak_mw": round(peak_kw / 1000.0, 3),
+                "average_mw": avg_mw,
+            }
+    except Exception:
+        pass
+
+    # --- Fallback: sum per-inverter Potenza AC ---
     df = load_metric(date_str, "Potenza AC")
-    
     if df is None or df.empty:
         return {"date": date_str, "total_mwh": None, "error": "No data"}
-        
     ac_cols = [c for c in df.columns if "Potenza AC (INV" in c or "Potenza AC(INV" in c]
     if not ac_cols:
         return {"date": date_str, "total_mwh": None, "error": "No inverter columns"}
-    
     df[ac_cols] = df[ac_cols].fillna(0)
-    total_mwh = round(float(df[ac_cols].sum().sum() * (1/60)) / 1_000_000, 3)
-    
-    # Calculate average MW during production hours
-    sunrise, sunset = calculate_sun_times(date_str)
-    if "Ora" in df.columns:
-        prod_df = df[(df["Ora"].astype(float) >= sunrise) & (df["Ora"].astype(float) <= sunset)]
-        if not prod_df.empty:
-            avg_mw = round(float(prod_df[ac_cols].sum(axis=1).mean()) / 1_000_000, 3)
-        else:
-            avg_mw = 0.0
-    else:
-        avg_mw = 0.0
-        
-    return {"date": date_str, "total_mwh": total_mwh, "average_mw": avg_mw, "inverter_count": len(ac_cols)}
+    total_mwh = round(float(df[ac_cols].sum().sum() / 60.0) / 1_000_000, 3)
+    return {"date": date_str, "total_mwh": total_mwh, "inverter_count": len(ac_cols), "note": "estimated from inverter data"}
 
 def get_peak_production(date_str=None):
-    """Find peak instantaneous power and its time."""
+    """Find peak instantaneous plant power and its time."""
     date_str = date_str or datetime.now().strftime("%Y-%m-%d")
+
+    # Primary: potenza_attiva gives the true grid-side peak
+    try:
+        conn = get_data_conn()
+        df_pa = pd.read_sql_query(
+            'SELECT "Ora", "Potenza [kW]" FROM potenza_attiva WHERE _date = ?',
+            conn, params=(date_str,)
+        )
+        if not df_pa.empty:
+            df_pa["kw"] = pd.to_numeric(df_pa["Potenza [kW]"], errors="coerce")
+            peak_idx = df_pa["kw"].idxmax()
+            peak_kw = df_pa.loc[peak_idx, "kw"]
+            peak_ora = df_pa.loc[peak_idx, "Ora"]
+            if pd.notna(peak_kw) and pd.notna(peak_ora):
+                f = float(peak_ora)
+                h = int(f)
+                m = int(round((f - h) * 100))
+                peak_time = f"{h:02d}:{m:02d}"
+
+                # POA irradiance at that time
+                poa_val = None
+                irr_df = load_metric(date_str, "Irraggiamento")
+                if irr_df is not None and not irr_df.empty and "Ora" in irr_df.columns:
+                    match = irr_df[irr_df["Ora"] == peak_ora]
+                    if not match.empty:
+                        poa_cols = [c for c in irr_df.columns if "POA" in c or "Irraggiamento" in c]
+                        if poa_cols:
+                            poa_val = match.iloc[0][poa_cols[0]]
+
+                return {
+                    "date": date_str,
+                    "peak_power_kw": round(float(peak_kw), 1),
+                    "peak_power_mw": round(float(peak_kw) / 1000.0, 3),
+                    "peak_time": peak_time,
+                    "poa_at_peak": round(float(poa_val)) if poa_val is not None else None,
+                }
+    except Exception:
+        pass
+
+    # Fallback: sum per-inverter Potenza AC
     df = load_metric(date_str, "Potenza AC")
     if df is None or df.empty:
         return {"date": date_str, "error": "No data"}
-
     ac_cols = [c for c in df.columns if "Potenza AC (INV" in c]
     if not ac_cols:
         return {"date": date_str, "error": "No inverter columns"}
-
-    df["total_power"] = pd.to_numeric(df[ac_cols].stack(), errors="coerce").unstack().sum(axis=1)
+    df["total_power"] = df[ac_cols].apply(pd.to_numeric, errors="coerce").sum(axis=1)
     peak_idx = df["total_power"].idxmax()
     peak_val = df.loc[peak_idx, "total_power"]
-
     if pd.isna(peak_val):
-        return {"date": date_str, "error": "No valid power data for this date"}
-
+        return {"date": date_str, "error": "No valid power data"}
     peak_ora = df.loc[peak_idx, "Ora"] if "Ora" in df.columns else "Unknown"
-    
-    # Format peak_ora (HH.mm -> HH:mm)
     peak_time = "Unknown"
     if peak_ora != "Unknown":
         try:
             f = float(peak_ora)
-            h = int(f)
-            m = int(round((f - h) * 100))
-            if m >= 60: m = int(round((f - h) * 60))
+            h, m = int(f), int(round((f - int(f)) * 100))
             peak_time = f"{h:02d}:{m:02d}"
-        except:
+        except Exception:
             peak_time = str(peak_ora)
-
-    # Try to get POA at that time
-    poa_val = None
-    irr_df = load_metric(date_str, "Irraggiamento")
-    if irr_df is not None and not irr_df.empty and "Ora" in irr_df.columns:
-        # Find matching time in irradiance
-        match = irr_df[irr_df["Ora"] == peak_ora]
-        if not match.empty:
-            poa_cols = [c for c in irr_df.columns if "POA" in c or "Irraggiamento" in c]
-            if poa_cols:
-                poa_val = match.iloc[0][poa_cols[0]]
-
-    return {
-        "date": date_str, 
-        "peak_power_w": round(float(peak_val)), 
-        "peak_time": peak_time,
-        "poa_at_peak": round(float(poa_val)) if poa_val is not None else None
-    }
+    return {"date": date_str, "peak_power_kw": round(float(peak_val) / 1000.0, 1), "peak_time": peak_time}
 
 def get_temperatures(date_str=None, threshold=None):
     """Get latest temperature readings for all inverters."""
@@ -325,21 +374,22 @@ def get_transformer_comparison(date_str=None):
     if df is None or df.empty:
         return {"date": date_str, "error": "No data"}
 
+    # Determine the actual time step from Ora column (HH.MM format)
+    step_h = 1.0 / 60.0  # default: 1 min in hours
+    if "Ora" in df.columns:
+        ora = pd.to_numeric(df["Ora"], errors="coerce").dropna()
+        if len(ora) > 1:
+            step_hhmm = ora.diff().dropna().median()
+            step_h = (step_hhmm * 100) / 60.0  # HH.MM step → hours
+
     result = {}
     for tx in ["TX1", "TX2", "TX3"]:
         cols = [c for c in df.columns if f"(INV {tx}-" in c]
         if cols:
-            # sum() skips NaNs. Filling with 0 to be explicit.
             tx_data = df[cols].fillna(0)
-            total_mwh = round(float(tx_data.sum().sum() * (1/60)) / 1_000_000, 3)
-            
-            # Latest MW should be from the last row that ACTUALLY had data
+            total_mwh = round(float(tx_data.sum().sum() * step_h) / 1_000_000, 3)
             valid_rows = df[cols].dropna(how='all')
-            if not valid_rows.empty:
-                latest_mw = round(float(valid_rows.iloc[-1].fillna(0).sum()) / 1_000_000, 3)
-            else:
-                latest_mw = 0.0
-                
+            latest_mw = round(float(valid_rows.iloc[-1].fillna(0).sum()) / 1_000_000, 3) if not valid_rows.empty else 0.0
             result[tx] = {"total_mwh": total_mwh, "latest_mw": latest_mw, "inverter_count": len(cols)}
     return {"date": date_str, "transformers": result}
 
@@ -397,15 +447,16 @@ def get_irradiance(date_str=None):
     latest_vals = {col: round(float(df_valid.iloc[-1][col]), 1) for col in irr_cols if pd.notna(df_valid.iloc[-1][col])}
     peak_vals = {col: round(float(df[col].max()), 1) for col in irr_cols}
     
-    # Calculate averages during daylight hours
+    # Calculate averages during daylight hours (Ora is HH.MM, sunrise/sunset are decimal)
     sunrise, sunset = calculate_sun_times(date_str)
     avg_vals = {}
     if "Ora" in df.columns:
-        daylight_df = df[(df["Ora"].astype(float) >= sunrise) & (df["Ora"].astype(float) <= sunset)]
+        ora_dec = df["Ora"].apply(lambda x: _ora_hhmm_to_decimal(float(x)) if pd.notna(x) else 0)
+        daylight_df = df[(ora_dec >= sunrise) & (ora_dec <= sunset)]
         if not daylight_df.empty:
             for col in irr_cols:
                 avg_vals[col] = round(float(daylight_df[col].mean()), 1)
-    
+
     return {"date": date_str, "latest": latest_vals, "peak": peak_vals, "daylight_average": avg_vals}
 
 def get_downtime_events(date_str=None):
