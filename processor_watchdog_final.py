@@ -1848,7 +1848,7 @@ class MetricFileHandler(FileSystemEventHandler):
     def __init__(self):
         super().__init__()
         self.last_run = 0
-        self.debounce_seconds = 120  # 2 min: coalesce per-file events within one extraction cycle
+        self.debounce_seconds = 30  # 30s: coalesce rapid burst events without blocking 2-min data cycles
         self.is_running = False
 
     def on_created(self, event):

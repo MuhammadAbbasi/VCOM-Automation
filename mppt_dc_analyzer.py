@@ -255,10 +255,13 @@ def analyze_dc_current(dc_df: pd.DataFrame, output_md_path: Path, date_str: str)
                 cross_m = get_current_streak_minutes(cond_cross.where(real_mask), df["Ora"])
 
             # Alarms
-            if open_streak_m >= 15:
+            # Thresholds account for the +15 min bonus added by get_current_streak_minutes.
+            # At 2-min data resolution, open_streak_m >= 30 requires ~15 actual fault minutes
+            # (not a transient dip), preventing false positives from short near-zero readings.
+            if open_streak_m >= 30:
                 faults.append({"Inverter": inv, "MPPT": mppt_num, "Strings": string_count, "Type": "OPEN CIRCUIT", "Severity": "CRITICAL", "Measured": f"{latest_val:.1f}" if latest_val is not None else "0.0", "Expected": f"{expected_val:.1f}" if expected_val is not None else "0.0", "Duration": int(open_streak_m), "Deviation": "<10%", "Action": "Check connection"})
                 inv_summary[inv]["Critical"] += 1
-            elif string_count == 2 and ss_loss_m >= 45:
+            elif string_count == 2 and ss_loss_m >= 60:
                 faults.append({"Inverter": inv, "MPPT": mppt_num, "Strings": string_count, "Type": "SINGLE STRING LOSS", "Severity": "CRITICAL", "Measured": f"{latest_val:.1f}" if latest_val is not None else "0.0", "Expected": f"{expected_val:.1f}" if expected_val is not None else "0.0", "Duration": int(ss_loss_m), "Deviation": "~50%", "Action": "String off status - maintenance team intervention required (check fuses/connections)"})
                 inv_summary[inv]["Critical"] += 1
             elif cross_m >= 60:
