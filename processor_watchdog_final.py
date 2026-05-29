@@ -1645,13 +1645,17 @@ def analyze_site(date_str: str) -> None:
             
             if dc_alarm_id in prev_alarm_map:
                 alarm = prev_alarm_map[dc_alarm_id]
+                alarm["severity"] = "red" if is_crit else "yellow"
+                alarm["type"]     = dc_type
+                alarm["message"]  = f"{f['Type']} on MPPT {f['MPPT']} (Measured: {f['Measured']} A, Expected: {f['Expected']} A)"
             else:
                 alarm = {
                     "id": dc_alarm_id,
                     "inverter": inv_label_f,
                     "type": dc_type,
                     "severity": "red" if is_crit else "yellow",
-                    "trip_time": timestamp
+                    "trip_time": timestamp,
+                    "message": f"{f['Type']} on MPPT {f['MPPT']} (Measured: {f['Measured']} A, Expected: {f['Expected']} A)"
                 }
             
             if should_alert(dc_cat, "dashboard"):
