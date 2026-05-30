@@ -26,7 +26,7 @@ def _ensure_minute_values_on(page) -> None:
     """Make sure 'Valori in minuti' toggle is active (blue/acceso). If not, click it."""
     try:
         acceso = page.locator('button[title="acceso"]:visible').first
-        if acceso.is_visible(timeout=5_000):
+        if acceso.is_visible():
             cls = acceso.get_attribute("class") or ""
             if "active" not in cls:
                 logger.info("Enabling 'Valori in minuti'...")
@@ -58,7 +58,7 @@ def _download_chart_csv(page) -> pd.DataFrame | None:
     try:
         # Find the export button by its SVG title
         export_btn = page.locator('g:has(> title):has-text("diagramma")').last
-        if not export_btn.is_visible(timeout=5_000):
+        if not export_btn.is_visible():
             logger.warning("[DC Fallback] Export button not found by text, trying JS click...")
             # Fallback: click the button by pixel coordinates found via JS
             coords = page.evaluate("""() => {

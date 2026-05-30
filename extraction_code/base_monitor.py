@@ -363,7 +363,7 @@ def refresh_chart(page) -> None:
     """Click 'Aggiorna grafico' if visible."""
     try:
         btn = page.locator('button:has-text("Aggiorna grafico"), button:has-text("Update chart")')
-        if btn.is_visible(timeout=2_000):
+        if btn.is_visible():
             btn.click()
             time.sleep(1.5)
     except Exception:

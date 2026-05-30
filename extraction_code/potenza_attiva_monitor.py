@@ -11,7 +11,7 @@ def extract_potenza_attiva(page) -> pd.DataFrame:
     try:
         # Check if Potenza attiva is already visible
         target = page.locator('text=/^\\s*Potenza attiva\\s*$/i').first
-        if not target.is_visible(timeout=3000):
+        if not target.is_visible():
             logger.info("Clicking 'Power control' parent menu...")
             page.locator('text=/^\\s*Power control\\s*$/i').first.click(force=True)
             time.sleep(1)

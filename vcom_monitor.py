@@ -22,6 +22,7 @@ import sys
 import time
 import json
 import traceback
+import threading
 from datetime import datetime
 from pathlib import Path
 from logging.handlers import RotatingFileHandler
@@ -285,6 +286,21 @@ def _sleep_remaining(interval_minutes: int, trigger_path: Path, start_date: str 
     return "normal"
 
 
+# ---------------------------------------------------------------------------
+# Cycle Watchdog to prevent hangs
+# ---------------------------------------------------------------------------
+CYCLE_TIMEOUT_SECONDS = 900.0  # 15 minutes
+
+def cycle_watchdog_trigger(cycle_num: int) -> None:
+    logger.critical(
+        f"[WATCHDOG] Extraction cycle #{cycle_num} has exceeded "
+        f"{CYCLE_TIMEOUT_SECONDS / 60:.1f} minutes! Force-exiting process to trigger orchestrator restart..."
+    )
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(1)
+
+
 def main() -> None:
     print("[EXTRACTION] Script started.", flush=True)
     ERRORS_DIR.mkdir(parents=True, exist_ok=True)
@@ -345,6 +361,11 @@ def main() -> None:
             while True:
                 busy_path.touch()
 
+                # Start the watchdog timer for the current cycle (15 minutes limit)
+                watchdog = threading.Timer(CYCLE_TIMEOUT_SECONDS, cycle_watchdog_trigger, args=[cycle_count])
+                watchdog.daemon = True
+                watchdog.start()
+
                 try:
                     if page.is_closed():
                         logger.warning("Browser page was closed. Reopening...")
@@ -366,6 +387,8 @@ def main() -> None:
                         pass
 
                 finally:
+                    # Cancel the watchdog timer as the cycle has finished
+                    watchdog.cancel()
                     if busy_path.exists():
                         busy_path.unlink()
 
