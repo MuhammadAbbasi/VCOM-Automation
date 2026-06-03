@@ -1,0 +1,54 @@
+{
+    "thresholds": {
+        "pr": {
+            "green": 85,
+            "yellow": 75
+        },
+        "temp": {
+            "yellow": 60,
+            "red": 70
+        },
+        "ac": {
+            "green": 5000,
+            "yellow": 1000
+        },
+        "dc": {
+            "morning_green": 10,
+            "morning_yellow": 2,
+            "afternoon_green": 5,
+            "afternoon_yellow": 0.5
+        },
+        "min_downtime_minutes": 5
+    },
+    "colors": {
+        "green": "#10b981",
+        "yellow": "#f59e0b",
+        "red": "#ef4444",
+        "grey": "#6b7280"
+    },
+    "collection_interval": 15,
+    "ollama_url": "http://host.docker.internal:11434/api/generate",
+    "telegram": {
+        "enabled": true,
+        "bot_token": "${TELEGRAM_BOT_TOKEN}",
+        "chat_id": "${TELEGRAM_CHAT_ID}",
+        "personal_id": "${TELEGRAM_PERSONAL_ID}"
+    },
+    "alert_preferences": {
+        "comm_lost":         { "dashboard": true,  "telegram": false },
+        "plant_drop":        { "dashboard": true,  "telegram": false },
+        "inverter_trip":     { "dashboard": true,  "telegram": true  },
+        "ac_drop":           { "dashboard": true,  "telegram": true  },
+        "low_pr":            { "dashboard": true,  "telegram": false },
+        "crit_pr":           { "dashboard": true,  "telegram": false },
+        "high_temp":         { "dashboard": true,  "telegram": false },
+        "crit_temp":         { "dashboard": true,  "telegram": true  },
+        "dc_warning":        { "dashboard": true,  "telegram": false },
+        "dc_critical":       { "dashboard": true,  "telegram": true  },
+        "iso_fault":         { "dashboard": true,  "telegram": true  },
+        "grid_limit_change": { "dashboard": true,  "telegram": true  },
+        "tracker_comm":      { "dashboard": false, "telegram": false },
+        "mqtt_pulse":        { "dashboard": false, "telegram": false },
+        "recovery":          { "telegram": false }
+    }
+}

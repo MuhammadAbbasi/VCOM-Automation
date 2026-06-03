@@ -1,0 +1,127 @@
+# ============================================================
+# .dockerignore — SCADA VCOM Automation Docker Build
+# Build context root: VCOM Automation/ (git root)
+# ============================================================
+# Excludes runtime-generated and sensitive files from the
+# Docker build context to keep image layers clean and small.
+# ============================================================
+
+
+# ------------------------------------------------------------
+# Credentials & secrets (NEVER bake into image layers)
+# ------------------------------------------------------------
+.env
+config.json
+user_settings.json
+*.key
+*.pem
+*.p12
+*.pfx
+auth_token.txt
+
+# ------------------------------------------------------------
+# Runtime databases — provided via named volumes at runtime
+# ------------------------------------------------------------
+db/*.db
+db/*.db-wal
+db/*.db-shm
+db/backups/
+db/fault_state.json
+db/link_status.json
+db/last_extraction.json
+db/last_db_backup.json
+db/last_ai_audit.json
+
+# ------------------------------------------------------------
+# Runtime data directories — provided via named volumes
+# ------------------------------------------------------------
+extracted_data/
+logs/
+errors/
+VCOM_Screenshots/
+
+# ------------------------------------------------------------
+# Playwright browser session — provided via named volume
+# ------------------------------------------------------------
+playwright_profile/
+
+# ------------------------------------------------------------
+# Python cache & compiled files
+# ------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+*.egg
+dist/
+build/
+
+# ------------------------------------------------------------
+# Virtual environments
+# ------------------------------------------------------------
+venv/
+ENV/
+env/
+.venv/
+
+# ------------------------------------------------------------
+# IDE & editor files
+# ------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ------------------------------------------------------------
+# Test & CI artifacts
+# ------------------------------------------------------------
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# ------------------------------------------------------------
+# Git internals (not needed inside the image)
+# ------------------------------------------------------------
+.git/
+.gitignore
+
+# ------------------------------------------------------------
+# Legacy, temp, and scratch directories
+# ------------------------------------------------------------
+legacy/
+archives/
+temp_llm_codes/
+artifacts/
+experiment_*/
+scratch/
+antigravity-skills/
+
+# ------------------------------------------------------------
+# Log files
+# ------------------------------------------------------------
+*.log
+*.log.*
+monitoring.log
+watchdog.log
+telegram_bot.log
+dashboard_doctor.log
+
+# ------------------------------------------------------------
+# Lock and state files
+# ------------------------------------------------------------
+run_monitor.pid
+.extraction_busy
+.trigger_extraction
+
+# ------------------------------------------------------------
+# Backup files
+# ------------------------------------------------------------
+*.bak
+*.backup
+*.tmp
+*.orig

@@ -1,0 +1,179 @@
+version: '3.8'
+
+# ============================================================
+# SCADA VCOM Automation — Production Docker Stack
+# Mazara 01 Solar Plant (12.6 MWp · 36 inverters)
+# ============================================================
+#
+# USAGE:
+#   1. Copy .env.example → .env and fill in all values
+#   2. docker compose up --build -d
+#   3. Dashboard available at http://localhost:8080
+#
+# BUILD CONTEXT: ../ (= VCOM Automation/ git root)
+# All Dockerfiles are inside VCOM Automation Docker/docker/
+# ============================================================
+
+# -----------------------------------------------------------
+# Shared build context anchor (DRY)
+# -----------------------------------------------------------
+x-app-build: &app-build
+  context: ../
+  dockerfile: VCOM Automation Docker/docker/base.Dockerfile
+
+x-common: &common
+  env_file: .env
+  restart: always
+  networks:
+    - scada_net
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+  environment:
+    - TZ=${TZ:-Europe/Rome}
+
+x-common-volumes: &common-volumes
+  - scada_db_data:/app/db
+  - logs:/app/logs
+
+# -----------------------------------------------------------
+# Services
+# -----------------------------------------------------------
+services:
+
+  # ----------------------------------------------------------
+  # DASHBOARD  — FastAPI web UI + WebSocket broadcaster
+  # Port 8080 is the only port exposed to the host network.
+  # ----------------------------------------------------------
+  dashboard:
+    <<: *common
+    image: scada-app:latest
+    build: *app-build
+    container_name: scada_dashboard
+    ports:
+      - "8080:8080"
+    volumes:
+      - *common-volumes
+      - extracted_data:/app/extracted_data
+    command: ["python", "dashboard/app.py"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ----------------------------------------------------------
+  # EXTRACTION  — Playwright Chromium VCOM scraper
+  # Runs headless Chromium (VCOM_HEADLESS=true) via env var.
+  # shm_size prevents /dev/shm OOM crashes during heavy scraping.
+  # ----------------------------------------------------------
+  extraction:
+    <<: *common
+    image: scada-extraction:latest
+    build:
+      context: ../
+      dockerfile: VCOM Automation Docker/docker/extraction.Dockerfile
+    container_name: scada_extraction
+    shm_size: '2gb'
+    volumes:
+      - *common-volumes
+      - extracted_data:/app/extracted_data
+      - playwright_profile:/app/playwright_profile
+    environment:
+      - TZ=${TZ:-Europe/Rome}
+      - VCOM_HEADLESS=true
+    command: ["python", "vcom_monitor.py"]
+
+  # ----------------------------------------------------------
+  # WATCHDOG  — Analysis engine & fault detection
+  # Watches extracted_data/ for new metric files and generates
+  # snapshots to scada_snapshots.db.
+  # ----------------------------------------------------------
+  watchdog:
+    <<: *common
+    image: scada-app:latest
+    container_name: scada_watchdog
+    volumes:
+      - *common-volumes
+      - extracted_data:/app/extracted_data
+    command: ["python", "processor_watchdog_final.py"]
+    depends_on:
+      - extraction
+
+  # ----------------------------------------------------------
+  # TELEGRAM  — Bot polling service + ticket creation UI
+  # Uses run_telegram.py wrapper to patch the hardcoded Odoo
+  # localhost URL before telegram_bot.py executes.
+  # ----------------------------------------------------------
+  telegram:
+    <<: *common
+    image: scada-app:latest
+    container_name: scada_telegram
+    volumes:
+      - *common-volumes
+      - extracted_data:/app/extracted_data
+    command: ["python", "/wrappers/run_telegram.py"]
+    depends_on:
+      - watchdog
+
+  # ----------------------------------------------------------
+  # TICKETS  — Odoo fault-to-ticket bridge
+  # Uses run_tickets.py wrapper to patch ODOO_URL/USER/PASS
+  # constants before odoo_ticket_engine.py loop starts.
+  # ----------------------------------------------------------
+  tickets:
+    <<: *common
+    image: scada-app:latest
+    container_name: scada_tickets
+    volumes:
+      - *common-volumes
+    command: ["python", "/wrappers/run_tickets.py"]
+    depends_on:
+      - watchdog
+
+  # ----------------------------------------------------------
+  # BROKER  — MQTT broker for tracker heartbeat
+  # Optional: tracker field communication service.
+  # ----------------------------------------------------------
+  broker:
+    <<: *common
+    image: scada-app:latest
+    container_name: scada_broker
+    volumes:
+      - logs:/app/logs
+    command: ["python", "tracker_testing/broker.py"]
+
+  # ----------------------------------------------------------
+  # TRACKER  — MQTT receiver for tracker link-status
+  # Monitors MQTT heartbeat from solar tracker NCUs.
+  # ----------------------------------------------------------
+  tracker:
+    <<: *common
+    image: scada-app:latest
+    container_name: scada_tracker
+    volumes:
+      - *common-volumes
+    command: ["python", "tracker_testing/receiver.py"]
+    depends_on:
+      - broker
+
+# -----------------------------------------------------------
+# Networks
+# -----------------------------------------------------------
+networks:
+  scada_net:
+    name: scada_net
+    driver: bridge
+
+# -----------------------------------------------------------
+# Named Volumes
+# -----------------------------------------------------------
+volumes:
+  scada_db_data:
+    name: scada_db_data
+  extracted_data:
+    name: scada_extracted_data
+  logs:
+    name: scada_logs
+  playwright_profile:
+    name: scada_playwright_profile

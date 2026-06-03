@@ -1,0 +1,37 @@
+# ============================================================
+# SCADA VCOM Automation — Pinned Docker Dependencies
+# ============================================================
+# This file replaces the unpinned requirements.txt for Docker
+# builds. Pin versions are tested together and should only be
+# updated deliberately, not on every build.
+# ============================================================
+
+# Data processing
+pandas==2.2.3
+numpy==1.26.4
+openpyxl==3.1.5
+
+# File system monitoring (watchdog analysis engine)
+watchdog==4.0.2
+
+# Browser automation (VCOM scraper)
+playwright==1.48.0
+
+# Web framework (dashboard)
+fastapi==0.115.0
+uvicorn[standard]==0.31.0
+jinja2==3.1.4
+python-multipart==0.0.12
+
+# Networking & integrations
+requests==2.32.3
+pyngrok==7.2.1
+
+# MQTT (tracker heartbeat)
+paho-mqtt==2.1.0
+amqtt==0.11.0b1
+
+# Process management (used by dashboard_doctor and run_monitor)
+psutil==6.1.0
+
+# sqlite3 is part of the Python stdlib — no install needed
