@@ -48,7 +48,7 @@ services:
     volumes:
       - scada_db_data:/app/db
       - logs:/app/logs
-      - extracted_data:/app/extracted_data
+      - ../extracted_data:/app/extracted_data
     command: ["python", "dashboard/app.py"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/"]
@@ -73,7 +73,7 @@ services:
     volumes:
       - scada_db_data:/app/db
       - logs:/app/logs
-      - extracted_data:/app/extracted_data
+      - ../extracted_data:/app/extracted_data
       - playwright_profile:/app/playwright_profile
     environment:
       - TZ=${TZ:-Europe/Rome}
@@ -93,7 +93,7 @@ services:
     volumes:
       - scada_db_data:/app/db
       - logs:/app/logs
-      - extracted_data:/app/extracted_data
+      - ../extracted_data:/app/extracted_data
     command: ["python", "processor_watchdog_final.py"]
     depends_on:
       - extraction
@@ -111,7 +111,7 @@ services:
     volumes:
       - scada_db_data:/app/db
       - logs:/app/logs
-      - extracted_data:/app/extracted_data
+      - ../extracted_data:/app/extracted_data
     command: ["python", "/wrappers/run_telegram.py"]
     depends_on:
       - watchdog
@@ -189,8 +189,6 @@ networks:
 volumes:
   scada_db_data:
     name: scada_db_data
-  extracted_data:
-    name: scada_extracted_data
   logs:
     name: scada_logs
   playwright_profile:
