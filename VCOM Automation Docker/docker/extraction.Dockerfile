@@ -25,7 +25,8 @@ COPY ["VCOM Automation Docker/requirements.docker.txt", "/tmp/requirements.docke
 RUN pip install --no-cache-dir -r /tmp/requirements.docker.txt \
     && apt-get purge -y gcc \
     && apt-get autoremove -y \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir --force-reinstall "setuptools>=69.0.0"
 
 # Set browser path BEFORE installing so playwright bakes it into the right location
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
