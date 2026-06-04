@@ -8,7 +8,7 @@
 # image layer — not re-downloaded on each container start.
 # ============================================================
 
-FROM python:3.12-slim AS base
+FROM python:3.12-slim-bookworm AS base
 
 # System dependencies (same as base.Dockerfile + Playwright deps)
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Install Python packages (including playwright pip package)
-COPY "VCOM Automation Docker/requirements.docker.txt" /tmp/requirements.docker.txt
+COPY ["VCOM Automation Docker/requirements.docker.txt", "/tmp/requirements.docker.txt"]
 RUN pip install --no-cache-dir -r /tmp/requirements.docker.txt
 
 # Install Playwright Chromium browser + all its system-level dependencies.

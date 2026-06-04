@@ -4,7 +4,7 @@
 # Build context: VCOM Automation/ (git root)
 # ============================================================
 
-FROM python:3.12-slim AS base
+FROM python:3.12-slim-bookworm AS base
 
 # System dependencies
 #   - gettext-base  : provides envsubst for entrypoint config rendering
@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Install Python dependencies first (Docker layer cache friendly)
-COPY "VCOM Automation Docker/requirements.docker.txt" /tmp/requirements.docker.txt
+COPY ["VCOM Automation Docker/requirements.docker.txt", "/tmp/requirements.docker.txt"]
 RUN pip install --no-cache-dir -r /tmp/requirements.docker.txt
 
 # Copy application source code (source repo root)

@@ -165,7 +165,6 @@ tracker_testing/sync_*.json
 # ============================================================================
 # DOCKER & DEPLOYMENT (if used)
 # ============================================================================
-.dockerignore
 docker-compose.override.yml
 .container-env
 

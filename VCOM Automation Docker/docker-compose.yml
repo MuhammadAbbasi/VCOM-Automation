@@ -1,5 +1,3 @@
-version: '3.8'
-
 # ============================================================
 # SCADA VCOM Automation — Production Docker Stack
 # Mazara 01 Solar Plant (12.6 MWp · 36 inverters)
@@ -31,10 +29,6 @@ x-common: &common
   environment:
     - TZ=${TZ:-Europe/Rome}
 
-x-common-volumes: &common-volumes
-  - scada_db_data:/app/db
-  - logs:/app/logs
-
 # -----------------------------------------------------------
 # Services
 # -----------------------------------------------------------
@@ -52,7 +46,8 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - *common-volumes
+      - scada_db_data:/app/db
+      - logs:/app/logs
       - extracted_data:/app/extracted_data
     command: ["python", "dashboard/app.py"]
     healthcheck:
@@ -76,7 +71,8 @@ services:
     container_name: scada_extraction
     shm_size: '2gb'
     volumes:
-      - *common-volumes
+      - scada_db_data:/app/db
+      - logs:/app/logs
       - extracted_data:/app/extracted_data
       - playwright_profile:/app/playwright_profile
     environment:
@@ -92,9 +88,11 @@ services:
   watchdog:
     <<: *common
     image: scada-app:latest
+    build: *app-build
     container_name: scada_watchdog
     volumes:
-      - *common-volumes
+      - scada_db_data:/app/db
+      - logs:/app/logs
       - extracted_data:/app/extracted_data
     command: ["python", "processor_watchdog_final.py"]
     depends_on:
@@ -108,9 +106,11 @@ services:
   telegram:
     <<: *common
     image: scada-app:latest
+    build: *app-build
     container_name: scada_telegram
     volumes:
-      - *common-volumes
+      - scada_db_data:/app/db
+      - logs:/app/logs
       - extracted_data:/app/extracted_data
     command: ["python", "/wrappers/run_telegram.py"]
     depends_on:
@@ -124,12 +124,27 @@ services:
   tickets:
     <<: *common
     image: scada-app:latest
+    build: *app-build
     container_name: scada_tickets
     volumes:
-      - *common-volumes
+      - scada_db_data:/app/db
+      - logs:/app/logs
     command: ["python", "/wrappers/run_tickets.py"]
     depends_on:
       - watchdog
+
+  # ----------------------------------------------------------
+  # CLOUDFLARE TUNNEL  — Exposes dashboard at getdashboard.dpdns.org
+  # ----------------------------------------------------------
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    restart: always
+    networks:
+      - scada_net
+    depends_on:
+      dashboard:
+        condition: service_healthy
 
   # ----------------------------------------------------------
   # BROKER  — MQTT broker for tracker heartbeat
@@ -138,6 +153,7 @@ services:
   broker:
     <<: *common
     image: scada-app:latest
+    build: *app-build
     container_name: scada_broker
     volumes:
       - logs:/app/logs
@@ -150,9 +166,11 @@ services:
   tracker:
     <<: *common
     image: scada-app:latest
+    build: *app-build
     container_name: scada_tracker
     volumes:
-      - *common-volumes
+      - scada_db_data:/app/db
+      - logs:/app/logs
     command: ["python", "tracker_testing/receiver.py"]
     depends_on:
       - broker
