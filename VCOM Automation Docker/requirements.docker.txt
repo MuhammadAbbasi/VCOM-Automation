@@ -35,3 +35,6 @@ amqtt==0.11.0b1
 psutil==6.1.0
 
 # sqlite3 is part of the Python stdlib — no install needed
+
+# pkg_resources (used by amqtt and other packages)
+setuptools>=69.0.0

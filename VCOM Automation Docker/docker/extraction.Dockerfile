@@ -24,6 +24,9 @@ WORKDIR /app
 COPY ["VCOM Automation Docker/requirements.docker.txt", "/tmp/requirements.docker.txt"]
 RUN pip install --no-cache-dir -r /tmp/requirements.docker.txt
 
+# Set browser path BEFORE installing so playwright bakes it into the right location
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
 # Install Playwright Chromium browser + all its system-level dependencies.
 # --with-deps installs libnss, libatk, libglib, libdrm, etc. automatically.
 RUN playwright install chromium --with-deps
@@ -39,9 +42,6 @@ RUN cp -r /app/"VCOM Automation Docker/config" /templates && \
 
 # Pre-create runtime directories
 RUN mkdir -p /app/db /app/extracted_data /app/logs /app/errors /app/VCOM_Screenshots
-
-# Playwright profile dir (persisted via named volume)
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
