@@ -775,7 +775,7 @@ HELP_TEXT = (
     "/approve <id> — Approve a pending action\n"
     "/deny <id>    — Deny a pending action\n\n"
     "*AI Assistant*\n"
-    "💬 _Just type any question in plain text_\n"
+    "💬 /ai — Ask a question (or just type freely)\n"
     "Examples:\n"
     "• `Which inverters are above 60°C?`\n"
     "• `Compare yesterday vs today production`\n"
@@ -842,6 +842,7 @@ class TelegramBot:
             {"command": "weather",         "description": "🌤 Irradiance & temperature"},
             {"command": "uptime",          "description": "⏱ Plant availability today"},
             {"command": "generate_ticket", "description": "🎫 Create fault ticket"},
+            {"command": "ai",              "description": "💬 Ask AI a question"},
             {"command": "help",            "description": "📋 Full command list"},
         ]
         try:
@@ -1028,6 +1029,16 @@ def main() -> None:
 
                 elif cmd == "/cancel":
                     bot.send_message(chat_id, "ℹ️ Nessuna operazione attiva.")
+
+                elif cmd == "/ai":
+                    # Explicit AI command — strip "/ai " prefix and forward
+                    question = text[3:].strip() if len(text) > 3 else text
+                    if not question:
+                        bot.send_message(chat_id, "💬 Usage: `/ai <your question>`\nOr just type your question directly.")
+                    else:
+                        bot.send_message(chat_id, "⏳ _Thinking..._")
+                        data = get_latest_dashboard_json()
+                        _dispatch_ai(bot, chat_id, question, data, settings, ai_semaphore)
 
                 else:
                     # ── Any free text → LLM ───────────────────────────────
