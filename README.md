@@ -54,10 +54,180 @@ cp user_settings.json.example user_settings.json
 # Edit config.json and user_settings.json with your credentials and preferences
 ```
 
-### 📦 Migration Guide (Moving to another system)
+---
+
+## 🐳 Docker Deployment (Recommended for Production)
+
+The recommended way to run the full stack is Docker Compose. All services (dashboard, extraction, watchdog, telegram, tickets, broker, tracker, Cloudflare tunnel) are containerized and managed together.
+
+### Prerequisites
+
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
+- Git
+
+### First-Time Setup on a New PC
+
+**1. Clone the repository**
+```bash
+git clone https://github.com/MuhammadAbbasi/VCOM-Automation.git
+cd "VCOM Automation"
+```
+
+**2. Create the `.env` file**
+
+Copy the template and fill in your credentials:
+```
+VCOM Automation Docker/.env
+```
+
+Required variables:
+```env
+VCOM_USERNAME=your_vcom_username
+VCOM_PASSWORD=your_vcom_password
+VCOM_SYSTEM_URL=https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635
+INVERTER_IDS_JSON=[...]
+DASHBOARD_USER=your_dashboard_user
+DASHBOARD_PASS=your_dashboard_password
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_CHAT_ID=...
+TELEGRAM_PERSONAL_ID=...
+ODOO_URL=http://host.docker.internal:8069
+ODOO_DB=odoo
+ODOO_USER=...
+ODOO_PASS=...
+CLOUDFLARE_TUNNEL_TOKEN=...
+TZ=Europe/Rome
+```
+
+**3. Migrate the database (preserves all historical data)**
+
+Run the migration script **before** the first `docker compose up`:
+
+```bash
+# Migrate databases only (recommended first time)
+python db_migrate_to_docker.py
+
+# Or with full backup history (~11 GB extra)
+python db_migrate_to_docker.py --with-backups
+```
+
+What the script does:
+- Checkpoints WAL journals to prevent data loss
+- Runs `VACUUM INTO` on each database (compresses + defragments)
+- Verifies integrity of each database
+- Creates the `scada_db_data` Docker volume
+- Copies all databases and JSON state files into the volume
+- Prints a before/after size summary
+
+**4. Build and start the stack**
+
+```bash
+cd "VCOM Automation Docker"
+docker compose up --build -d
+```
+
+**5. Verify everything is running**
+
+```bash
+docker compose ps
+docker compose logs -f dashboard
+```
+
+Dashboard will be live at:
+- **Local:** `http://localhost:8080`
+- **Remote:** `https://getdashboard.dpdns.org` (via Cloudflare Tunnel)
+
+---
+
+### Transferring to a New PC (Full Data Migration)
+
+Follow these steps to move the entire system with all historical data:
+
+**On the old PC:**
+
+```bash
+# 1. Stop the running stack
+cd "VCOM Automation Docker"
+docker compose down
+
+# 2. Export the database volume to a tar archive
+docker run --rm \
+  -v scada_db_data:/data \
+  -v "$(pwd)":/backup \
+  python:3.12-slim-bookworm \
+  tar czf /backup/scada_db_data_backup.tar.gz -C /data .
+
+# 3. Copy these files/folders to the new PC:
+#    - scada_db_data_backup.tar.gz  (database volume export)
+#    - VCOM Automation Docker/.env  (credentials — keep secure)
+#    - db/backups/                  (optional: 11 GB backup history)
+```
+
+**On the new PC:**
+
+```bash
+# 1. Install Docker Desktop, then clone the repo
+git clone https://github.com/MuhammadAbbasi/VCOM-Automation.git
+cd "VCOM Automation"
+
+# 2. Restore .env
+#    Copy your .env to: VCOM Automation Docker/.env
+
+# 3. Create volume and restore data
+docker volume create scada_db_data
+docker run --rm \
+  -v scada_db_data:/data \
+  -v "$(pwd)":/backup \
+  python:3.12-slim-bookworm \
+  tar xzf /backup/scada_db_data_backup.tar.gz -C /data
+
+# 4. Build and start
+cd "VCOM Automation Docker"
+docker compose up --build -d
+```
+
+> **Windows PowerShell note:** Replace `$(pwd)` with `${PWD}` in the commands above.
+
+---
+
+### Managing the Running Stack
+
+```bash
+# View all container statuses
+docker compose ps
+
+# Follow logs for all services
+docker compose logs -f
+
+# Follow logs for a specific service
+docker compose logs -f dashboard
+docker compose logs -f extraction
+docker compose logs -f cloudflared
+
+# Restart a single service without rebuilding
+docker compose restart watchdog
+
+# Stop everything
+docker compose down
+
+# Rebuild and restart after code changes
+docker compose up --build -d
+```
+
+### Updating the Application
+
+```bash
+git pull
+cd "VCOM Automation Docker"
+docker compose up --build -d
+```
+
+---
+
+### 📦 Legacy Migration Guide (Local Python, no Docker)
 1. **Copy Files**: Transfer the entire project folder to the new system.
 2. **Environment**: Re-run the installation steps above.
-3. **Data Preservation**: If you want to keep your history, ensure you copy the `extracted_data/` folder, specifically the `dashboard_data_*.json` files.
+3. **Data Preservation**: Copy the `db/` folder and `extracted_data/` folder to the new system.
 4. **Hardware**: Ensure the new system has at least 8GB RAM and stable network access for the browser automation.
 
 ### Run the System
