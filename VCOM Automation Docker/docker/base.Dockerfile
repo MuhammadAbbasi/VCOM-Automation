@@ -22,7 +22,10 @@ WORKDIR /app
 
 # Install Python dependencies first (Docker layer cache friendly)
 COPY ["VCOM Automation Docker/requirements.docker.txt", "/tmp/requirements.docker.txt"]
-RUN pip install --no-cache-dir -r /tmp/requirements.docker.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.docker.txt \
+    && apt-get purge -y gcc \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy application source code (source repo root)
 # .dockerignore excludes runtime-generated files (db/, logs/, etc.)

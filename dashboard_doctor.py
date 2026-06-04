@@ -376,7 +376,7 @@ def check_connections() -> dict:
     try:
         cfg = get_config()
         user = cfg.get("DASHBOARD_USER", "admin")
-        pw = cfg.get("DASHBOARD_PASS", "mazara2025!")
+        pw = cfg.get("DASHBOARD_PASS", "")
         resp = requests.get("http://localhost:8080/api/status", auth=(user, pw), timeout=5)
         if resp.status_code == 401:
             results["issues"].append("❌ Dashboard API: authentication failed (check DASHBOARD_USER/PASS in config.json)")
@@ -570,7 +570,7 @@ def attempt_self_heal(dead_processes: list, tracker_stale: bool) -> list:
     healed = []
     cfg = get_config()
     user = cfg.get("DASHBOARD_USER", "admin")
-    pw = cfg.get("DASHBOARD_PASS", "mazara2025!")
+    pw = cfg.get("DASHBOARD_PASS", "")
 
     # Trigger forensic rescan
     try:

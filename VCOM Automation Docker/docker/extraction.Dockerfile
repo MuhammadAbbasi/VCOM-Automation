@@ -22,7 +22,10 @@ WORKDIR /app
 
 # Install Python packages (including playwright pip package)
 COPY ["VCOM Automation Docker/requirements.docker.txt", "/tmp/requirements.docker.txt"]
-RUN pip install --no-cache-dir -r /tmp/requirements.docker.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.docker.txt \
+    && apt-get purge -y gcc \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set browser path BEFORE installing so playwright bakes it into the right location
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright

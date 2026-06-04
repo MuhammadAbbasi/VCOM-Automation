@@ -63,7 +63,7 @@ security = HTTPBasic()
 def verify_credentials(credentials: HTTPBasicCredentials = Depends(security)):
     cfg = load_config()
     correct_user = secrets.compare_digest(credentials.username, cfg.get("DASHBOARD_USER", "admin"))
-    correct_pass = secrets.compare_digest(credentials.password, cfg.get("DASHBOARD_PASS", "mazara2025"))
+    correct_pass = secrets.compare_digest(credentials.password, cfg.get("DASHBOARD_PASS", ""))
     if not (correct_user and correct_pass):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -504,7 +504,7 @@ if __name__ == "__main__":
     if ngrok_token and ngrok_token != "YOUR_TOKEN_HERE":
         print("[*] Queueing Ngrok Tunnel startup in background thread...")
         ng_user = cfg.get("DASHBOARD_USER", "admin")
-        ng_pass = cfg.get("DASHBOARD_PASS", "mazara2025")
+        ng_pass = cfg.get("DASHBOARD_PASS", "")
         
         def run_ngrok_bg():
             import time

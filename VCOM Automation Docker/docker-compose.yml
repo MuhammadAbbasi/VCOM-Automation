@@ -21,7 +21,7 @@ x-app-build: &app-build
 
 x-common: &common
   env_file: .env
-  restart: always
+  restart: unless-stopped
   networks:
     - scada_net
   extra_hosts:

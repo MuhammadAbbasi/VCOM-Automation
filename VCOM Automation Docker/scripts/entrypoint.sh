@@ -19,7 +19,7 @@ APP_DIR="/app"
 echo "[entrypoint] Rendering config files from templates..."
 
 # ---- config.json ----
-envsubst '${VCOM_USERNAME} ${VCOM_PASSWORD} ${VCOM_SYSTEM_URL} ${NGROK_AUTH_TOKEN} ${DASHBOARD_USER} ${DASHBOARD_PASS} ${INVERTER_IDS_JSON}' \
+envsubst '${VCOM_USERNAME} ${VCOM_PASSWORD} ${VCOM_SYSTEM_URL} ${DASHBOARD_USER} ${DASHBOARD_PASS} ${INVERTER_IDS_JSON}' \
     < "${TEMPLATES_DIR}/config.json.template" \
     > "${APP_DIR}/config.json"
 
@@ -33,11 +33,11 @@ envsubst '${TELEGRAM_BOT_TOKEN} ${TELEGRAM_CHAT_ID} ${TELEGRAM_PERSONAL_ID}' \
 echo "[entrypoint] user_settings.json written"
 
 # ---- Ensure runtime directories exist ----
-# (Named volumes are mounted here; mkdir -p is idempotent)
 mkdir -p "${APP_DIR}/db" \
          "${APP_DIR}/extracted_data" \
          "${APP_DIR}/logs" \
-         "${APP_DIR}/errors"
+         "${APP_DIR}/errors" \
+         "${APP_DIR}/VCOM_Screenshots"
 
 echo "[entrypoint] Runtime directories verified."
 echo "[entrypoint] Starting: $@"

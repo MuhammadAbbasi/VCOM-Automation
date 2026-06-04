@@ -49,11 +49,11 @@ from db.odoo_client import OdooClient as _OrigOdooClient  # noqa: E402
 _original_init = _OrigOdooClient.__init__
 
 def _patched_init(self, url, db, user, password):
-    """Replace hardcoded localhost URL with env-var value."""
-    resolved_url  = ODOO_URL  if url  in ("http://localhost:8069", "http://127.0.0.1:8069") else url
-    resolved_db   = ODOO_DB   if db   == "odoo" else db
-    resolved_user = ODOO_USER if user == "pietro.artale@gmail.com" else user
-    resolved_pass = ODOO_PASS if password == "odoo" else password
+    """Always use env-var values — ignore whatever was hardcoded in source."""
+    resolved_url  = ODOO_URL  or url
+    resolved_db   = ODOO_DB   or db
+    resolved_user = ODOO_USER or user
+    resolved_pass = ODOO_PASS or password
     _original_init(self, resolved_url, resolved_db, resolved_user, resolved_pass)
 
 _OrigOdooClient.__init__ = _patched_init
