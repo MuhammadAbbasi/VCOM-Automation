@@ -33,7 +33,8 @@ python-multipart==0.0.12
 requests==2.32.3
 
 # MQTT (tracker heartbeat)
-paho-mqtt==2.1.0
+# paho-mqtt 2.x imports errno.WSAEWOULDBLOCK (Windows-only) unconditionally on Linux — use 1.6.1
+paho-mqtt==1.6.1
 amqtt==0.11.0b1
 
 # Process management (used by dashboard_doctor and run_monitor)
