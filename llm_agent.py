@@ -723,8 +723,11 @@ def build_data_snapshot(plant_data, question):
     
     # 5. Semantic Data Fetching
     if "TEMPERATURE" in active_cats:
-        data = get_temperatures(target_date, 50)
-        snapshot.append(f"TEMPERATURES: {json.dumps(data, default=str)}")
+        # Extract threshold from question (e.g. "above 60°C", "> 55 degrees")
+        temp_match = re.search(r'(\d+(?:\.\d+)?)\s*°?\s*[cC]\b', q)
+        temp_threshold = float(temp_match.group(1)) if temp_match else None
+        data = get_temperatures(target_date, temp_threshold)
+        snapshot.append(f"TEMPERATURES (threshold={temp_threshold}°C): {json.dumps(data, default=str)}")
         
     if "PRODUCTION" in active_cats:
         prod = get_total_production(target_date)
