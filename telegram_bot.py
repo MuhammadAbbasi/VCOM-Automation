@@ -507,10 +507,10 @@ def build_weekly_message() -> str:
     total = 0.0
     for date_str, snap in reversed(days):
         h   = snap.get("macro_health", {})
-        mwh = h.get("total_energy_mwh", 0.0)
-        pr  = h.get("avg_pr", 0.0)
+        mwh = float(h.get("total_energy_mwh") or 0.0)
+        pr  = float(h.get("avg_pr") or 0.0)
         d   = datetime.strptime(date_str, "%Y-%m-%d").strftime("%a %d/%m")
-        bar = "█" * min(int(mwh / 10), 10)
+        bar = "▓" * min(int(mwh / 10), 10)
         lines.append(f"`{d}` {bar} *{mwh:.1f} MWh*  PR:{pr:.0f}%")
         total += mwh
     lines += ["", f"📊 *7-day total: {total:.1f} MWh*"]
@@ -593,11 +593,19 @@ def build_peak_message(data: dict) -> str:
     h = data.get("macro_health", {})
     peak_mw   = h.get("peak_power_mw")
     peak_time = h.get("peak_time", "")
-    cur_mw    = h.get("total_ac_power_mw", 0.0)
+    cur_mw    = float(h.get("total_ac_power_mw") or 0.0)
+
+    # Fallback: use current power as a lower-bound estimate of today's peak
+    if not peak_mw and cur_mw:
+        peak_mw   = cur_mw
+        peak_time = h.get("last_sync", "")
+
     try:
         peak_fmt = datetime.fromisoformat(peak_time).strftime("%H:%M") if peak_time else "—"
     except Exception:
         peak_fmt = peak_time or "—"
+
+    rated = 12.6
     lines = [
         "⚡ *Peak Power — Today*",
         "━━━━━━━━━━━━━━━━━━━",
@@ -605,7 +613,6 @@ def build_peak_message(data: dict) -> str:
         f"⏰ *At:*      {peak_fmt}",
         f"📡 *Now:*     {cur_mw:.2f} MW",
     ]
-    rated = 12.6
     if peak_mw:
         cf = (peak_mw / rated) * 100
         lines.append(f"📊 *Capacity:* {cf:.1f}% of {rated} MWp")
@@ -636,7 +643,7 @@ def build_compare_message(data: dict) -> str:
         pr  = sum(s.get("pr_vals", [])) / len(s["pr_vals"]) if s.get("pr_vals") else 0
         cnt = s.get("count", 0)
         flt = s.get("faults", 0)
-        bar = "█" * min(int(mw * 10), 12)
+        bar = "▓" * min(int(mw * 10), 12)
         lines.append(
             f"*{tx}* ({cnt} inv)  {bar}\n"
             f"  ⚡ {mw:.2f} MW  📊 PR:{pr:.0f}%"
@@ -675,29 +682,36 @@ def build_pr_message(data: dict) -> str:
 
 
 def build_energy_message() -> str:
-    days_30 = get_snapshots_for_days(30)
-    days_7  = get_snapshots_for_days(7)
-    today_snap = get_latest_dashboard_json()
+    try:
+        days_30 = get_snapshots_for_days(30)
+        days_7  = get_snapshots_for_days(7)
+        today_snap = get_latest_dashboard_json()
 
-    today_mwh = today_snap.get("macro_health", {}).get("total_energy_mwh", 0) if today_snap else 0
-    week_mwh  = sum(s.get("macro_health", {}).get("total_energy_mwh", 0) for _, s in days_7)
-    month_mwh = sum(s.get("macro_health", {}).get("total_energy_mwh", 0) for _, s in days_30)
+        def _mwh(snap):
+            return float(snap.get("macro_health", {}).get("total_energy_mwh") or 0)
 
-    rated_kwp = 12625.0
-    lines = [
-        "🔋 *Energy Summary*",
-        "━━━━━━━━━━━━━━━━━━━",
-        f"📅 *Today:*        {today_mwh:.1f} MWh",
-        f"📆 *Last 7 days:*  {week_mwh:.1f} MWh",
-        f"🗓  *Last 30 days:* {month_mwh:.1f} MWh",
-    ]
-    if month_mwh and rated_kwp:
-        spec_yield = (month_mwh * 1000) / rated_kwp
-        lines.append(f"📊 *Specific yield (30d):* {spec_yield:.1f} kWh/kWp")
-    if week_mwh:
-        avg_daily = week_mwh / max(len(days_7), 1)
-        lines.append(f"📉 *Avg daily (7d):* {avg_daily:.1f} MWh")
-    return "\n".join(lines)
+        today_mwh = _mwh(today_snap) if today_snap else 0.0
+        week_mwh  = sum(_mwh(s) for _, s in days_7)
+        month_mwh = sum(_mwh(s) for _, s in days_30)
+
+        rated_kwp = 12625.0
+        lines = [
+            "🔋 *Energy Summary*",
+            "━━━━━━━━━━━━━━━━━━━",
+            f"📅 *Today:*        {today_mwh:.1f} MWh",
+            f"📆 *Last 7 days:*  {week_mwh:.1f} MWh",
+            f"🗓  *Last 30 days:* {month_mwh:.1f} MWh",
+        ]
+        if month_mwh and rated_kwp:
+            spec_yield = (month_mwh * 1000) / rated_kwp
+            lines.append(f"📊 *Specific yield (30d):* {spec_yield:.1f} kWh/kWp")
+        if week_mwh:
+            avg_daily = week_mwh / max(len(days_7), 1)
+            lines.append(f"📉 *Avg daily (7d):* {avg_daily:.1f} MWh")
+        return "\n".join(lines)
+    except Exception as e:
+        logger.error(f"build_energy_message error: {e}")
+        return "⚠️ Energy data temporarily unavailable."
 
 
 def build_weather_message(data: dict) -> str:
@@ -968,83 +982,90 @@ def main() -> None:
                     continue
 
                 # ── Commands ──────────────────────────────────────────────
-                if cmd in ("/start", "/help"):
-                    bot.send_message(chat_id, HELP_TEXT)
+                try:
+                    if cmd in ("/start", "/help"):
+                        bot.send_message(chat_id, HELP_TEXT)
 
-                elif cmd == "/status":
-                    data = get_latest_dashboard_json()
-                    bot.send_message(chat_id, build_status_message(data) if data else "⚠️ No data.")
-
-                elif cmd == "/alerts":
-                    data = get_latest_dashboard_json()
-                    bot.send_message(chat_id, build_alerts_message(data) if data else "⚠️ No data.")
-
-                elif cmd == "/daily":
-                    data = get_latest_dashboard_json()
-                    bot.send_message(chat_id, build_daily_message(data) if data else "⚠️ No data.")
-
-                elif cmd == "/week":
-                    bot.send_message(chat_id, build_weekly_message())
-
-                elif cmd == "/inverters":
-                    data = get_latest_dashboard_json()
-                    bot.send_message(chat_id, build_inverters_message(data) if data else "⚠️ No data.")
-
-                elif cmd == "/inverter":
-                    parts = text.split(maxsplit=1)
-                    if len(parts) < 2:
-                        bot.send_message(chat_id, "Usage: `/inverter TX1-03`")
-                    else:
+                    elif cmd == "/status":
                         data = get_latest_dashboard_json()
-                        bot.send_message(
-                            chat_id,
-                            build_inverter_detail(data, parts[1].strip()) if data else "⚠️ No data.",
-                        )
+                        bot.send_message(chat_id, build_status_message(data) if data else "⚠️ No data.")
 
-                elif cmd == "/peak":
-                    data = get_latest_dashboard_json()
-                    bot.send_message(chat_id, build_peak_message(data) if data else "⚠️ No data.")
+                    elif cmd == "/alerts":
+                        data = get_latest_dashboard_json()
+                        bot.send_message(chat_id, build_alerts_message(data) if data else "⚠️ No data.")
 
-                elif cmd == "/compare":
-                    data = get_latest_dashboard_json()
-                    bot.send_message(chat_id, build_compare_message(data) if data else "⚠️ No data.")
+                    elif cmd == "/daily":
+                        data = get_latest_dashboard_json()
+                        bot.send_message(chat_id, build_daily_message(data) if data else "⚠️ No data.")
 
-                elif cmd == "/pr":
-                    data = get_latest_dashboard_json()
-                    bot.send_message(chat_id, build_pr_message(data) if data else "⚠️ No data.")
+                    elif cmd == "/week":
+                        bot.send_message(chat_id, build_weekly_message())
 
-                elif cmd == "/energy":
-                    bot.send_message(chat_id, build_energy_message())
+                    elif cmd == "/inverters":
+                        data = get_latest_dashboard_json()
+                        bot.send_message(chat_id, build_inverters_message(data) if data else "⚠️ No data.")
 
-                elif cmd == "/weather":
-                    data = get_latest_dashboard_json()
-                    bot.send_message(chat_id, build_weather_message(data) if data else "⚠️ No data.")
+                    elif cmd == "/inverter":
+                        parts = text.split(maxsplit=1)
+                        if len(parts) < 2:
+                            bot.send_message(chat_id, "Usage: `/inverter TX1-03`")
+                        else:
+                            data = get_latest_dashboard_json()
+                            bot.send_message(
+                                chat_id,
+                                build_inverter_detail(data, parts[1].strip()) if data else "⚠️ No data.",
+                            )
 
-                elif cmd == "/uptime":
-                    data = get_latest_dashboard_json()
-                    bot.send_message(chat_id, build_uptime_message(data) if data else "⚠️ No data.")
+                    elif cmd == "/peak":
+                        data = get_latest_dashboard_json()
+                        bot.send_message(chat_id, build_peak_message(data) if data else "⚠️ No data.")
 
-                elif cmd == "/generate_ticket":
-                    start_ticket_flow(bot, chat_id)
+                    elif cmd == "/compare":
+                        data = get_latest_dashboard_json()
+                        bot.send_message(chat_id, build_compare_message(data) if data else "⚠️ No data.")
 
-                elif cmd == "/cancel":
-                    bot.send_message(chat_id, "ℹ️ Nessuna operazione attiva.")
+                    elif cmd == "/pr":
+                        data = get_latest_dashboard_json()
+                        bot.send_message(chat_id, build_pr_message(data) if data else "⚠️ No data.")
 
-                elif cmd == "/ai":
-                    # Explicit AI command — strip "/ai " prefix and forward
-                    question = text[3:].strip() if len(text) > 3 else text
-                    if not question:
-                        bot.send_message(chat_id, "💬 Usage: `/ai <your question>`\nOr just type your question directly.")
+                    elif cmd == "/energy":
+                        bot.send_message(chat_id, build_energy_message())
+
+                    elif cmd == "/weather":
+                        data = get_latest_dashboard_json()
+                        bot.send_message(chat_id, build_weather_message(data) if data else "⚠️ No data.")
+
+                    elif cmd == "/uptime":
+                        data = get_latest_dashboard_json()
+                        bot.send_message(chat_id, build_uptime_message(data) if data else "⚠️ No data.")
+
+                    elif cmd == "/generate_ticket":
+                        start_ticket_flow(bot, chat_id)
+
+                    elif cmd == "/cancel":
+                        bot.send_message(chat_id, "ℹ️ Nessuna operazione attiva.")
+
+                    elif cmd == "/ai":
+                        question = text[3:].strip() if len(text) > 3 else text
+                        if not question:
+                            bot.send_message(chat_id, "💬 Usage: `/ai <your question>`\nOr just type your question directly.")
+                        else:
+                            bot.send_message(chat_id, "⏳ _Thinking..._")
+                            data = get_latest_dashboard_json()
+                            _dispatch_ai(bot, chat_id, question, data, settings, ai_semaphore)
+
                     else:
+                        # ── Any free text → LLM ───────────────────────────────
                         bot.send_message(chat_id, "⏳ _Thinking..._")
                         data = get_latest_dashboard_json()
-                        _dispatch_ai(bot, chat_id, question, data, settings, ai_semaphore)
+                        _dispatch_ai(bot, chat_id, text, data, settings, ai_semaphore)
 
-                else:
-                    # ── Any free text → LLM ───────────────────────────────
-                    bot.send_message(chat_id, "⏳ _Thinking..._")
-                    data = get_latest_dashboard_json()
-                    _dispatch_ai(bot, chat_id, text, data, settings, ai_semaphore)
+                except Exception as cmd_err:
+                    logger.error(f"Command error [{cmd!r}]: {cmd_err}", exc_info=True)
+                    try:
+                        bot.send_message(chat_id, f"⚠️ Error processing `{cmd or 'message'}`. Check logs.", markdown=False)
+                    except Exception:
+                        pass
 
         except KeyboardInterrupt:
             logger.info("Bot stopping — KeyboardInterrupt.")
