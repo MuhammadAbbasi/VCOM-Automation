@@ -510,8 +510,7 @@ def build_weekly_message() -> str:
         mwh = float(h.get("total_energy_mwh") or 0.0)
         pr  = float(h.get("avg_pr") or 0.0)
         d   = datetime.strptime(date_str, "%Y-%m-%d").strftime("%a %d/%m")
-        bar = "▓" * min(int(mwh / 10), 10)
-        lines.append(f"`{d}` {bar} *{mwh:.1f} MWh*  PR:{pr:.0f}%")
+        lines.append(f"`{d}`  *{mwh:.1f} MWh*  PR:{pr:.0f}%")
         total += mwh
     lines += ["", f"📊 *7-day total: {total:.1f} MWh*"]
     avg = total / len(days)
@@ -643,9 +642,8 @@ def build_compare_message(data: dict) -> str:
         pr  = sum(s.get("pr_vals", [])) / len(s["pr_vals"]) if s.get("pr_vals") else 0
         cnt = s.get("count", 0)
         flt = s.get("faults", 0)
-        bar = "▓" * min(int(mw * 10), 12)
         lines.append(
-            f"*{tx}* ({cnt} inv)  {bar}\n"
+            f"*{tx}* ({cnt} inv)\n"
             f"  ⚡ {mw:.2f} MW  📊 PR:{pr:.0f}%"
             + (f"  🔴 {flt} fault(s)" if flt else "")
         )
