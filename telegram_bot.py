@@ -679,6 +679,51 @@ def build_pr_message(data: dict) -> str:
     return "\n".join(lines)
 
 
+def build_pr_inverter_message(data: dict) -> str:
+    inv_health = data.get("inverter_health", {})
+    if not inv_health:
+        return "⚠️ No inverter data."
+
+    by_tx: dict[str, list[tuple[str, float]]] = {}
+    for name, h in sorted(inv_health.items()):
+        pr = h.get("pr_v")
+        if pr is None:
+            continue
+        tx = _tx_of(name)
+        by_tx.setdefault(tx, []).append((name, float(pr)))
+
+    all_vals: list[float] = []
+    lines = ["📈 *PR per Inverter — Mazara 01*", "━━━━━━━━━━━━━━━━━━━", ""]
+
+    for tx in ["TX1", "TX2", "TX3"]:
+        entries = by_tx.get(tx, [])
+        if not entries:
+            continue
+        lines.append(f"*{tx}*")
+        tx_vals = []
+        for name, pr in entries:
+            icon = "🟢" if pr >= 80 else ("🟡" if pr >= 70 else "🔴")
+            short = name.replace("INV ", "")
+            lines.append(f"  {icon} `{short}`: {pr:.0f}%")
+            tx_vals.append(pr)
+            all_vals.append(pr)
+        avg = sum(tx_vals) / len(tx_vals)
+        low = min(tx_vals)
+        high = max(tx_vals)
+        lines.append(f"  _avg {avg:.1f}%  min {low:.0f}%  max {high:.0f}%_")
+        lines.append("")
+
+    if all_vals:
+        plant_avg = sum(all_vals) / len(all_vals)
+        below = [n.replace("INV ", "") for n, pr in
+                 [(n, p) for tx in by_tx.values() for n, p in tx] if pr < 75]
+        lines.append(f"🏭 *Plant avg: {plant_avg:.1f}%*")
+        if below:
+            lines.append(f"⚠️ _Below 75%: {', '.join(below)}_")
+
+    return "\n".join(lines)
+
+
 def build_energy_message() -> str:
     try:
         days_30 = get_snapshots_for_days(30)
@@ -781,7 +826,8 @@ HELP_TEXT = (
     "🔌 /inverters — All 36 inverters health matrix\n"
     "🔍 /inverter TX1-03 — Single inverter deep-dive\n"
     "📊 /compare — TX1 vs TX2 vs TX3 comparison\n"
-    "📈 /pr — Performance Ratio by transformer\n\n"
+    "📈 /pr — Performance Ratio by transformer\n"
+    "📈 /pr\\_inverter — PR for each individual inverter\n\n"
     "*Operations*\n"
     "🎫 /generate\\_ticket — Create Odoo fault ticket\n"
     "/approve <id> — Approve a pending action\n"
@@ -849,6 +895,7 @@ class TelegramBot:
             {"command": "inverters",       "description": "🔌 All inverters health matrix"},
             {"command": "compare",         "description": "📊 TX1 vs TX2 vs TX3"},
             {"command": "pr",              "description": "📈 PR breakdown by transformer"},
+            {"command": "pr_inverter",     "description": "📈 PR for each individual inverter"},
             {"command": "energy",          "description": "🔋 Monthly energy totals"},
             {"command": "peak",            "description": "⚡ Today's peak power"},
             {"command": "weather",         "description": "🌤 Irradiance & temperature"},
@@ -1025,6 +1072,10 @@ def main() -> None:
                     elif cmd == "/pr":
                         data = get_latest_dashboard_json()
                         bot.send_message(chat_id, build_pr_message(data) if data else "⚠️ No data.")
+
+                    elif cmd == "/pr_inverter":
+                        data = get_latest_dashboard_json()
+                        bot.send_message(chat_id, build_pr_inverter_message(data) if data else "⚠️ No data.")
 
                     elif cmd == "/energy":
                         bot.send_message(chat_id, build_energy_message())

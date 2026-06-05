@@ -10,23 +10,20 @@ FROM python:3.12-slim-bookworm AS base
 #   - gettext-base  : provides envsubst for entrypoint config rendering
 #   - libsqlite3-0  : SQLite runtime (Python sqlite3 module uses this)
 #   - curl          : health-check and Ollama reachability tests
-#   - gcc           : needed to compile any C-extension pip packages
+# NOTE: gcc is intentionally omitted — all pip packages use pre-compiled
+# manylinux wheels. Installing gcc pulls in python3-setuptools via apt,
+# then apt-autoremove wipes pkg_resources and breaks amqtt at runtime.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gettext-base \
     libsqlite3-0 \
     curl \
-    gcc \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 # Install Python dependencies first (Docker layer cache friendly)
 COPY ["VCOM Automation Docker/requirements.docker.txt", "/tmp/requirements.docker.txt"]
-RUN pip install --no-cache-dir -r /tmp/requirements.docker.txt \
-    && apt-get purge -y gcc \
-    && apt-get autoremove -y \
-    && rm -rf /var/lib/apt/lists/* \
-    && pip install --no-cache-dir --force-reinstall "setuptools>=69.0.0"
+RUN pip install --no-cache-dir -r /tmp/requirements.docker.txt
 
 # Copy application source code (source repo root)
 # .dockerignore excludes runtime-generated files (db/, logs/, etc.)

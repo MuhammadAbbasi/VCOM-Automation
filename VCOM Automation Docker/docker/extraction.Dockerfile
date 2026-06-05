@@ -10,23 +10,18 @@
 
 FROM python:3.12-slim-bookworm AS base
 
-# System dependencies (same as base.Dockerfile + Playwright deps)
+# System dependencies (same as base.Dockerfile — gcc omitted, see base.Dockerfile note)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gettext-base \
     libsqlite3-0 \
     curl \
-    gcc \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 # Install Python packages (including playwright pip package)
 COPY ["VCOM Automation Docker/requirements.docker.txt", "/tmp/requirements.docker.txt"]
-RUN pip install --no-cache-dir -r /tmp/requirements.docker.txt \
-    && apt-get purge -y gcc \
-    && apt-get autoremove -y \
-    && rm -rf /var/lib/apt/lists/* \
-    && pip install --no-cache-dir --force-reinstall "setuptools>=69.0.0"
+RUN pip install --no-cache-dir -r /tmp/requirements.docker.txt
 
 # Set browser path BEFORE installing so playwright bakes it into the right location
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
