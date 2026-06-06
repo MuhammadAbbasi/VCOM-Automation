@@ -1854,15 +1854,14 @@ class MetricFileHandler(FileSystemEventHandler):
     def on_created(self, event):
         if event.is_directory:
             return
-        if event.src_path.endswith(".csv") or event.src_path.endswith(".db"):
+        if event.src_path.endswith((".csv", ".db", ".db-wal", ".trigger")):
             time.sleep(1)
             self._check_and_analyze()
 
     def on_modified(self, event):
         if event.is_directory:
             return
-        # Ignore temporary files or the analysis snapshot table writes if possible
-        if event.src_path.endswith(".csv") or event.src_path.endswith(".db"):
+        if event.src_path.endswith((".csv", ".db", ".db-wal", ".trigger")):
             self._check_and_analyze()
 
     def _check_and_analyze(self):
@@ -1930,19 +1929,19 @@ def main():
     handler = MetricFileHandler()
     observer = Observer()
     observer.schedule(handler, str(DATA_DIR), recursive=False)
-    
-    # Also watch the DB directory for changes
-    # db_dir = ROOT / "db"
-    # db_dir.mkdir(parents=True, exist_ok=True)
-    # observer.schedule(handler, str(db_dir), recursive=False)
-    
+
+    # Also watch the DB directory — extraction writes vcom_data.db-wal on every commit
+    db_dir = ROOT / "db"
+    db_dir.mkdir(parents=True, exist_ok=True)
+    observer.schedule(handler, str(db_dir), recursive=False)
+
     observer.start()
 
     try:
         while True:
             time.sleep(60) # Check every minute
-            # Fallback: if no file change for 15 min, trigger analysis
-            if time.time() - handler.last_run > 900:
+            # Fallback: if no file change detected for 3 min, trigger analysis anyway
+            if time.time() - handler.last_run > 180:
                 logger.info("[TIMER] Fallback: No file changes detected for 15m. Triggering analysis...")
                 handler._check_and_analyze()
     except KeyboardInterrupt:

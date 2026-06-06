@@ -396,6 +396,15 @@ def main() -> None:
                 if _should_daily_restart(start_date):
                     _do_daily_restart()
 
+                # Signal the watchdog immediately — write a trigger file to extracted_data/
+                # so the watchdog's file observer wakes up without waiting for its fallback timer.
+                try:
+                    trigger_file = ROOT / "extracted_data" / "extraction.trigger"
+                    trigger_file.parent.mkdir(parents=True, exist_ok=True)
+                    trigger_file.write_text(datetime.now().isoformat())
+                except Exception:
+                    pass
+
                 # Sleep for the configured interval (crash-resistant)
                 interval = _get_interval_minutes()
                 logger.info(f"Cycle #{cycle_count} done. Sleeping {interval} min...")
