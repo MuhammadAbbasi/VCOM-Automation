@@ -24,10 +24,11 @@ sys.path.insert(0, "/app")
 # ---------------------------------------------------------------------------
 # Read Odoo config from environment (set via docker-compose / .env)
 # ---------------------------------------------------------------------------
-ODOO_URL  = os.environ.get("ODOO_URL",  "http://host.docker.internal:8069")
-ODOO_DB   = os.environ.get("ODOO_DB",   "odoo")
-ODOO_USER = os.environ.get("ODOO_USER", "")
-ODOO_PASS = os.environ.get("ODOO_PASS", "")
+ODOO_URL  = os.environ.get("ODOO_URL",      "http://host.docker.internal:8069")
+ODOO_DB   = os.environ.get("ODOO_DB")   or os.environ.get("ODOO_DATABASE",  "odoo")
+ODOO_USER = os.environ.get("ODOO_USER") or os.environ.get("ODOO_USERNAME",  "")
+ODOO_PASS = os.environ.get("ODOO_PASS") or os.environ.get("ODOO_PASSWORD",  "") \
+                                        or os.environ.get("ODOO_API_KEY",   "")
 
 logging.basicConfig(
     level=logging.INFO,
