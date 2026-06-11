@@ -25,10 +25,15 @@ if str(ROOT) not in sys.path:
 import uvicorn
 import socket
 import asyncio
+import logging
 import secrets
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+# Suppress asyncio's noisy log for WebSocket keepalive ping timeouts.
+# These fire when a browser tab goes idle — harmless, already handled in broadcast().
+logging.getLogger("asyncio").setLevel(logging.CRITICAL)
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks, Request, Depends, HTTPException, status
 from fastapi.responses import FileResponse, JSONResponse
@@ -108,11 +113,14 @@ class ConnectionManager:
             self.active_connections.remove(websocket)
 
     async def broadcast(self, message: dict):
+        dead = []
         for connection in self.active_connections:
             try:
                 await connection.send_json(message)
             except Exception:
-                pass
+                dead.append(connection)
+        for conn in dead:
+            self.disconnect(conn)
 
 manager = ConnectionManager()
 
@@ -251,9 +259,9 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.send_json({"type": "config_update", "data": settings})
         
         while True:
-            # wait for messages from client (if needed)
+            # wait for messages from client (ping/pong keepalive)
             message = await websocket.receive_text()
-    except WebSocketDisconnect:
+    except (WebSocketDisconnect, Exception):
         manager.disconnect(websocket)
 
 
