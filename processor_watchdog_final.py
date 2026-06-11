@@ -1848,6 +1848,7 @@ class MetricFileHandler(FileSystemEventHandler):
     def __init__(self):
         super().__init__()
         self.last_run = 0
+        self.last_extraction_ts = None  # timestamp of the extraction we last analyzed
         self.debounce_seconds = 30  # 30s: coalesce rapid burst events without blocking 2-min data cycles
         self.is_running = False
 
@@ -1875,14 +1876,24 @@ class MetricFileHandler(FileSystemEventHandler):
         self.is_running = True
         try:
             today = datetime.now().strftime("%Y-%m-%d")
-            
+
             # 1. Check database for available metrics
             try:
                 from db.db_manager import get_extraction_status
                 estatus = get_extraction_status(today)
                 if len(estatus) >= 5:
+                    # Skip if we already analyzed this exact extraction run
+                    latest_ts = max(
+                        (v.get("timestamp") or "" for v in estatus.values() if isinstance(v, dict)),
+                        default=""
+                    )
+                    if latest_ts and latest_ts == self.last_extraction_ts:
+                        logger.debug("No new extraction since last analysis — skipping.")
+                        self.last_run = time.time()
+                        return
                     logger.info(f"DB has {len(estatus)} metrics for {today}. Analyzing...")
                     analyze_site(today)
+                    self.last_extraction_ts = latest_ts
                     self.last_run = time.time()
                     return
             except Exception as e:
@@ -1906,8 +1917,8 @@ class MetricFileHandler(FileSystemEventHandler):
                 analyze_site(today)
                 self.last_run = time.time()
             else:
-                # No data yet for today — still update last_run so the 15-min
-                # fallback timer doesn't fire every minute when data is absent.
+                # No data yet for today — update last_run so the fallback
+                # timer doesn't fire every minute while data is absent.
                 self.last_run = time.time()
 
         finally:
@@ -1940,9 +1951,9 @@ def main():
     try:
         while True:
             time.sleep(60) # Check every minute
-            # Fallback: if no file change detected for 3 min, trigger analysis anyway
+            # Fallback: if no trigger received for 3 min, check for new extraction data
             if time.time() - handler.last_run > 180:
-                logger.info("[TIMER] Fallback: No file changes detected for 15m. Triggering analysis...")
+                logger.info("[TIMER] Fallback: Checking for new extraction data...")
                 handler._check_and_analyze()
     except KeyboardInterrupt:
         logger.info("Shutting down...")
