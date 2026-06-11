@@ -831,11 +831,11 @@ def load_latest_snapshot(date_str: str) -> dict | None:
         ).fetchone()
         if row is not None:
             return json.loads(row[0])
-    except sqlite3.DatabaseError:
-        logger.warning("[DB] snapshot DB error in load_latest_snapshot — resetting connection, falling back to JSON")
+    except sqlite3.DatabaseError as exc:
+        logger.warning(f"[DB] snapshot DB error in load_latest_snapshot ({exc}) — resetting connection, falling back to JSON")
         _reset_snapshot_conn()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning(f"[DB] unexpected error in load_latest_snapshot: {exc}")
 
     return _load_snapshot_from_json(date_str)
 

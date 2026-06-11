@@ -40,6 +40,14 @@ log.info("Odoo endpoint : %s", ODOO_URL)
 log.info("Odoo DB       : %s", ODOO_DB)
 log.info("Odoo user     : %s", ODOO_USER)
 
+# Ensure all DB tables exist before the engine tries to read snapshots
+try:
+    from db.db_manager import init_databases
+    init_databases()
+    log.info("Databases initialized.")
+except Exception as exc:
+    log.warning("DB init warning (non-fatal): %s", exc)
+
 if not ODOO_USER or not ODOO_PASS:
     log.warning(
         "ODOO_USER or ODOO_PASS is empty — ticket creation will fail. "
