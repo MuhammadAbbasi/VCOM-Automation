@@ -559,9 +559,19 @@ def query_db(sql: str) -> str:
     sql = re.sub(r'\btimestamp\b', '_date', sql, flags=re.IGNORECASE)
     
     # 3. Intercept grid limit queries and force the exact correct query
+    # potenza_attiva has 288 rows/day (VCOM pre-fills the full day with planned values).
+    # We must filter to rows at or before NOW so future slots (100% planned) are excluded.
     sql_lower = sql.lower()
     if "potenza" in sql_lower and ("nominale" in sql_lower or "limit" in sql_lower):
-        sql = 'SELECT "Valore nominale potenza attiva [%]" FROM potenza_attiva WHERE "Valore nominale potenza attiva [%]" IS NOT NULL ORDER BY _date DESC, CAST(Ora AS REAL) DESC LIMIT 1'
+        _now = datetime.now()
+        _now_hhmm = _now.hour + _now.minute / 100.0  # HH.MM float, e.g. 15.22
+        sql = (
+            f'SELECT "Valore nominale potenza attiva [%]", Ora FROM potenza_attiva '
+            f'WHERE _date = (SELECT MAX(_date) FROM potenza_attiva) '
+            f'AND "Valore nominale potenza attiva [%]" IS NOT NULL '
+            f'AND CAST(Ora AS REAL) <= {_now_hhmm:.2f} '
+            f'ORDER BY CAST(Ora AS REAL) DESC LIMIT 1'
+        )
     else:
         # 4. Normalize known LLM hallucinations for the potenza_attiva table
         if "potenza_attiva" in sql:
