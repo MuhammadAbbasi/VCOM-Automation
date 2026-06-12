@@ -1328,7 +1328,7 @@ def analyze_site(date_str: str) -> None:
                 alarm = {
                     "id": grid_alarm_id,
                     "inverter": "GRID",
-                    "type": "VARIAZIONE LIMITE RETE",
+                    "type": "Limitazione da Rete",
                     "severity": "red",
                     "trip_time": timestamp,
                     "message": f"Limite produzione rete sceso al {current_limit:.1f}% (Sotto il max. impianto 87.6%)."
@@ -1336,7 +1336,7 @@ def analyze_site(date_str: str) -> None:
             if should_alert("grid_limit_change", "dashboard"):
                 current_active.append(alarm)
             if should_alert("grid_limit_change", "telegram") and should_send_tg(alarm):
-                fire_tg(alarm, "LIMITE RETE", f"🚨 *CRITICO: CALO LIMITE RETE*\nLimite ora al *{current_limit:.1f}%* (Sotto il massimo consentito 87.6%)")
+                fire_tg(alarm, "Limitazione da Rete", f"🚨 *Limitazione da Rete*\nLimite ora al *{current_limit:.1f}%* (Sotto il massimo consentito 87.6%)")
         else:
             if grid_alarm_id in prev_alarm_map:
                 past_alarm = prev_alarm_map[grid_alarm_id]
