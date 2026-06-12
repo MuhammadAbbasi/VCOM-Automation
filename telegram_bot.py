@@ -404,28 +404,28 @@ def build_status_message(data: dict) -> str:
     comms   = macro.get("comms_lost", "—")
 
     lines = [
-        "🌞 *Mazara 01 — Live Status*",
-        f"🕐 Last sync: *{sync_time}*",
+        "🌞 *Mazara 01 - Stato in Tempo Reale*",
+        f"🕐 Ultimo aggiornamento: *{sync_time}*",
         "━━━━━━━━━━━━━━━━━━━",
         "",
-        f"⚡ *Power:*    {total_mw:.2f} MW",
-        f"🔋 *Energy:*   {energy_mwh:.1f} MWh today",
-        f"📊 *Avg PR:*   {avg_pr:.1f}%",
+        f"⚡ *Potenza:*   {total_mw:.2f} MW",
+        f"🔋 *Energia:*   {energy_mwh:.1f} MWh oggi",
+        f"📊 *PR Medio:* {avg_pr:.1f}%",
     ]
     if poa:
-        lines.append(f"☀️ *Irrad:*    {poa:.0f} W/m²")
+        lines.append(f"☀️ *Irragg.:* {poa:.0f} W/m²")
     lines += [
         "",
-        f"🟢 Online: *{online}*   🔴 Tripped: *{tripped}*   🔇 Comms: *{comms}*",
+        f"🟢 Online: *{online}*   🔴 Scattati: *{tripped}*   🔇 Com.: *{comms}*",
     ]
 
     alerts = data.get("active_anomalies", [])
     if alerts:
-        lines += ["", f"🚨 *Active Alerts ({len(alerts)}):*"]
+        lines += ["", f"🚨 *Allarmi Attivi ({len(alerts)}):*"]
         seen, count = set(), 0
         for a in alerts:
             inv   = a.get("inverter", "?") if isinstance(a, dict) else str(a)
-            atype = a.get("rule", a.get("type", "Anomaly")) if isinstance(a, dict) else ""
+            atype = a.get("rule", a.get("type", "Anomalia")) if isinstance(a, dict) else ""
             entry = f" • {inv} — {atype}" if atype else f" • {inv}"
             if entry not in seen:
                 seen.add(entry)
@@ -433,10 +433,10 @@ def build_status_message(data: dict) -> str:
                 count += 1
                 if count >= 5:
                     if len(alerts) - 5 > 0:
-                        lines.append(f" _...and {len(alerts)-5} more_")
+                        lines.append(f" _...e altri {len(alerts)-5}_")
                     break
     else:
-        lines += ["", "✅ No active alerts"]
+        lines += ["", "✅ Nessun allarme attivo"]
 
     return "\n".join(lines)
 
@@ -444,7 +444,7 @@ def build_status_message(data: dict) -> str:
 def build_alerts_message(data: dict) -> str:
     alerts = data.get("active_anomalies", [])
     if not alerts:
-        return "✅ *No active alerts* — all inverters nominal."
+        return "✅ *Nessun allarme attivo* - tutti gli inverter nominali."
     critical, warnings = [], []
     seen = set()
     for a in alerts:
@@ -452,23 +452,23 @@ def build_alerts_message(data: dict) -> str:
             warnings.append(f"🟡  • {a}")
             continue
         inv      = a.get("inverter", "?")
-        atype    = a.get("rule", a.get("type", "Anomaly"))
+        atype    = a.get("rule", a.get("type", "Anomalia"))
         severity = str(a.get("severity", "")).upper()
         since    = a.get("since", a.get("start_time", ""))
         try:
             since_fmt = datetime.fromisoformat(since).strftime("%H:%M") if since else ""
         except Exception:
             since_fmt = ""
-        line = f" • *{inv}* — {atype}" + (f" _(since {since_fmt})_" if since_fmt else "")
+        line = f" • *{inv}* — {atype}" + (f" _(dalle {since_fmt})_" if since_fmt else "")
         if line in seen: continue
         seen.add(line)
         (critical if severity == "CRITICAL" else warnings).append(line)
 
-    lines = [f"🚨 *Active Alerts ({len(critical)+len(warnings)})*", "━━━━━━━━━━━━━━━━━━━"]
+    lines = [f"🚨 *Allarmi Attivi ({len(critical)+len(warnings)})*", "━━━━━━━━━━━━━━━━━━━"]
     if critical:
-        lines += ["\n🔴 *Critical:*"] + [f"🔴{l}" for l in critical[:15]]
+        lines += ["\n🔴 *Critici:*"] + [f"🔴{l}" for l in critical[:15]]
     if warnings:
-        lines += ["\n🟡 *Warnings:*"] + [f"🟡{l}" for l in warnings[:15]]
+        lines += ["\n🟡 *Avvisi:*"] + [f"🟡{l}" for l in warnings[:15]]
     return "\n".join(lines)
 
 
@@ -485,25 +485,25 @@ def build_daily_message(data: dict) -> str:
     comms   = h.get("comms_lost", 0)
     today   = datetime.now().strftime("%d/%m/%Y")
     msg = (
-        f"📅 *Daily Report — {today}*\n━━━━━━━━━━━━━━━━━━━\n\n"
-        f"⚡ *Current Power:* {h.get('total_ac_power_mw', 0):.2f} MW\n"
-        f"🔋 *Energy Today:*  {h.get('total_energy_mwh', 0):.2f} MWh\n"
-        f"📈 *Average PR:*    {h.get('avg_pr', 0):.1f}%\n"
+        f"📅 *Report Giornaliero - {today}*\n━━━━━━━━━━━━━━━━━━━\n\n"
+        f"⚡ *Potenza Attuale:* {h.get('total_ac_power_mw', 0):.2f} MW\n"
+        f"🔋 *Energia Oggi:*   {h.get('total_energy_mwh', 0):.2f} MWh\n"
+        f"📈 *PR Medio:*       {h.get('avg_pr', 0):.1f}%\n"
     )
     if poa:
-        msg += f"☀️ *Irradiance:*    {poa:.0f} W/m²\n"
-    msg += f"\n🟢 Online: *{h.get('online','—')}/36*\n"
-    if tripped: msg += f"🔴 Tripped: *{tripped}*\n"
-    if comms:   msg += f"🔇 Comms Lost: *{comms}*\n"
-    msg += f"\n⏰ Last Sync: *{sync_fmt}*"
+        msg += f"☀️ *Irraggiamento:*  {poa:.0f} W/m²\n"
+    msg += f"\n🟢 Online: *{h.get('online','-')}/36*\n"
+    if tripped: msg += f"🔴 Scattati: *{tripped}*\n"
+    if comms:   msg += f"🔇 Com. Persa: *{comms}*\n"
+    msg += f"\n⏰ Ultimo Sync: *{sync_fmt}*"
     return msg
 
 
 def build_weekly_message() -> str:
     days = get_snapshots_for_days(7)
     if not days:
-        return "⚠️ No historical data available."
-    lines = ["📆 *7-Day Production*", "━━━━━━━━━━━━━━━━━━━", ""]
+        return "⚠️ Nessun dato storico disponibile."
+    lines = ["📆 *Produzione 7 Giorni*", "━━━━━━━━━━━━━━━━━━━", ""]
     total = 0.0
     for date_str, snap in reversed(days):
         h   = snap.get("macro_health", {})
@@ -512,17 +512,17 @@ def build_weekly_message() -> str:
         d   = datetime.strptime(date_str, "%Y-%m-%d").strftime("%a %d/%m")
         lines.append(f"`{d}`  *{mwh:.1f} MWh*  PR:{pr:.0f}%")
         total += mwh
-    lines += ["", f"📊 *7-day total: {total:.1f} MWh*"]
+    lines += ["", f"📊 *Totale 7 giorni: {total:.1f} MWh*"]
     avg = total / len(days)
-    lines.append(f"📉 *Daily avg: {avg:.1f} MWh*")
+    lines.append(f"📉 *Media giornaliera: {avg:.1f} MWh*")
     return "\n".join(lines)
 
 
 def build_inverters_message(data: dict) -> str:
     inv_health = data.get("inverter_health", {})
     if not inv_health:
-        return "⚠️ No inverter data."
-    lines = ["🔌 *All Inverters — Health Matrix*", "━━━━━━━━━━━━━━━━━━━", ""]
+        return "⚠️ Nessun dato inverter."
+    lines = ["🔌 *Tutti gli Inverter - Matrice Salute*", "━━━━━━━━━━━━━━━━━━━", ""]
     by_tx: dict[str, list] = {"TX1": [], "TX2": [], "TX3": []}
     for name, h in sorted(inv_health.items()):
         tx = _tx_of(name)
@@ -555,20 +555,20 @@ def build_inverter_detail(data: dict, name: str) -> str:
     inv_health = data.get("inverter_health", {})
     key = next((k for k in inv_health if k.upper() == name.upper()), None)
     if not key:
-        return f"⚠️ Inverter `{name}` not found. Check the name (e.g. TX1-03)."
+        return f"⚠️ Inverter `{name}` non trovato. Controlla il nome (es. TX1-03)."
     h      = inv_health[key]
     status = str(h.get("status", "ok")).upper()
     lines  = [
         f"🔌 *Inverter {key}*",
         "━━━━━━━━━━━━━━━━━━━",
-        f"*Status:*  {status}",
+        f"*Stato:*  {status}",
     ]
     fields = [
-        ("pr_v",   "PR",          "%",   1),
-        ("ac_v",   "AC Power",    "W",   0),
-        ("dc_v",   "DC Current",  "A",   2),
-        ("temp_v", "Temperature", "°C",  1),
-        ("iso_v",  "Isolation",   "kΩ",  1),
+        ("pr_v",   "PR",            "%",   1),
+        ("ac_v",   "Potenza AC",    "W",   0),
+        ("dc_v",   "Corrente DC",   "A",   2),
+        ("temp_v", "Temperatura",   "°C",  1),
+        ("iso_v",  "Isolamento",    "kΩ",  1),
     ]
     for key_f, label, unit, dec in fields:
         v = h.get(key_f)
@@ -580,11 +580,11 @@ def build_inverter_detail(data: dict, name: str) -> str:
         if isinstance(a, dict) and a.get("inverter", "").upper() == key.upper()
     ]
     if alerts:
-        lines += ["", f"🚨 *Active faults ({len(alerts)}):*"]
+        lines += ["", f"🚨 *Guasti Attivi ({len(alerts)}):*"]
         for a in alerts:
-            lines.append(f" • {a.get('rule', 'Anomaly')}")
+            lines.append(f" • {a.get('rule', 'Anomalia')}")
     else:
-        lines.append("\n✅ No active faults")
+        lines.append("\n✅ Nessun guasto attivo")
     return "\n".join(lines)
 
 
@@ -606,15 +606,15 @@ def build_peak_message(data: dict) -> str:
 
     rated = 12.6
     lines = [
-        "⚡ *Peak Power — Today*",
+        "⚡ *Potenza Picco - Oggi*",
         "━━━━━━━━━━━━━━━━━━━",
-        f"🏆 *Peak:*    {peak_mw:.2f} MW" if peak_mw else "🏆 *Peak:*    N/A",
-        f"⏰ *At:*      {peak_fmt}",
-        f"📡 *Now:*     {cur_mw:.2f} MW",
+        f"🏆 *Picco:*    {peak_mw:.2f} MW" if peak_mw else "🏆 *Picco:*    N/D",
+        f"⏰ *Alle:*     {peak_fmt}",
+        f"📡 *Ora:*      {cur_mw:.2f} MW",
     ]
     if peak_mw:
         cf = (peak_mw / rated) * 100
-        lines.append(f"📊 *Capacity:* {cf:.1f}% of {rated} MWp")
+        lines.append(f"📊 *Capacità:* {cf:.1f}% di {rated} MWp")
     return "\n".join(lines)
 
 
@@ -635,7 +635,7 @@ def build_compare_message(data: dict) -> str:
         if str(h.get("status", "")).upper() in ("CRITICAL", "TRIPPED", "FAULT"):
             tx_stats[tx]["faults"] += 1
 
-    lines = ["📊 *Transformer Comparison*", "━━━━━━━━━━━━━━━━━━━", ""]
+    lines = ["📊 *Confronto Trasformatori*", "━━━━━━━━━━━━━━━━━━━", ""]
     for tx in ["TX1", "TX2", "TX3"]:
         s = tx_stats.get(tx, {})
         mw  = s.get("power", 0) / 1e6
@@ -645,7 +645,7 @@ def build_compare_message(data: dict) -> str:
         lines.append(
             f"*{tx}* ({cnt} inv)\n"
             f"  ⚡ {mw:.2f} MW  📊 PR:{pr:.0f}%"
-            + (f"  🔴 {flt} fault(s)" if flt else "")
+            + (f"  🔴 {flt} guasto/i" if flt else "")
         )
         lines.append("")
     return "\n".join(lines)
@@ -663,7 +663,7 @@ def build_pr_message(data: dict) -> str:
     lines = [
         "📈 *Performance Ratio*",
         "━━━━━━━━━━━━━━━━━━━",
-        f"🏭 *Plant avg PR:* {macro_pr:.1f}%",
+        f"🏭 *PR Medio Impianto:* {macro_pr:.1f}%",
         "",
     ]
     for tx in ["TX1", "TX2", "TX3"]:
@@ -673,16 +673,16 @@ def build_pr_message(data: dict) -> str:
         low  = min(vals)
         high = max(vals)
         icon = "🟢" if avg >= 80 else ("🟡" if avg >= 70 else "🔴")
-        lines.append(f"{icon} *{tx}:* avg {avg:.1f}%  (min {low:.0f}% / max {high:.0f}%)")
+        lines.append(f"{icon} *{tx}:* media {avg:.1f}%  (min {low:.0f}% / max {high:.0f}%)")
 
-    lines += ["", "_PR < 75%: inspection recommended_"]
+    lines += ["", "_PR < 75%: ispezione raccomandata_"]
     return "\n".join(lines)
 
 
 def build_pr_inverter_message(data: dict) -> str:
     inv_health = data.get("inverter_health", {})
     if not inv_health:
-        return "⚠️ No inverter data."
+        return "⚠️ Nessun dato inverter."
 
     by_tx: dict[str, list[tuple[str, float]]] = {}
     for name, h in sorted(inv_health.items()):
@@ -710,16 +710,16 @@ def build_pr_inverter_message(data: dict) -> str:
         avg = sum(tx_vals) / len(tx_vals)
         low = min(tx_vals)
         high = max(tx_vals)
-        lines.append(f"  _avg {avg:.1f}%  min {low:.0f}%  max {high:.0f}%_")
+        lines.append(f"  _media {avg:.1f}%  min {low:.0f}%  max {high:.0f}%_")
         lines.append("")
 
     if all_vals:
         plant_avg = sum(all_vals) / len(all_vals)
         below = [n.replace("INV ", "") for n, pr in
                  [(n, p) for tx in by_tx.values() for n, p in tx] if pr < 75]
-        lines.append(f"🏭 *Plant avg: {plant_avg:.1f}%*")
+        lines.append(f"🏭 *Media impianto: {plant_avg:.1f}%*")
         if below:
-            lines.append(f"⚠️ _Below 75%: {', '.join(below)}_")
+            lines.append(f"⚠️ _Sotto 75%: {', '.join(below)}_")
 
     return "\n".join(lines)
 
@@ -739,22 +739,22 @@ def build_energy_message() -> str:
 
         rated_kwp = 12625.0
         lines = [
-            "🔋 *Energy Summary*",
+            "🔋 *Riepilogo Energia*",
             "━━━━━━━━━━━━━━━━━━━",
-            f"📅 *Today:*        {today_mwh:.1f} MWh",
-            f"📆 *Last 7 days:*  {week_mwh:.1f} MWh",
-            f"🗓  *Last 30 days:* {month_mwh:.1f} MWh",
+            f"📅 *Oggi:*              {today_mwh:.1f} MWh",
+            f"📆 *Ultimi 7 giorni:*  {week_mwh:.1f} MWh",
+            f"🗓  *Ultimi 30 giorni:* {month_mwh:.1f} MWh",
         ]
         if month_mwh and rated_kwp:
             spec_yield = (month_mwh * 1000) / rated_kwp
-            lines.append(f"📊 *Specific yield (30d):* {spec_yield:.1f} kWh/kWp")
+            lines.append(f"📊 *Resa specifica (30gg):* {spec_yield:.1f} kWh/kWp")
         if week_mwh:
             avg_daily = week_mwh / max(len(days_7), 1)
-            lines.append(f"📉 *Avg daily (7d):* {avg_daily:.1f} MWh")
+            lines.append(f"📉 *Media giornaliera (7gg):* {avg_daily:.1f} MWh")
         return "\n".join(lines)
     except Exception as e:
         logger.error(f"build_energy_message error: {e}")
-        return "⚠️ Energy data temporarily unavailable."
+        return "⚠️ Dati energetici temporaneamente non disponibili."
 
 
 def build_weather_message(data: dict) -> str:
@@ -763,24 +763,24 @@ def build_weather_message(data: dict) -> str:
     poa = h.get("poa", h.get("avg_irradiance", 0.0))
     temps = [float(v.get("temp_v") or 0) for v in inv.values() if v.get("temp_v") is not None]
     lines = [
-        "🌤 *Environmental Data*",
+        "🌤 *Dati Ambientali*",
         "━━━━━━━━━━━━━━━━━━━",
-        f"☀️  *Irradiance:*  {poa:.0f} W/m²",
+        f"☀️  *Irraggiamento:*  {poa:.0f} W/m²",
     ]
     if temps:
         lines += [
-            f"🌡  *Inv Temp avg:* {sum(temps)/len(temps):.1f}°C",
-            f"🌡  *Inv Temp max:* {max(temps):.1f}°C",
-            f"🌡  *Inv Temp min:* {min(temps):.1f}°C",
+            f"🌡  *Temp. Inv. media:* {sum(temps)/len(temps):.1f}°C",
+            f"🌡  *Temp. Inv. max:*   {max(temps):.1f}°C",
+            f"🌡  *Temp. Inv. min:*   {min(temps):.1f}°C",
         ]
     if poa >= 800:
-        lines.append("\n☀️ _High irradiance — expect peak production_")
+        lines.append("\n☀️ _Irraggiamento elevato - produzione al picco_")
     elif poa >= 400:
-        lines.append("\n⛅ _Moderate irradiance — partial production_")
+        lines.append("\n⛅ _Irraggiamento moderato - produzione parziale_")
     elif poa > 0:
-        lines.append("\n🌥 _Low irradiance — reduced output expected_")
+        lines.append("\n🌥 _Irraggiamento basso - produzione ridotta_")
     else:
-        lines.append("\n🌙 _No irradiance — night mode_")
+        lines.append("\n🌙 _Nessun irraggiamento - modalità notturna_")
     return "\n".join(lines)
 
 
@@ -797,48 +797,48 @@ def build_uptime_message(data: dict) -> str:
                if str(h.get("status", "")).upper() in ("COMM_LOST", "COMMS_LOST")]
     icon    = "🟢" if uptime >= 95 else ("🟡" if uptime >= 80 else "🔴")
     lines   = [
-        "⏱ *Plant Uptime — Today*",
+        "⏱ *Disponibilità Impianto - Oggi*",
         "━━━━━━━━━━━━━━━━━━━",
-        f"{icon} *Uptime:* {uptime:.1f}%",
+        f"{icon} *Disponibilità:* {uptime:.1f}%",
         f"🟢 Online: {online}/{total}",
     ]
     if tripped:
-        lines.append(f"🔴 Tripped: {', '.join(sorted(tripped)[:6])}")
+        lines.append(f"🔴 Scattati: {', '.join(sorted(tripped)[:6])}")
     if comm:
-        lines.append(f"🔇 Comms lost: {', '.join(sorted(comm)[:6])}")
+        lines.append(f"🔇 Com. persa: {', '.join(sorted(comm)[:6])}")
     return "\n".join(lines)
 
 
 HELP_TEXT = (
-    "🌞 *Mazara 01 — Command Reference*\n"
+    "🌞 *Mazara 01 - Guida Comandi*\n"
     "━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-    "*Plant Status*\n"
-    "📊 /status — Live power, PR & health summary\n"
-    "🚨 /alerts — Active faults & anomalies\n"
-    "⏱ /uptime — Plant availability % today\n"
-    "🌤 /weather — Irradiance & temperature sensors\n\n"
-    "*Production*\n"
-    "📅 /daily — Today's energy report\n"
-    "📆 /week — 7-day production history\n"
-    "🔋 /energy — Monthly & 30-day energy totals\n"
-    "⚡ /peak — Today's peak power & time\n\n"
-    "*Inverter Analysis*\n"
-    "🔌 /inverters — All 36 inverters health matrix\n"
-    "🔍 /inverter TX1-03 — Single inverter deep-dive\n"
-    "📊 /compare — TX1 vs TX2 vs TX3 comparison\n"
-    "📈 /pr — Performance Ratio by transformer\n"
-    "📈 /pr\\_inverter — PR for each individual inverter\n\n"
-    "*Operations*\n"
-    "🎫 /generate\\_ticket — Create Odoo fault ticket\n"
-    "/approve <id> — Approve a pending action\n"
-    "/deny <id>    — Deny a pending action\n\n"
-    "*AI Assistant*\n"
-    "💬 /ai — Ask a question (or just type freely)\n"
-    "Examples:\n"
-    "• `Which inverters are above 60°C?`\n"
-    "• `Compare yesterday vs today production`\n"
-    "• `Any DC string anomalies on TX2?`\n"
-    "• `What caused the drop at 14:00?`"
+    "*Stato Impianto*\n"
+    "📊 /status — Potenza, PR e stato in tempo reale\n"
+    "🚨 /alerts — Guasti e anomalie attive\n"
+    "⏱ /uptime — Disponibilità impianto oggi\n"
+    "🌤 /weather — Irraggiamento e sensori temperatura\n\n"
+    "*Produzione*\n"
+    "📅 /daily — Report energia giornaliero\n"
+    "📆 /week — Storico produzione 7 giorni\n"
+    "🔋 /energy — Totali energia mensili e 30 giorni\n"
+    "⚡ /peak — Potenza picco odierna e orario\n\n"
+    "*Analisi Inverter*\n"
+    "🔌 /inverters — Matrice salute tutti i 36 inverter\n"
+    "🔍 /inverter TX1-03 — Analisi dettagliata inverter\n"
+    "📊 /compare — Confronto TX1 vs TX2 vs TX3\n"
+    "📈 /pr — Performance Ratio per trasformatore\n"
+    "📈 /pr\\_inverter — PR per ogni singolo inverter\n\n"
+    "*Operazioni*\n"
+    "🎫 /generate\\_ticket — Crea ticket guasto su Odoo\n"
+    "/approve <id> — Approva un'azione in sospeso\n"
+    "/deny <id>    — Rifiuta un'azione in sospeso\n\n"
+    "*Assistente AI*\n"
+    "💬 /ai — Fai una domanda (o scrivi direttamente)\n"
+    "Esempi:\n"
+    "• `Quali inverter superano i 60°C?`\n"
+    "• `Confronta la produzione ieri e oggi`\n"
+    "• `Anomalie sulle stringhe DC di TX2?`\n"
+    "• `Cosa ha causato il calo alle 14:00?`"
 )
 
 
@@ -887,22 +887,22 @@ class TelegramBot:
 
     def set_my_commands(self) -> None:
         commands = [
-            {"command": "start",           "description": "Welcome & overview"},
-            {"command": "status",          "description": "📊 Live power, PR & health"},
-            {"command": "alerts",          "description": "🚨 Active faults"},
-            {"command": "daily",           "description": "📅 Daily energy report"},
-            {"command": "week",            "description": "📆 7-day production history"},
-            {"command": "inverters",       "description": "🔌 All inverters health matrix"},
-            {"command": "compare",         "description": "📊 TX1 vs TX2 vs TX3"},
-            {"command": "pr",              "description": "📈 PR breakdown by transformer"},
-            {"command": "pr_inverter",     "description": "📈 PR for each individual inverter"},
-            {"command": "energy",          "description": "🔋 Monthly energy totals"},
-            {"command": "peak",            "description": "⚡ Today's peak power"},
-            {"command": "weather",         "description": "🌤 Irradiance & temperature"},
-            {"command": "uptime",          "description": "⏱ Plant availability today"},
-            {"command": "generate_ticket", "description": "🎫 Create fault ticket"},
-            {"command": "ai",              "description": "💬 Ask AI a question"},
-            {"command": "help",            "description": "📋 Full command list"},
+            {"command": "start",           "description": "Benvenuto e panoramica"},
+            {"command": "status",          "description": "📊 Potenza, PR e stato in tempo reale"},
+            {"command": "alerts",          "description": "🚨 Guasti e anomalie attive"},
+            {"command": "daily",           "description": "📅 Report energia giornaliero"},
+            {"command": "week",            "description": "📆 Storico produzione 7 giorni"},
+            {"command": "inverters",       "description": "🔌 Matrice salute tutti gli inverter"},
+            {"command": "compare",         "description": "📊 Confronto TX1 vs TX2 vs TX3"},
+            {"command": "pr",              "description": "📈 PR per trasformatore"},
+            {"command": "pr_inverter",     "description": "📈 PR per ogni singolo inverter"},
+            {"command": "energy",          "description": "🔋 Totali energia mensili"},
+            {"command": "peak",            "description": "⚡ Potenza picco odierna"},
+            {"command": "weather",         "description": "🌤 Irraggiamento e temperatura"},
+            {"command": "uptime",          "description": "⏱ Disponibilità impianto oggi"},
+            {"command": "generate_ticket", "description": "🎫 Crea ticket guasto"},
+            {"command": "ai",              "description": "💬 Fai una domanda all'AI"},
+            {"command": "help",            "description": "📋 Lista completa comandi"},
         ]
         try:
             requests.post(f"{self.base}/setMyCommands", json={"commands": commands}, timeout=API_TIMEOUT)
@@ -917,11 +917,11 @@ class TelegramBot:
 def _dispatch_ai(bot, chat_id, question: str, data, settings, ai_semaphore):
     """Run LLM in a thread and reply."""
     if not llm_agent:
-        bot.send_message(chat_id, "❌ AI agent not available.")
+        bot.send_message(chat_id, "❌ Agente AI non disponibile.")
         return
 
     if not ai_semaphore.acquire(blocking=False):
-        bot.send_message(chat_id, "⚠️ AI is busy. Try again in a moment.")
+        bot.send_message(chat_id, "⚠️ AI occupata. Riprova tra un momento.")
         return
 
     personal_id = str(settings.get("telegram", {}).get("personal_id", ""))
@@ -930,14 +930,14 @@ def _dispatch_ai(bot, chat_id, question: str, data, settings, ai_semaphore):
         try:
             reply = llm_agent.ask_llm(question, data, user_id=f"TG_{chat_id}")
             if reply.startswith("⚠️ Technical Error") or reply.startswith("⚠️ AI Agent error"):
-                bot.send_message(chat_id, "⚠️ Error during AI processing. Admin notified.")
+                bot.send_message(chat_id, "⚠️ Errore nell'elaborazione AI. Admin notificato.")
                 if personal_id:
                     bot.send_message(personal_id, f"AI Error in chat {chat_id}:\n{reply}")
             else:
                 bot.send_message(chat_id, reply)
         except Exception as e:
             logger.error(f"AI thread error: {e}")
-            bot.send_message(chat_id, "⚠️ AI failed to respond.")
+            bot.send_message(chat_id, "⚠️ L'AI non ha risposto.")
             if personal_id:
                 bot.send_message(personal_id, f"AI Exception {chat_id}: {str(e)[:200]}")
         finally:
@@ -1053,7 +1053,7 @@ def main() -> None:
                     elif cmd == "/inverter":
                         parts = text.split(maxsplit=1)
                         if len(parts) < 2:
-                            bot.send_message(chat_id, "Usage: `/inverter TX1-03`")
+                            bot.send_message(chat_id, "Utilizzo: `/inverter TX1-03`")
                         else:
                             data = get_latest_dashboard_json()
                             bot.send_message(
@@ -1097,22 +1097,22 @@ def main() -> None:
                     elif cmd == "/ai":
                         question = text[3:].strip() if len(text) > 3 else text
                         if not question:
-                            bot.send_message(chat_id, "💬 Usage: `/ai <your question>`\nOr just type your question directly.")
+                            bot.send_message(chat_id, "💬 Utilizzo: `/ai <domanda>`\nOppure scrivi direttamente la tua domanda.")
                         else:
-                            bot.send_message(chat_id, "⏳ _Thinking..._")
+                            bot.send_message(chat_id, "⏳ _Elaborazione..._")
                             data = get_latest_dashboard_json()
                             _dispatch_ai(bot, chat_id, question, data, settings, ai_semaphore)
 
                     else:
                         # ── Any free text → LLM ───────────────────────────────
-                        bot.send_message(chat_id, "⏳ _Thinking..._")
+                        bot.send_message(chat_id, "⏳ _Elaborazione..._")
                         data = get_latest_dashboard_json()
                         _dispatch_ai(bot, chat_id, text, data, settings, ai_semaphore)
 
                 except Exception as cmd_err:
                     logger.error(f"Command error [{cmd!r}]: {cmd_err}", exc_info=True)
                     try:
-                        bot.send_message(chat_id, f"⚠️ Error processing `{cmd or 'message'}`. Check logs.", markdown=False)
+                        bot.send_message(chat_id, f"⚠️ Errore nell'elaborare `{cmd or 'messaggio'}`. Controlla i log.", markdown=False)
                     except Exception:
                         pass
 
