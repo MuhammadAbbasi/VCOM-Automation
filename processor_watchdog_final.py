@@ -1322,6 +1322,7 @@ def analyze_site(date_str: str) -> None:
         if current_limit < (STANDARD_LIMIT - 0.01):
             if grid_alarm_id in prev_alarm_map:
                 alarm = prev_alarm_map[grid_alarm_id]
+                alarm["type"]    = "Limitazione da Rete"
                 alarm["message"] = f"Limite produzione rete al {current_limit:.1f}% (Sotto il max. impianto 87.6%)."
                 alarm["severity"] = "red"
             else:

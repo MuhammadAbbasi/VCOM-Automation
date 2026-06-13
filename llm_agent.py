@@ -702,14 +702,14 @@ def build_data_snapshot(plant_data, question):
         is_sensor_zero = (poa < 10) # Very low reading
         
         if is_dark_hours:
-            mode = "NIGHT MODE (Offline)"
-            status_msg = f"It is currently night time at the plant. POA is {poa} W/m² as expected."
+            mode = "MODALITÀ NOTTURNA"
+            status_msg = f"L'impianto è in modalità notturna. POA={poa} W/m² (atteso)."
         elif is_sensor_zero and now_hr > (sunrise + 1) and now_hr < (sunset - 1):
-            mode = "SENSOR ALERT (Irregularity)"
-            status_msg = f"ALERT: Irradiance (POA) is reporting {poa} W/m² during daylight hours. This likely indicates a sensor communication issue or failure."
+            mode = "ALLERTA SENSORI"
+            status_msg = f"ATTENZIONE: Irraggiamento (POA) riporta {poa} W/m² durante le ore di sole. Probabile problema di comunicazione o guasto sensore."
         else:
-            mode = "PRODUCTION MODE (Daylight)"
-            status_msg = f"Plant is in production. POA={poa} W/m²."
+            mode = "PRODUZIONE (Ore Diurne)"
+            status_msg = f"Impianto in produzione. POA={poa} W/m²."
 
         snapshot.append(f"CURRENT LOCAL TIME: {now.strftime('%H:%M')}")
         snapshot.append(f"CURRENT STATUS (Latest Sync): {mode}, MW={mw}, Online={online_count}/{total_count}, {status_msg}, Avg PR={pr}%")
