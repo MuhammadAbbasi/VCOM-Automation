@@ -260,34 +260,29 @@ After deployment:
 
 ---
 
+## Completed Enhancements (as of June 2026)
+
+1. ✅ **Anomaly Detection** — 6 forensic rules fully implemented and production-stable:
+   - Low PR detection (with 30-min stabilization)
+   - High temperature alerts (yellow/red thresholds)
+   - DC string failures (dynamic MPPT comparison)
+   - AC power deviations (per-inverter vs plant average)
+   - Communication loss (NaN during daylight)
+   - Inverter trip detection (zero AC during plant production)
+
+2. ✅ **Grid Curtailment Suppression** — `processor_watchdog_final.py` now suppresses Low PR alarms when `grid_limit < 87%`, preventing false alarm storms during forced curtailment.
+
+3. ✅ **Telegram/Webhook Alerts** — `telegram_bot.py` handles critical anomalies, daily energy reports, and real-time status. Fully translated to Italian. New `/plant` command for concise plant summary.
+
+4. ✅ **SQL Database Backend** — SQLite via `db/db_manager.py`. Wide-metric tables per metric type, WAL mode, chunk write with single commit per batch (fixed June 2026).
+
+5. ✅ **Odoo Ticket Integration** — automatic anomaly → Odoo ticket creation for alarm tracking.
+
+6. ✅ **Docker Containerization** — full Docker Compose stack (branch `feature/docker-containerized`).
+
 ## Next Steps: Future Enhancements
 
-1. **Anomaly Detection** (6 forensic rules):
-   - Low PR detection
-   - High temperature alerts
-   - DC string failures
-   - AC power deviations
-   - Communication loss
-   - Inverter trip detection
-
-2. **Time-Series Visualization**:
-   - Power curves (AC generation over day)
-   - Temperature trends
-   - Efficiency curves
-
-3. **Predictive Maintenance**:
-   - Temperature trend analysis
-   - Insulation resistance tracking
-   - String degradation detection
-
-4. **Email/Webhook Alerts**:
-   - Critical anomalies → email to operators
-   - Daily health summaries
-
-5. **Historical Data Archive**:
-   - Move CSV files to separate archive directory
-   - Compress > 30 days old
-   - SQL database backend option
+See `docs/FUTURE_WORKS.md` for the current backlog of possible improvements.
 
 ---
 
@@ -309,7 +304,7 @@ The system has been significantly hardened to handle real-world browser and plat
 
 ---
 
-**Document Version**: 1.1
-**Date**: 2026-04-21
+**Document Version**: 1.2
+**Date**: 2026-06-16
 **System**: VCOM Mazara del Vallo (36 inverters)
-**Status**: Production-Ready / Hardened
+**Status**: Production-Ready / Grid Curtailment Intelligence Active

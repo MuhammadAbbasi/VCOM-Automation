@@ -12,6 +12,28 @@ A complete, high-performance automated monitoring system for utility-scale solar
 
 ---
 
+## 🚀 Key Improvements (June 2026 Update)
+
+### Grid Curtailment Intelligence
+- **PR Alarm Suppression:** Low PR alarms are now automatically silenced when the plant is under grid limit curtailment (grid limit < 87%). This prevents alarm storms during forced curtailment events that are outside the plant's control.
+- **Curtailment Visibility:** The `/status`, `/pr`, and `/plant` Telegram commands now surface the active grid limit percentage with a prominent warning when curtailment is below the nominal 87.6%.
+
+### New `/plant` Telegram Command
+Provides a concise plant-health summary in a single message: energy produced today, online inverters, POA irradiance, average PR, grid limit status, and up to 3 active alarms.
+
+### Data Pipeline Bug Fixes
+- **DB write reliability:** `conn.commit()` in `db_manager.py` was incorrectly placed inside the chunk-write loop, causing one commit per chunk. Moved outside the loop — a single commit now covers the entire batch, reducing WAL churn and eliminating partial-write risk.
+- **Empty-DataFrame guard:** `base_monitor.export_metric()` now detects and skips DataFrames that contain only time/metadata columns (no actual inverter data), preventing empty tables from being written to the database.
+
+### AI Formatting Instructions
+`ai_system_prompt.txt` now includes explicit Telegram formatting guidelines: use of Markdown (bold, italic), structured emojis per metric type, and mandatory curtailment highlighting in status/PR responses.
+
+### Diagnostic Utility Scripts
+- **`check_log_error.py`** — scans `monitoring.log` for CRITICAL/FATAL/Exception entries.
+- **`check_watchdog_overnight.py`** — inspects `logs/watchdog.log` for a specified overnight window.
+
+---
+
 ## 🚀 Key Improvements (April 2026 Update)
 
 Seamlessly integrates **Qwen 3.5 9B** via local Ollama (localhost) for plant diagnostics:
@@ -21,8 +43,9 @@ Seamlessly integrates **Qwen 3.5 9B** via local Ollama (localhost) for plant dia
 
 ### 📱 Multi-User Telegram Bot (`telegram_bot.py`)
 - **Concurrency:** Fully multi-threaded; handles dozens of simultaneous AI requests without freezing.
-- **Quick Shortcuts:** Instant commands like `/alerts`, `/daily`, and `/status`.
+- **Quick Shortcuts:** Instant commands like `/alerts`, `/daily`, `/status`, and `/plant`.
 - **Instant Feedback:** Immediate "⏳ Thinking..." status while the local GPU processes complex logic.
+- **Group Chat Support:** Bot username suffix (`@BotName`) stripped from commands automatically so group-chat commands work correctly.
 
 - **Stable Reliability:** Hot-reload is controlled (semi-automated) to prevent excessive restarts during long extraction cycles, ensuring the browser session remains stable.
 
@@ -385,11 +408,12 @@ The watchdog applies deep diagnostic rules in priority order:
 
 | Rule | Condition | Severity |
 |------|-----------|----------|
-| **Low PR** | PR < thresholds after 30m stabilization period | 🔴 Critical |
+| **Low PR** | PR < thresholds after 30m stabilization period; **suppressed if grid limit < 87%** | 🔴 Critical |
 | **High Temp** | Temperature > configured limit | 🔴 Critical |
 | **DC String Loss** | String fault/open circuit/underperformance detected via dynamic MPPT comparison | 🔴/🟡 Fault/Warning |
 | **Comms Loss** | Data missing (x) for entire component | 🟡 Warning |
 | **Inverter Trip / AC Power Loss** | AC output deviates >5% below the plant average during nominal POA | 🔴 Critical |
+| **Grid Curtailment** | Grid limit < 87% — surfaced in status/PR messages; suppresses Low PR alarms | ⚠️ Info |
 
 Historical alarms feature a category drop-down filter, and consecutive alerts on the same inverter/rule are deduplicated dynamically.
 
@@ -454,10 +478,13 @@ tail -f watchdog.log
 
 | File | Purpose |
 |------|---------|
-| `ANALYSIS_FIX_SUMMARY.md` | Problem/solution analysis, thresholds, and migration guide |
-| `DATA_STRUCTURE_AND_ANALYSIS.md` | Comprehensive data format docs for all 6 metrics |
-| `analysis_method.md` | Forensic rule definitions and implementation details |
-| `SYSTEM_PROMPT.md` | Plant topology (36 inverters, 14 sensors, string mapping) |
+| `docs/ANALYSIS_FIX_SUMMARY.md` | Problem/solution analysis, thresholds, and migration guide |
+| `docs/DATA_STRUCTURE_AND_ANALYSIS.md` | Comprehensive data format docs for all 6 metrics |
+| `docs/analysis_method.md` | Forensic rule definitions and implementation details |
+| `docs/SYSTEM_PROMPT.md` | Plant topology (36 inverters, 14 sensors, string mapping) |
+| `docs/PLANT_MAP_IMPLEMENTATION.md` | Plant visual map component design |
+| `docs/LOGIN_UPDATE_SUMMARY.md` | VCOM Keycloak login flow changes and handling |
+| `docs/FUTURE_WORKS.md` | Planned and possible future improvements |
 | `README.md` | This file |
 
 ---
@@ -555,5 +582,5 @@ This project is provided as-is. Adapt and use freely, but ensure compliance with
 
 ---
 
-**Last Updated:** 2026-04-22
-**System Status:** ✅ Production-hardened with high-fidelity footer, verified site metadata (12.625 MWp), session protection, and premium dashboard UI.
+**Last Updated:** 2026-06-16
+**System Status:** ✅ Production-hardened — grid curtailment intelligence active, Docker stack containerized, Telegram bot fully bilingual (Italian), Odoo ticket integration live.
