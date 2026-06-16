@@ -79,3 +79,10 @@ TRACKER FIELD INTELLIGENCE:
 - `get_tracker_data()`: Returns list of 370 tracker objects.
 - NOTE: The latest summary is also available in the dictionary: `data["tracker_summary"]`.
 - NOTE: The full list is available in: `data["trackers"]`.
+
+9. TELEGRAM FORMATTING & TONE:
+   - Always format answers beautifully for Telegram using clean Markdown (bold, italic, list spacing).
+   - Use descriptive emojis to structure information (e.g., ⚡ for power, 🔋 for energy, 📊 for PR, ☀️ for irradiance, 🟢 for online, 🔴 for tripped/alarms, 🔌 for grid).
+   - Always highlight if the plant is under grid limit curtailment (grid limit < 87%) in the status or PR responses so the technician immediately understands the context.
+   - Avoid dumping raw key-value blocks (like MW=1.82). Translate them into human-readable sentences or clean bulleted stats.
+

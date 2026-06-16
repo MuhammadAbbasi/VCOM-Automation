@@ -403,6 +403,8 @@ def build_status_message(data: dict) -> str:
     tripped = macro.get("tripped", "—")
     comms   = macro.get("comms_lost", "—")
 
+    grid_limit = macro.get("grid_limit", 87.6)
+
     lines = [
         "🌞 *Mazara 01 - Stato in Tempo Reale*",
         f"🕐 Ultimo aggiornamento: *{sync_time}*",
@@ -414,6 +416,8 @@ def build_status_message(data: dict) -> str:
     ]
     if poa:
         lines.append(f"☀️ *Irragg.:* {poa:.0f} W/m²")
+    if grid_limit < 87.0:
+        lines.append(f"🔌 *Limite Rete:* {grid_limit:.1f}% (Limitazione Attiva)")
     lines += [
         "",
         f"🟢 Online: *{online}*   🔴 Scattati: *{tripped}*   🔇 Com.: *{comms}*",
@@ -437,6 +441,71 @@ def build_status_message(data: dict) -> str:
                     break
     else:
         lines += ["", "✅ Nessun allarme attivo"]
+
+    return "\n".join(lines)
+
+
+def build_plant_message(data: dict) -> str:
+    macro = data.get("macro_health", {})
+    try:
+        sync_time = datetime.fromisoformat(
+            macro.get("last_sync", "").replace("Z", "+00:00")
+        ).strftime("%H:%M")
+    except Exception:
+        sync_time = datetime.now().strftime("%H:%M")
+
+    inv_health = data.get("inverter_health", {})
+    total_mw = macro.get("total_ac_power_mw", 0.0)
+    if not total_mw:
+        total_mw = sum(float(h.get("ac_v", 0) or 0) for h in inv_health.values()) / 1e6
+    avg_pr = macro.get("avg_pr", 0.0)
+    if not avg_pr:
+        pr_vals = [float(h.get("pr_v", 0)) for h in inv_health.values() if h.get("pr_v") is not None]
+        avg_pr = sum(pr_vals) / len(pr_vals) if pr_vals else 0.0
+    energy_mwh = macro.get("total_energy_mwh", 0.0)
+    poa = macro.get("poa", macro.get("avg_irradiance", 0.0))
+    online = macro.get("online", "—")
+    total_inverters = macro.get("total_inverters", 36)
+    grid_limit = macro.get("grid_limit", 87.6)
+
+    lines = [
+        "🏭 *Mazara 01 - Stato Impianto*",
+        f"🕐 Ultimo aggiornamento: *{sync_time}*",
+        "━━━━━━━━━━━━━━━━━━━",
+        "",
+        f"🔋 *Energia Oggi:* {energy_mwh:.1f} MWh",
+        f"🟢 *Inverter Online:* {online}/{total_inverters}",
+        f"☀️ *Irraggiamento (POA):* {poa:.0f} W/m²" if poa else "☀️ *Irraggiamento (POA):* 0 W/m²",
+        f"📊 *PR Medio:* {avg_pr:.1f}%",
+        f"🔌 *Limite Rete:* {grid_limit:.1f}%" + (" (Limitazione Attiva)" if grid_limit < 87.0 else " (Nominale)"),
+    ]
+
+    alerts = data.get("active_anomalies", [])
+    if alerts:
+        lines += ["", f"🚨 *Allarmi Attivi (Max 3):*"]
+        seen = set()
+        count = 0
+        for a in alerts:
+            if not isinstance(a, dict):
+                entry = f" • {a}"
+            else:
+                inv = a.get("inverter", "?")
+                atype = a.get("rule", a.get("type", "Anomalia"))
+                msg = a.get("message", "")
+                msg_clean = msg.split("(")[0].strip() if msg else ""
+                entry = f" • *{inv}*: {atype}"
+                if msg_clean:
+                    entry += f" - {msg_clean}"
+            if entry not in seen:
+                seen.add(entry)
+                lines.append(entry)
+                count += 1
+                if count >= 3:
+                    break
+        if len(alerts) > 3:
+            lines.append(f" _...e altri {len(alerts) - 3} allarmi_")
+    else:
+        lines += ["", "✅ *Nessun allarme attivo*"]
 
     return "\n".join(lines)
 
@@ -653,7 +722,10 @@ def build_compare_message(data: dict) -> str:
 
 def build_pr_message(data: dict) -> str:
     inv_health = data.get("inverter_health", {})
-    macro_pr   = data.get("macro_health", {}).get("avg_pr", 0.0)
+    macro = data.get("macro_health", {})
+    macro_pr = macro.get("avg_pr", 0.0)
+    grid_limit = macro.get("grid_limit", 87.6)
+
     tx_pr: dict[str, list] = {}
     for name, h in inv_health.items():
         tx = _tx_of(name)
@@ -664,8 +736,10 @@ def build_pr_message(data: dict) -> str:
         "📈 *Performance Ratio*",
         "━━━━━━━━━━━━━━━━━━━",
         f"🏭 *PR Medio Impianto:* {macro_pr:.1f}%",
-        "",
     ]
+    if grid_limit < 87.0:
+        lines.append(f"⚠️ *Nota:* PR ridotta a causa della limitazione di rete attiva ({grid_limit:.1f}%).")
+    lines.append("")
     for tx in ["TX1", "TX2", "TX3"]:
         vals = tx_pr.get(tx, [])
         if not vals: continue
@@ -814,6 +888,7 @@ HELP_TEXT = (
     "━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
     "*Stato Impianto*\n"
     "📊 /status — Potenza, PR e stato in tempo reale\n"
+    "🏭 /plant — Stato sintetico impianto (Energia, PR, Errori)\n"
     "🚨 /alerts — Guasti e anomalie attive\n"
     "⏱ /uptime — Disponibilità impianto oggi\n"
     "🌤 /weather — Irraggiamento e sensori temperatura\n\n"
@@ -889,6 +964,7 @@ class TelegramBot:
         commands = [
             {"command": "start",           "description": "Benvenuto e panoramica"},
             {"command": "status",          "description": "📊 Potenza, PR e stato in tempo reale"},
+            {"command": "plant",           "description": "🏭 Riepilogo completo stato impianto"},
             {"command": "alerts",          "description": "🚨 Guasti e anomalie attive"},
             {"command": "daily",           "description": "📅 Report energia giornaliero"},
             {"command": "week",            "description": "📆 Storico produzione 7 giorni"},
@@ -998,6 +1074,8 @@ def main() -> None:
                     continue
 
                 cmd = text.lower().split()[0] if text.startswith("/") else ""
+                if cmd and "@" in cmd:
+                    cmd = cmd.split("@")[0]
 
                 # Ticket flow takes priority
                 if chat_id in ticket_sessions:
@@ -1034,6 +1112,10 @@ def main() -> None:
                     elif cmd == "/status":
                         data = get_latest_dashboard_json()
                         bot.send_message(chat_id, build_status_message(data) if data else "⚠️ No data.")
+
+                    elif cmd == "/plant":
+                        data = get_latest_dashboard_json()
+                        bot.send_message(chat_id, build_plant_message(data) if data else "⚠️ No data.")
 
                     elif cmd == "/alerts":
                         data = get_latest_dashboard_json()

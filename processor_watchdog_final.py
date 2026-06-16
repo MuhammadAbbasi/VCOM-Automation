@@ -1475,7 +1475,9 @@ def analyze_site(date_str: str) -> None:
             pr_val = h.get("raw_pr")
             is_stabilized = h.get("is_stabilized", True)
 
-            if pr_val is not None and is_stabilized and pr_val < pr_green_thresh:
+            # Suppress low PR alarms if the plant is curtailed by a grid limit (standard is 87.6%)
+            is_curtailed = current_grid_limit < 87.0
+            if pr_val is not None and is_stabilized and pr_val < pr_green_thresh and not is_curtailed:
                 is_critical_pr = pr_val < pr_yellow_thresh
                 pr_cat      = "crit_pr" if is_critical_pr else "low_pr"
                 pr_severity = "red"    if is_critical_pr else "yellow"
