@@ -77,6 +77,12 @@ def export_metric(df: pd.DataFrame, prefix: str) -> None:
         logger.warning(f"[{prefix}] Empty DataFrame — skipping export.")
         return
 
+    # Ensure we have actual data/inverter columns (excluding time and metadata)
+    data_cols = [c for c in df.columns if c not in ("Ora", "Timestamp Fetch", "_date", "date", "ora", "timestamp_fetch")]
+    if not data_cols:
+        logger.warning(f"[{prefix}] DataFrame contains only time/metadata columns — skipping export.")
+        return
+
     current_time = get_timestamp_fetch()
 
     if "Timestamp Fetch" not in df.columns:

@@ -521,7 +521,7 @@ def _save_wide_metric(df: pd.DataFrame, table_name: str, date_str: str) -> None:
     for start in range(0, len(df_out), CHUNK):
         chunk_df = df_out.iloc[start:start + CHUNK]
         _retry_data_operation(chunk_df.to_sql, table_name, conn, if_exists="append", index=False)
-        _retry_data_operation(conn.commit)
+    _retry_data_operation(conn.commit)
 
     # Keep WAL size bounded after high-volume writes
     try:
@@ -577,7 +577,7 @@ def _save_corrente_dc(df: pd.DataFrame, date_str: str) -> None:
     for start in range(0, len(result), CHUNK):
         chunk_df = result.iloc[start:start + CHUNK]
         _retry_data_operation(chunk_df.to_sql, "corrente_dc", conn, if_exists="append", index=False)
-        _retry_data_operation(conn.commit)
+    _retry_data_operation(conn.commit)
 
     try:
         conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
