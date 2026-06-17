@@ -168,12 +168,21 @@ def analyze_dc_current(dc_df: pd.DataFrame, output_md_path: Path, date_str: str)
 
     mppt_details = {}
 
+    # Precompute the fleet-median reference row index (last row where fleet median is valid).
+    # Using this single reference for both v and exp guarantees both values come from the
+    # same point in time, preventing false yellow/red dots when an MPPT recovered but its
+    # last non-NaN reading pre-dates the current (higher) fleet irradiance level.
+    fleet_ref_idx = None
+    fleet_valid_idxs = fleet_2str_median.dropna().index
+    if len(fleet_valid_idxs) > 0:
+        fleet_ref_idx = int(fleet_valid_idxs[-1])
+
     for inv, mppt_cfg in MPPT_CONFIG.items():
         inv_label = f"INV {inv}"
         mppt_details[inv_label] = []
 
         inv_cols = [c for c in df.columns if inv in c]
-        
+
         # Single Inverter Medians
         inv_2str_cols = [f"Corrente DC MPPT {i+1} (INV {inv}) [A]" for i, s in enumerate(mppt_cfg) if s == 2 and f"Corrente DC MPPT {i+1} (INV {inv}) [A]" in df.columns]
         inv_2str_median = df[inv_2str_cols].median(axis=1) if inv_2str_cols else pd.Series(np.nan, index=df.index)
@@ -183,7 +192,7 @@ def analyze_dc_current(dc_df: pd.DataFrame, output_md_path: Path, date_str: str)
         for mppt_idx, string_count in enumerate(mppt_cfg):
             mppt_num = mppt_idx + 1
             col_name = f"Corrente DC MPPT {mppt_num} (INV {inv}) [A]"
-            
+
             # Fallback for aggregate columns
             if col_name not in df.columns:
                 if mppt_num == 1:
@@ -195,21 +204,21 @@ def analyze_dc_current(dc_df: pd.DataFrame, output_md_path: Path, date_str: str)
                 else:
                     mppt_details[inv_label].append({"mppt": mppt_num, "strings": string_count, "v": None, "exp": None})
                     continue
-            
-            series = df[col_name]
-            # Get latest non-nan value
-            latest_val = None
-            series_valid = series.dropna()
-            if not series_valid.empty:
-                latest_val = float(series_valid.iloc[-1])
 
-            # Expected current proportional logic
+            series = df[col_name]
+
+            # Time-matched v and exp: read both from the fleet-median reference row so
+            # the ratio always reflects the same moment. If the MPPT has no data at that
+            # row (NaN/x gap), v=None → dot renders grey (no data), not a stale yellow.
             nominal = 18.0 if string_count == 2 else 9.0
             expected_series = nominal * (fleet_2str_median / 18.0)
+            latest_val = None
             expected_val = None
-            expected_valid = expected_series.dropna()
-            if not expected_valid.empty:
-                expected_val = float(expected_valid.iloc[-1])
+            if fleet_ref_idx is not None and fleet_ref_idx < len(series):
+                ref_v = series.iloc[fleet_ref_idx]
+                ref_e = expected_series.iloc[fleet_ref_idx]
+                latest_val = float(ref_v) if pd.notna(ref_v) else None
+                expected_val = float(ref_e) if pd.notna(ref_e) else None
 
             mppt_details[inv_label].append({
                 "mppt": mppt_num,
