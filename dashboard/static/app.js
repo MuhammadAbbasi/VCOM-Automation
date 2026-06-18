@@ -69,6 +69,7 @@ function updateDashboard(data) {
   updateHistory(data);
   updateDowntime(data);
   updateSensorsTab(data);
+  updateDataQuality(data);
 }
 
 // ─── 1. Macro health ──────────────────────────────────────────────────────
@@ -970,11 +971,12 @@ function renderActiveDetailTab() {
   if (!activeTab) return;
   const id = activeTab.id;
 
-  if (id === "tab-pr")   updatePRDetail(lastData);
-  if (id === "tab-temp") updateTempDetail(lastData);
-  if (id === "tab-dc")   updateDCDetail(lastData);
-  if (id === "tab-ac")   updateACDetail(lastData);
+  if (id === "tab-pr")     updatePRDetail(lastData);
+  if (id === "tab-temp")   updateTempDetail(lastData);
+  if (id === "tab-dc")     updateDCDetail(lastData);
+  if (id === "tab-ac")     updateACDetail(lastData);
   if (id === "tab-sensors") updateSensorsTab(lastData);
+  if (id === "tab-logger") updateDataQuality(lastData);
 }
 
 
@@ -1011,6 +1013,194 @@ function initSortableHeaders() {
   });
 }
 
+
+// ─── Data Quality / Logger Tab ────────────────────────────────────────────────
+
+const DQ_METRICS = [
+  { id: "pr",   label: "Performance Ratio", shortLabel: "PR",   icon: "⚡", valueKey: "pr_v"   },
+  { id: "temp", label: "Temperatura",        shortLabel: "Temp", icon: "🌡️", valueKey: "temp_v" },
+  { id: "dc",   label: "Corrente DC",        shortLabel: "DC",  icon: "🔌", valueKey: "dc_v"   },
+  { id: "ac",   label: "Potenza AC",         shortLabel: "AC",  icon: "⚙️", valueKey: "ac_v"   },
+  { id: "iso",  label: "Isolamento",         shortLabel: "ISO", icon: "🛡️", valueKey: "iso_v"  },
+];
+
+const DQ_FILE_LABELS = {
+  PR:                   { label: "PR Inverter",             icon: "⚡" },
+  Potenza_AC:           { label: "Potenza AC",              icon: "⚙️" },
+  Corrente_DC:          { label: "Corrente DC",             icon: "🔌" },
+  Resistenza_Isolamento:{ label: "Resistenza Isolamento",   icon: "🛡️" },
+  Temperatura:          { label: "Temperatura",             icon: "🌡️" },
+  Irraggiamento:        { label: "Irraggiamento",           icon: "☀️" },
+  Potenza_Attiva:       { label: "Potenza Attiva (Grid)",   icon: "🔌" },
+};
+
+/**
+ * Classify every inverter×metric cell into one of four states:
+ *   "ok"      - value is a valid number (data present)
+ *   "missing" - value is null/undefined during expected operational period
+ *   "night"   - AC is 0 or null but the plant is not generating (off-hours)
+ *   "na"      - inverter not in health map at all
+ */
+function buildDataCoverage(data) {
+  const health = data.inverter_health || {};
+  const macro  = data.macro_health   || {};
+
+  // Plant is "active" if any inverter has AC power > 0
+  const plantActive = Object.values(health).some(h => (h.ac_v || 0) > 0);
+
+  return DQ_METRICS.map(m => {
+    const perInverter = INVERTER_NAMES.map(name => {
+      const h = health[name];
+      if (!h) return { name, state: "na" };
+
+      const val = h[m.valueKey];
+      const hasValue = val !== null && val !== undefined && !isNaN(Number(val));
+
+      if (hasValue) return { name, state: "ok", value: Number(val) };
+
+      // AC at night: missing data vs genuinely off
+      if (m.id === "ac" && !plantActive) return { name, state: "night" };
+
+      return { name, state: "missing" };
+    });
+
+    const ok      = perInverter.filter(r => r.state === "ok");
+    const missing = perInverter.filter(r => r.state === "missing");
+    const night   = perInverter.filter(r => r.state === "night");
+
+    return { ...m, perInverter, ok, missing, night, total: INVERTER_NAMES.length };
+  });
+}
+
+function updateDataQuality(data) {
+  if (!data) return;
+
+  const coverage = buildDataCoverage(data);
+  const macro    = data.macro_health || {};
+  const fs       = data.file_status  || {};
+
+  // ── Updated-at badge ──────────────────────────────────────────────────────
+  const updatedAt = el("dq-updated-at");
+  if (updatedAt) {
+    const sync = macro.last_sync ? macro.last_sync.substring(11, 16) : "—";
+    updatedAt.textContent = `Aggiornato: ${sync}`;
+  }
+
+  // ── Summary cards (one per metric) ────────────────────────────────────────
+  const summaryGrid = el("dq-summary-grid");
+  if (summaryGrid) {
+    summaryGrid.innerHTML = coverage.map(m => {
+      const pct     = m.total > 0 ? Math.round((m.ok.length / m.total) * 100) : 0;
+      const hasMiss = m.missing.length > 0;
+      const cardCls = hasMiss ? "dq-metric-card dq-card-warn" : "dq-metric-card dq-card-ok";
+      const badge   = hasMiss
+        ? `<span class="dq-badge dq-badge-warn">${m.missing.length} mancanti</span>`
+        : `<span class="dq-badge dq-badge-ok">Completo</span>`;
+      const barFill  = hasMiss ? "dq-bar-warn" : "dq-bar-ok";
+      return `
+        <div class="${cardCls}">
+          <div class="dq-card-top">
+            <span class="dq-card-icon">${m.icon}</span>
+            <span class="dq-card-label">${m.label}</span>
+            ${badge}
+          </div>
+          <div class="dq-card-counts">${m.ok.length} / ${m.total} inverter</div>
+          <div class="dq-bar-track">
+            <div class="dq-bar-fill ${barFill}" style="width:${pct}%"></div>
+          </div>
+        </div>`;
+    }).join("");
+  }
+
+  // ── Extraction file status ─────────────────────────────────────────────────
+  const extGrid = el("dq-extraction-grid");
+  if (extGrid) {
+    const now = Date.now();
+    extGrid.innerHTML = Object.entries(DQ_FILE_LABELS).map(([key, meta]) => {
+      const info   = fs[key] || {};
+      const status = info.status || "pending";
+      const ts     = info.timestamp || null;
+      let ageStr   = "—";
+      if (ts) {
+        const ageMin = Math.round((now - new Date(ts).getTime()) / 60000);
+        ageStr = ageMin < 60 ? `${ageMin}m fa` : `${Math.floor(ageMin / 60)}h ${ageMin % 60}m fa`;
+      }
+      const cls = status === "success" ? "dq-ext-ok"
+                : status === "failed"  ? "dq-ext-fail"
+                : status === "empty"   ? "dq-ext-empty"
+                :                        "dq-ext-pending";
+      const dot = status === "success" ? "🟢" : status === "failed" ? "🔴" : status === "empty" ? "🟡" : "⚪";
+      return `
+        <div class="dq-ext-card ${cls}">
+          <div class="dq-ext-icon">${meta.icon}</div>
+          <div class="dq-ext-body">
+            <div class="dq-ext-name">${meta.label}</div>
+            <div class="dq-ext-status">${dot} ${status}</div>
+          </div>
+          <div class="dq-ext-age">${ageStr}</div>
+        </div>`;
+    }).join("");
+  }
+
+  // ── Coverage matrix ────────────────────────────────────────────────────────
+  const matrixBody = el("dq-matrix-body");
+  if (matrixBody) {
+    // Build a lookup: metricId → { invName → state }
+    const stateMap = {};
+    coverage.forEach(m => {
+      stateMap[m.id] = {};
+      m.perInverter.forEach(r => { stateMap[m.id][r.name] = r.state; });
+    });
+
+    let html = "";
+    let lastGroup = null;
+    INVERTER_NAMES.forEach(name => {
+      const group = name.replace("INV ", "").substring(0, 3); // "TX1", "TX2", "TX3"
+      if (group !== lastGroup) {
+        lastGroup = group;
+        html += `<tr class="dq-group-sep"><td colspan="6">${group}</td></tr>`;
+      }
+      const short = name.replace("INV ", "");
+      const cells = DQ_METRICS.map(m => {
+        const state = stateMap[m.id]?.[name] || "na";
+        const cls   = `dq-cell dq-cell-${state}`;
+        const tip   = state === "ok"      ? `${m.shortLabel}: dato presente`
+                    : state === "missing" ? `${m.shortLabel}: DATO MANCANTE`
+                    : state === "night"   ? `${m.shortLabel}: fuori orario`
+                    :                       `${m.shortLabel}: nessun dato`;
+        return `<td><span class="${cls}" title="${tip}"></span></td>`;
+      }).join("");
+      // Highlight rows with any missing cell
+      const hasMissing = DQ_METRICS.some(m => stateMap[m.id]?.[name] === "missing");
+      const rowCls = hasMissing ? "dq-row-warn" : "";
+      html += `<tr class="${rowCls}"><td class="dq-inv-name">${short}</td>${cells}</tr>`;
+    });
+    matrixBody.innerHTML = html;
+  }
+
+  // ── Missing detail (per metric, only those with missing data) ─────────────
+  const missingDetail = el("dq-missing-detail");
+  if (missingDetail) {
+    const withMissing = coverage.filter(m => m.missing.length > 0);
+    if (withMissing.length === 0) {
+      missingDetail.innerHTML = `<div class="dq-all-ok">✅ Tutti i dati presenti per tutti gli inverter nell'ultimo ciclo.</div>`;
+    } else {
+      missingDetail.innerHTML = withMissing.map(m => {
+        const chips = m.missing.map(r =>
+          `<span class="dq-inv-chip">${r.name.replace("INV ", "")}</span>`
+        ).join("");
+        return `
+          <div class="dq-missing-block">
+            <div class="dq-missing-header">
+              ${m.icon} <strong>${m.label}</strong>
+              <span class="dq-missing-count">${m.missing.length} inverter senza dato</span>
+            </div>
+            <div class="dq-inv-chips">${chips}</div>
+          </div>`;
+      }).join("");
+    }
+  }
+}
 
 // ─── WebSocket and Config ───────────────────────────────────────────────────
 

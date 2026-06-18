@@ -58,6 +58,7 @@
     <button class="tab-btn" data-tab="tab-sensors"><span class="tab-icon">📡</span> Sensori</button>
     <button class="tab-btn" data-tab="tab-analytics"><span class="tab-icon">📈</span> Analisi</button>
     <button class="tab-btn" data-tab="tab-trackers"><span class="tab-icon">🛰️</span> Campo Tracker</button>
+    <button class="tab-btn" data-tab="tab-logger"><span class="tab-icon">📋</span> Qualità Dati</button>
     <button class="tab-btn" data-tab="tab-chat"><span class="tab-icon">💬</span> Chat AI</button>
   </nav>
 
@@ -588,6 +589,60 @@
       </div>
     </section>
   </main>
+
+  <!-- ═══════════════════════════════ DATA QUALITY / LOGGER TAB ═══════════════════════════════ -->
+  <main id="tab-logger" class="tab-content">
+    <section>
+      <div class="detail-header">
+        <h2>📋 Qualità &amp; Copertura Dati</h2>
+        <span class="dq-updated-at" id="dq-updated-at"></span>
+      </div>
+
+      <!-- ── Metric coverage summary cards ── -->
+      <div class="dq-summary-grid" id="dq-summary-grid"></div>
+
+      <!-- ── Extraction file status ── -->
+      <div class="dq-section-title">
+        <span>📂 Stato Estrazione File</span>
+        <span class="dq-section-hint">Ultimo ciclo di estrazione per sorgente dati</span>
+      </div>
+      <div class="dq-extraction-grid" id="dq-extraction-grid"></div>
+
+      <!-- ── Coverage matrix ── -->
+      <div class="dq-section-title" style="margin-top:1.5rem;">
+        <span>🔲 Matrice Copertura (36 Inverter × 5 Metriche)</span>
+        <span class="dq-section-hint">
+          <span class="dq-legend-item dq-ok">■</span> Dato presente
+          <span class="dq-legend-item dq-missing">■</span> Dato mancante
+          <span class="dq-legend-item dq-night">■</span> Fuori orario / notte
+          <span class="dq-legend-item dq-na">■</span> Nessun dato storico
+        </span>
+      </div>
+      <div class="dq-matrix-wrapper">
+        <table class="dq-matrix" id="dq-matrix">
+          <thead>
+            <tr>
+              <th class="dq-inv-col">Inverter</th>
+              <th><span title="Performance Ratio">⚡ PR</span></th>
+              <th><span title="Temperatura">🌡️ Temp</span></th>
+              <th><span title="Corrente DC">🔌 DC</span></th>
+              <th><span title="Potenza AC">⚙️ AC</span></th>
+              <th><span title="Resistenza Isolamento">🛡️ ISO</span></th>
+            </tr>
+          </thead>
+          <tbody id="dq-matrix-body"></tbody>
+        </table>
+      </div>
+
+      <!-- ── Missing data detail per metric ── -->
+      <div class="dq-section-title" style="margin-top:1.5rem;">
+        <span>⚠️ Dettaglio Dati Mancanti</span>
+        <span class="dq-section-hint">Solo metriche con inverter senza dato nell'ultimo ciclo</span>
+      </div>
+      <div id="dq-missing-detail"></div>
+    </section>
+  </main>
+  <!-- ═══════════════════════════════════════════════════════════════════════════════════════════ -->
 
   <div id="settings-modal" class="modal-hidden">
     <div class="modal-content">
