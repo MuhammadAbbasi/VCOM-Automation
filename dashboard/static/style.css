@@ -657,9 +657,9 @@ header {
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   position: sticky;
-  top: 74px;
+  top: 85px;
   /* below header */
-  z-index: 9;
+  z-index: 999;
 }
 
 .tab-nav::-webkit-scrollbar {
@@ -3113,12 +3113,9 @@ section>h2 {
 /* ── Summary metric cards ────────────────────────────────────────────────── */
 .dq-summary-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 0.75rem;
   margin-bottom: 1rem;
-}
-@media (max-width: 900px) {
-  .dq-summary-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 .dq-metric-card {

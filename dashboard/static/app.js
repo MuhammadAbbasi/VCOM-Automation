@@ -1022,6 +1022,8 @@ const DQ_METRICS = [
   { id: "dc",   label: "Corrente DC",        shortLabel: "DC",  icon: "🔌", valueKey: "dc_v"   },
   { id: "ac",   label: "Potenza AC",         shortLabel: "AC",  icon: "⚙️", valueKey: "ac_v"   },
   { id: "iso",  label: "Isolamento",         shortLabel: "ISO", icon: "🛡️", valueKey: "iso_v"  },
+  { id: "irr",  label: "Irraggiamento",      shortLabel: "IRR", icon: "☀️", valueKey: "irr_v"  },
+  { id: "act",  label: "Potenza Attiva",     shortLabel: "ACT", icon: "📊", valueKey: "act_v"  },
 ];
 
 const DQ_FILE_LABELS = {
@@ -1158,7 +1160,7 @@ function updateDataQuality(data) {
       const group = name.replace("INV ", "").substring(0, 3); // "TX1", "TX2", "TX3"
       if (group !== lastGroup) {
         lastGroup = group;
-        html += `<tr class="dq-group-sep"><td colspan="6">${group}</td></tr>`;
+        html += `<tr class="dq-group-sep"><td colspan="8">${group}</td></tr>`;
       }
       const short = name.replace("INV ", "");
       const cells = DQ_METRICS.map(m => {

@@ -270,8 +270,9 @@ def scan_active_faults(snapshot: dict, stale_trackers: list) -> dict[str, dict]:
 
 
 _FAULT_TYPE_ALIASES: dict[str, str] = {
-    # Watchdog emits "INSULATION FAULT"; engine key is "ISO FAULT" — no substring overlap
+    # Watchdog emits "INSULATION FAULT" or "GUASTO ISOLAMENTO"; engine key is "ISO FAULT" — no substring overlap
     "INSULATION FAULT": "ISO FAULT",
+    "GUASTO ISOLAMENTO": "ISO FAULT",
 }
 
 

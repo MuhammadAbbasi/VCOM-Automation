@@ -309,20 +309,88 @@ def select_inverters(page) -> None:
     cfg = load_config()
     logger.info("Selecting target inverters...")
     try:
+        target_ids = cfg.get("INVERTER_IDS", [])
+
+        # Navigate to 'PR inverter' tab to configure selection (it must be a component tab)
+        logger.info("Navigating to 'PR inverter' tab to configure selection...")
+        pr_link = page.locator('text=/^\\s*PR inverter\\s*$/i').first
+        pr_link.wait_for(state="visible", timeout=20_000)
+        time.sleep(1) # Settle
+        pr_link.click(force=True)
+        time.sleep(2)
+        dismiss_popup(page)
+
+        # Toggle 'Valori in minuti' ON to expose the selection panel
+        toggle_minute_values(page, "PR inverter")
+
+        # Wait for selection panel innerHTML to be populated (indicates dynamic loading finished)
+        page.wait_for_function("""() => {
+            const el = document.querySelector('#chartComponentSelection');
+            return el && el.innerHTML.trim() !== '';
+        }""", timeout=30_000)
+        dismiss_popup(page)
+
+        # 1. Expand selection panel if it is collapsed (hidden)
+        container = page.locator("#chartComponentSelection")
+        # Ensure it is attached/present in the DOM first
+        container.wait_for(state="attached", timeout=20_000)
+        if not container.is_visible():
+            logger.info("Inverter selection panel is collapsed. Expanding it...")
+            toggle_btn = page.locator("a#headingComponentSelection")
+            if toggle_btn.count() > 0:
+                toggle_btn.click()
+                time.sleep(1.5) # wait for expansion animation
+        
+        # Now wait for it to be visible
+        container.wait_for(state="visible", timeout=10_000)
+        
+        # 2. Check if all 36 inverters are already selected (their spans have 'component-colorized' class)
+        all_inverters_selected = True
+        for inv_id in target_ids:
+            span = page.locator(f"span#{inv_id}")
+            if span.count() > 0:
+                classes = span.get_attribute("class") or ""
+                if "component-colorized" not in classes:
+                    all_inverters_selected = False
+                    break
+            else:
+                all_inverters_selected = False
+                break
+
+        # 3. Check if SunGrow is checked (should NOT be checked).
+        # We check both the input state and the span's class to be absolutely sure.
+        sungrow_checked = False
+        sungrow_cb = page.locator("input#checkbox-Id27848313")
+        if sungrow_cb.count() > 0:
+            if sungrow_cb.is_checked():
+                sungrow_checked = True
+
+        sungrow_span = page.locator("span#Id27848313")
+        if sungrow_span.count() > 0:
+            classes = sungrow_span.get_attribute("class") or ""
+            if "component-colorized" in classes:
+                sungrow_checked = True
+
+        if all_inverters_selected and not sungrow_checked:
+            logger.info("All 36 target inverters are already selected and SunGrow is deselected. Skipping selection steps.")
+            return
+
+        logger.info("Selection mismatch or other user changed selection. Performing check/uncheck steps...")
+
         # Deselect all first for a clean slate
         btn_deselect = page.locator('button.selectNone:visible, button:has-text("Deseleziona tutto"):visible').first
         if btn_deselect.count() > 0 and btn_deselect.is_visible():
             btn_deselect.click()
             time.sleep(1)
 
-        for inv_id in cfg.get("INVERTER_IDS", []):
+        # Select target inverters
+        for inv_id in target_ids:
             cb = page.locator(f"input#checkbox-{inv_id}")
-            if cb.is_visible():
-                cb.check(force=True) # Use force=True as labels often intercept clicks
+            if cb.count() > 0:
+                cb.check(force=True) # Use force=True as labels often intercept clicks or inputs are styled opacity: 0
 
         # Ensure SunGrow is NOT checked
-        sungrow_cb = page.locator('input[id*="Id27848313"]')
-        if sungrow_cb.is_visible() and sungrow_cb.is_checked():
+        if sungrow_cb.count() > 0 and sungrow_cb.is_checked():
             sungrow_cb.uncheck(force=True)
 
         # Refresh chart after selection - Use a specific selector to avoid strict mode violation

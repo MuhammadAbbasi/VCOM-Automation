@@ -423,13 +423,45 @@ def normalize_pr(val):
 def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFrame,
                          dc_df: pd.DataFrame, pr_df: pd.DataFrame, irrad_df: pd.DataFrame, 
                          iso_df: pd.DataFrame = None,
-                         daylight_start: float = 7.0, daylight_end: float = 19.5, settings: dict = None) -> dict:
+                         daylight_start: float = 7.0, daylight_end: float = 19.5, settings: dict = None,
+                         attiva_df: pd.DataFrame = None) -> dict:
     """
     Compute health flags from the latest available NON-NAN values in each metric file.
     """
     if settings is None:
         settings = DEFAULT_SETTINGS
     thresholds = settings.get("thresholds", DEFAULT_SETTINGS["thresholds"])
+
+    # Get latest Potenza attiva limit
+    act_val = None
+    if attiva_df is not None and not attiva_df.empty:
+        priority_names = [
+            "Valore nominale potenza attiva",
+            "Valore nominale della potenza attiva (gestore di rete)",
+            "Valore nominale della potenza attiva (terzi)"
+        ]
+        limit_col = None
+        for p_name in priority_names:
+            found = [c for c in attiva_df.columns if p_name in c]
+            if found:
+                limit_col = found[0]
+                break
+        if not limit_col:
+            limit_cols = [c for c in attiva_df.columns if "Valore nominale" in c and "potenza attiva" in c.lower()]
+            if limit_cols:
+                limit_col = limit_cols[0]
+        if limit_col:
+            temp_df_act = attiva_df.dropna(subset=[limit_col])
+            if not temp_df_act.empty:
+                latest_row = temp_df_act.iloc[-1]
+                val_raw = latest_row[limit_col]
+                try:
+                    if isinstance(val_raw, str):
+                        act_val = float(val_raw.replace("%", "").replace(",", ".").strip())
+                    else:
+                        act_val = float(val_raw)
+                except:
+                    pass
 
     inverter_health = {}
     poa_val = 0 # Initialize here so it's available for the AC logic below
@@ -829,6 +861,33 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
         health["data_time"] = format_ora(ora)
         health["is_stabilized"] = bool(ora >= (daylight_start + (STABILIZATION_MINUTES / 60.0)))
 
+        # Irradiance zone check for each inverter
+        irr_val = None
+        if sensor_data:
+            # Determine zone keywords based on inv_id
+            if "TX1" in inv_id:
+                zone_keywords = ["JB1", "JB-SM1"]
+            elif "TX2" in inv_id:
+                zone_keywords = ["JB2"]
+            elif "TX3" in inv_id:
+                zone_keywords = ["JB3", "JB-SM3"]
+            else:
+                zone_keywords = []
+
+            zone_vals = []
+            for col, val in sensor_data.items():
+                if any(kw in col for kw in zone_keywords):
+                    if val is not None and not pd.isna(val):
+                        try:
+                            zone_vals.append(float(val))
+                        except:
+                            pass
+            if zone_vals:
+                irr_val = float(np.mean(zone_vals))
+        
+        health["irr_v"] = irr_val
+        health["act_v"] = act_val
+
         inverter_health[inv_label] = health
 
     return inverter_health, plant_drop_history, sensor_data
@@ -1093,7 +1152,7 @@ def analyze_site(date_str: str) -> None:
 
         # Compute health from latest values (use actual_sunset and theory_sunset for context)
         logger.info("Computing health flags...")
-        inverter_health, plant_drop_history, sensor_data = compute_latest_health(date_str, ac_df, temp_df, dc_df, pr_df, irrad_df=irrad_df, iso_df=iso_df, daylight_start=daylight_start, daylight_end=actual_sunset, settings=settings)
+        inverter_health, plant_drop_history, sensor_data = compute_latest_health(date_str, ac_df, temp_df, dc_df, pr_df, irrad_df=irrad_df, iso_df=iso_df, daylight_start=daylight_start, daylight_end=actual_sunset, settings=settings, attiva_df=attiva_df)
 
         macro_health = compute_macro_health(inverter_health, daylight_start=daylight_start, ac_df=ac_df)
         macro_health["sunset_time"] = format_ora(theory_sunset)
@@ -1604,20 +1663,48 @@ def analyze_site(date_str: str) -> None:
             if iso_status == "red":
                 if iso_alarm_id in prev_alarm_map:
                     alarm = prev_alarm_map[iso_alarm_id]
-                    alarm["message"] = f"Resistenza isolamento critica: {iso_val} kΩ (Soglia: 50 kΩ)"
                 else:
                     alarm = {
                         "id": iso_alarm_id,
                         "inverter": inv_label,
                         "type": "GUASTO ISOLAMENTO",
                         "severity": "red",
-                        "trip_time": timestamp,
-                        "message": f"ISO resistance critically low: {iso_val} kΩ (Threshold: 50 kΩ)"
+                        "trip_time": timestamp
                     }
+
+                duration_str = ""
+                try:
+                    trip_time_str = alarm.get("trip_time")
+                    if trip_time_str:
+                        if "T" in trip_time_str:
+                            trip_dt = datetime.fromisoformat(trip_time_str)
+                        else:
+                            trip_dt = datetime.strptime(f"{date_str} {trip_time_str}", "%Y-%m-%d %H:%M")
+                        duration_min = int(round((datetime.now() - trip_dt).total_seconds() / 60))
+                        if duration_min <= 0:
+                            duration_str = "appena rilevato"
+                        elif duration_min < 60:
+                            duration_str = f"attivo da {duration_min} min"
+                        else:
+                            hrs = duration_min // 60
+                            mins = duration_min % 60
+                            if mins > 0:
+                                duration_str = f"attivo da {hrs} h {mins} min"
+                            else:
+                                duration_str = f"attivo da {hrs} h"
+                except Exception as e:
+                    logger.error(f"Error calculating ISO alarm duration: {e}")
+
+                msg_suffix = " — necessaria ispezione sul campo"
+                if duration_str:
+                    msg_suffix += f" ({duration_str})"
+
+                alarm["message"] = f"Resistenza isolamento critica: {iso_val} kΩ (Soglia: 50 kΩ){msg_suffix}"
+
                 if should_alert("iso_fault", "dashboard"):
                     current_active.append(alarm)
                 if should_alert("iso_fault", "telegram") and should_send_tg(alarm):
-                    fire_tg(alarm, "INSULATION FAULT", f"🔌 *INSULATION FAULT* ({inv_label})\nValue: *{iso_val} kΩ* — field inspection required")
+                    fire_tg(alarm, "GUASTO ISOLAMENTO", f"🔌 *GUASTO ISOLAMENTO* ({inv_label})\nValore: *{iso_val} kΩ*{msg_suffix}")
             else:
                 if iso_alarm_id in prev_alarm_map:
                     prev_alarm = prev_alarm_map[iso_alarm_id]
