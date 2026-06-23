@@ -2000,9 +2000,6 @@ function updateTrackers(trackers) {
         return match ? parseInt(match[1]) : null;
     };
 
-    const tno = extractNum(t.tracker_no);
-    if (tno) return tno;
-
     const tcu = extractNum(t.tcu_id);
     const ncuStr = String(t.ncu_id || "").replace("_", " "); // "NCU_01" -> "NCU 01"
     
@@ -2011,6 +2008,10 @@ function updateTrackers(trackers) {
         if (ncuStr.includes("NCU 02") || ncuStr.includes("NCU 2")) return 121 + tcu;
         if (ncuStr.includes("NCU 03") || ncuStr.includes("NCU 3")) return 121 + 122 + tcu;
     }
+
+    const tno = extractNum(t.tracker_no);
+    if (tno) return tno;
+
     return null;
   };
 
