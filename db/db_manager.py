@@ -1285,12 +1285,17 @@ def resolve_tracker_id(ncu, tcu) -> int:
         return 0
 
 def save_tracker_data(records: list) -> None:
-    """Batch upsert tracker records into the database."""
+    """Batch upsert tracker records into the database and prune stale records older than 24 hours."""
     conn = get_data_conn()
     timestamp = datetime.now().isoformat()
+    from datetime import timedelta
+    limit_time = (datetime.now() - timedelta(hours=24)).isoformat()
     
     try:
         with conn:
+            # Delete stale tracker status records older than 24 hours
+            conn.execute("DELETE FROM tracker_status WHERE last_update < ?", (limit_time,))
+            
             conn.executemany("""
                 INSERT INTO tracker_status (
                     ncu_id, tcu_id, tracker_no, target_angle, actual_angle, alarm, mode, last_update
@@ -1318,10 +1323,15 @@ def save_tracker_data(records: list) -> None:
         logger.error(f"Failed to save tracker data: {e}")
 
 def get_all_tracker_status() -> list:
-    """Retrieve current status for all trackers."""
+    """Retrieve current status for all trackers, filtering out stale records older than 24 hours."""
+    from datetime import timedelta
     conn = get_data_conn()
     try:
-        cursor = conn.execute("SELECT * FROM tracker_status ORDER BY ncu_id, tcu_id")
+        limit_time = (datetime.now() - timedelta(hours=24)).isoformat()
+        cursor = conn.execute(
+            "SELECT * FROM tracker_status WHERE last_update >= ? ORDER BY ncu_id, tcu_id",
+            (limit_time,)
+        )
         cols = [column[0] for column in cursor.description]
         results = []
         for row in cursor.fetchall():
@@ -1332,9 +1342,11 @@ def get_all_tracker_status() -> list:
         return []
 
 def get_tracker_summary() -> dict:
-    """Get high-level summary of tracker field (Avg angles, alarms)."""
+    """Get high-level summary of tracker field (Avg angles, alarms), filtering out stale records."""
+    from datetime import timedelta
     conn = get_data_conn()
     try:
+        limit_time = (datetime.now() - timedelta(hours=24)).isoformat()
         # 1. NCU-wise Averages
         cursor = conn.execute("""
             SELECT ncu_id, 
@@ -1342,8 +1354,9 @@ def get_tracker_summary() -> dict:
                    COUNT(*) as total,
                    SUM(CASE WHEN alarm != 'Normal' AND alarm != '' THEN 1 ELSE 0 END) as alarms
             FROM tracker_status 
+            WHERE last_update >= ?
             GROUP BY ncu_id
-        """)
+        """, (limit_time,))
         summary = {}
         for row in cursor.fetchall():
             ncu_val = row[0]
@@ -1362,7 +1375,10 @@ def get_tracker_summary() -> dict:
             }
         
         # 2. Modes distribution
-        cursor = conn.execute("SELECT mode, COUNT(*) FROM tracker_status GROUP BY mode")
+        cursor = conn.execute(
+            "SELECT mode, COUNT(*) FROM tracker_status WHERE last_update >= ? GROUP BY mode",
+            (limit_time,)
+        )
         modes = {row[0]: row[1] for row in cursor.fetchall()}
         
         return {
