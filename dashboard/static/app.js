@@ -2069,7 +2069,27 @@ function updateTrackers(trackers) {
   if (el("stat-last-sync") && trackers.length > 0) {
       const latest = [...trackers].sort((a,b) => (b.last_update || "").localeCompare(a.last_update || ""))[0];
       if (latest && latest.last_update) {
-          el("stat-last-sync").textContent = latest.last_update.split("T")[1].substring(0, 5);
+          const rawUpdate = latest.last_update;
+          let formattedDate = "";
+          let formattedTime = "";
+          if (rawUpdate.includes("T")) {
+              const parts = rawUpdate.split("T");
+              const dateParts = parts[0].split("-");
+              formattedDate = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
+              formattedTime = parts[1].substring(0, 5);
+          } else if (rawUpdate.includes(" ")) {
+              const parts = rawUpdate.split(" ");
+              const dateParts = parts[0].split("-");
+              formattedDate = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
+              formattedTime = parts[1].substring(0, 5);
+          } else {
+              formattedTime = rawUpdate;
+          }
+          if (formattedDate) {
+              el("stat-last-sync").innerHTML = `${formattedTime}<div style="font-size: 0.8rem; font-weight: 500; opacity: 0.8; margin-top: 0.25rem; font-family: 'Outfit', sans-serif;">${formattedDate}</div>`;
+          } else {
+              el("stat-last-sync").textContent = formattedTime;
+          }
       }
   }
 
