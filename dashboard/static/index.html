@@ -674,7 +674,8 @@
                     step="0.1"></label><label>Temp Giallo °C <input type="number" id="cfg-temp-yellow"
                     step="0.1"></label></div>
               <div class="settings-row"><label>Fermo Min. (min) <input type="number" id="cfg-min-downtime"
-                    step="1"></label></div>
+                    step="1"></label><label>Deviazione Tracker (°) <input type="number" id="cfg-tracker-deviation"
+                    step="0.1"></label></div>
               <div class="settings-row"><label>DC Mattina Verde <input type="number" id="cfg-dcm-green"
                     step="0.1"></label><label>DC Mattina Giallo <input type="number" id="cfg-dcm-yellow"
                     step="0.1"></label></div>
@@ -811,6 +812,12 @@
                       style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">🛰️</span> Comunicazione Tracker (MQTT Mancante)</td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-tracker-db"></td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-tracker-tg"></td>
+                </tr>
+                <tr>
+                  <td style="padding:0.75rem;"><span
+                      style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">📐</span> Deviazione Angolo Tracker (>Soglia)</td>
+                  <td style="text-align:center;"><input type="checkbox" id="pref-tracker-dev-db"></td>
+                  <td style="text-align:center;"><input type="checkbox" id="pref-tracker-dev-tg"></td>
                 </tr>
                 <tr>
                   <td style="padding:0.75rem;"><span

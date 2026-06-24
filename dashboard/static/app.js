@@ -1311,6 +1311,9 @@ function applyConfig(config) {
     if (el("cfg-min-downtime") && t.min_downtime_minutes !== undefined) {
       el("cfg-min-downtime").value = t.min_downtime_minutes;
     }
+    if (el("cfg-tracker-deviation") && t.tracker_deviation !== undefined) {
+      el("cfg-tracker-deviation").value = t.tracker_deviation;
+    }
   }
 
   // Alert Preferences
@@ -1350,6 +1353,8 @@ function applyConfig(config) {
 
     if (el("pref-tracker-db")) el("pref-tracker-db").checked = !!ap.tracker_comm?.dashboard;
     if (el("pref-tracker-tg")) el("pref-tracker-tg").checked = !!ap.tracker_comm?.telegram;
+    if (el("pref-tracker-dev-db")) el("pref-tracker-dev-db").checked = !!ap.tracker_deviation?.dashboard;
+    if (el("pref-tracker-dev-tg")) el("pref-tracker-dev-tg").checked = !!ap.tracker_deviation?.telegram;
     if (el("pref-mqtt-db")) el("pref-mqtt-db").checked = !!ap.mqtt_pulse?.dashboard;
     if (el("pref-mqtt-tg")) el("pref-mqtt-tg").checked = !!ap.mqtt_pulse?.telegram;
 
@@ -1408,7 +1413,8 @@ async function handleSaveSettings() {
         afternoon_green: num("cfg-dca-green", 5.0),
         afternoon_yellow: num("cfg-dca-yellow", 0.5)
       },
-      min_downtime_minutes: num("cfg-min-downtime", 9)
+      min_downtime_minutes: num("cfg-min-downtime", 9),
+      tracker_deviation: num("cfg-tracker-deviation", 5.0)
     },
     colors: {
       green: val("cfg-color-green") || "#10b981",
@@ -1476,6 +1482,10 @@ async function handleSaveSettings() {
         dashboard: !!el("pref-tracker-db")?.checked,
         telegram: !!el("pref-tracker-tg")?.checked
       },
+      tracker_deviation: {
+        dashboard: !!el("pref-tracker-dev-db")?.checked,
+        telegram: !!el("pref-tracker-dev-tg")?.checked
+      },
       mqtt_pulse: {
         dashboard: !!el("pref-mqtt-db")?.checked,
         telegram: !!el("pref-mqtt-tg")?.checked
@@ -1508,6 +1518,7 @@ Threshold Updated:
 - PR Green: ${newConfig.thresholds.pr.green}%
 - Temp Red: ${newConfig.thresholds.temp.red}°C
 - Min Downtime: ${newConfig.thresholds.min_downtime_minutes} min
+- Tracker Deviation: ${newConfig.thresholds.tracker_deviation}°
 - Collection: ${newConfig.collection_interval} min
 
 Telegram: ${newConfig.telegram.enabled ? "ENABLED" : "DISABLED"}
@@ -2206,14 +2217,9 @@ function updateTrackers(trackers) {
   if (devContainer) {
     let devHtml = "";
     ranges.forEach(range => {
-      devHtml += `
-        <div class="deviation-ncu-block">
-          <div class="deviation-label">
-            <span>${range.id} Accuracy Health</span>
-            <span style="opacity: 0.6">50 trackers per row</span>
-          </div>
-          <div class="deviation-led-strip">`;
-      
+      let stripHtml = "";
+      const counts = { green: 0, yellow: 0, red: 0, purple: 0, grey: 0 };
+
       for (let i = range.start; i <= range.end; i++) {
         const t = trackerMap[i];
         let colorClass = "grey";
@@ -2222,19 +2228,39 @@ function updateTrackers(trackers) {
         if (t) {
           const isNoState = String(t.mode).includes("No State");
           const dev = Math.abs(t.actual_angle - t.target_angle);
+          const threshold = currentConfig?.thresholds?.tracker_deviation || 5.0;
           
           if (isNoState) colorClass = "purple";
-          else if (dev <= 5) colorClass = "green";
-          else if (dev <= 10) colorClass = "yellow";
+          else if (dev <= threshold) colorClass = "green";
+          else if (dev <= threshold * 2) colorClass = "yellow";
           else colorClass = "red";
           
           tip = `Tracker ${i}\nMode: ${t.mode}\nActual: ${t.actual_angle.toFixed(1)}°\nTarget: ${t.target_angle.toFixed(1)}°\nDev: ${dev.toFixed(1)}°`;
         }
         
-        devHtml += `<div class="dev-led ${colorClass}" title="${tip}"></div>`;
+        counts[colorClass]++;
+        stripHtml += `<div class="dev-led ${colorClass}" title="${tip}"></div>`;
       }
       
-      devHtml += `</div></div>`;
+      const statusParts = [];
+      if (counts.green > 0) statusParts.push(`OK: ${counts.green}`);
+      if (counts.yellow > 0) statusParts.push(`Attenzione: ${counts.yellow}`);
+      if (counts.red > 0) statusParts.push(`Critico: ${counts.red}`);
+      if (counts.purple > 0) statusParts.push(`Senza Stato: ${counts.purple}`);
+      if (counts.grey > 0) statusParts.push(`Offline: ${counts.grey}`);
+      
+      const statusText = statusParts.join(" | ");
+
+      devHtml += `
+        <div class="deviation-ncu-block">
+          <div class="deviation-label">
+            <span>${range.id} Accuracy Health</span>
+            <span style="opacity: 0.6">${statusText}</span>
+          </div>
+          <div class="deviation-led-strip">
+            ${stripHtml}
+          </div>
+        </div>`;
     });
     devContainer.innerHTML = devHtml;
   }

@@ -18,7 +18,8 @@
             "afternoon_green": 5,
             "afternoon_yellow": 0.5
         },
-        "min_downtime_minutes": 5
+        "min_downtime_minutes": 5,
+        "tracker_deviation": 5.0
     },
     "colors": {
         "green": "#10b981",
@@ -49,6 +50,7 @@
         "grid_limit_change": { "dashboard": true,  "telegram": true  },
         "tracker_comm":      { "dashboard": false, "telegram": false },
         "mqtt_pulse":        { "dashboard": false, "telegram": false },
-        "recovery":          { "telegram": false }
+        "recovery":          { "telegram": false },
+        "tracker_deviation": { "dashboard": true,  "telegram": true  }
     }
 }

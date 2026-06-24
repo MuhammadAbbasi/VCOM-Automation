@@ -106,7 +106,14 @@ def handle_sync_request(client, payload):
             
             # compute some stats from unique_data
             total_trackers = len(unique_data)
-            critical_dev = sum(1 for t in unique_data if abs(t.get("actual_angle", 0) - t.get("target_angle", 0)) > 5)
+            
+            # Use dynamic deviation threshold from config (default to 5.0)
+            dev_threshold = config.get("thresholds", {}).get("tracker_deviation", 5.0)
+            critical_dev = sum(1 for t in unique_data if abs(t.get("actual_angle", 0) - t.get("target_angle", 0)) > dev_threshold)
+            
+            # Check Telegram preference for tracker deviation (default to True)
+            alert_pref_tg = config.get("alert_preferences", {}).get("tracker_deviation", {}).get("telegram", True)
+            
             ncu_counts = {}
             for t in unique_data:
                 ncu = t.get("ncu", "Unknown")
@@ -114,11 +121,11 @@ def handle_sync_request(client, payload):
                 
             ncu_str = ", ".join([f"{str(k).replace('&', '&amp;').replace('<', '&lt;')}: {v}" for k, v in ncu_counts.items()])
             
-            if critical_dev > 0:
+            if critical_dev > 0 and alert_pref_tg:
                 msg = f"📡 <b>New Tracker Data Received</b>\n\n" \
                       f"• <b>Total Units:</b> {total_trackers}\n" \
                       f"• <b>NCUs:</b> {ncu_str}\n" \
-                      f"• <b>Critical Deviations (>5°):</b> {critical_dev}\n"
+                      f"• <b>Critical Deviations (>{dev_threshold}°):</b> {critical_dev}\n"
                       
                 if duplicates:
                     msg += f"\n⚠️ <b>Duplicates filtered:</b> {len(duplicates)}"
@@ -128,7 +135,7 @@ def handle_sync_request(client, payload):
                 resp.raise_for_status()
                 logging.info("Telegram summary alert sent due to critical deviations.")
             else:
-                logging.info(f"No critical deviations ({critical_dev}). Skipping Telegram alert.")
+                logging.info(f"No critical deviations ({critical_dev}) or Telegram alert disabled ({alert_pref_tg}). Skipping Telegram alert.")
     except Exception as te:
         logging.error(f"Failed to send Telegram summary: {te}")
         if hasattr(te, 'response') and te.response is not None:
