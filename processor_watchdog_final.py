@@ -1169,19 +1169,21 @@ def analyze_site(date_str: str) -> None:
         current_grid_limit = 87.6
         if attiva_df is not None and not attiva_df.empty:
             # Priority 1: General limit, Priority 2: Gestore (Network), Priority 3: Terzi
+            # Priority 4: New VCOM column name introduced 2026-06 (Regolazione della potenza attiva)
             priority_names = [
                 "Valore nominale potenza attiva",
                 "Valore nominale della potenza attiva (gestore di rete)",
-                "Valore nominale della potenza attiva (terzi)"
+                "Valore nominale della potenza attiva (terzi)",
+                "Regolazione della potenza attiva",
             ]
-            
+
             limit_col = None
             for p_name in priority_names:
                 found = [c for c in attiva_df.columns if p_name in c]
                 if found:
                     limit_col = found[0]
                     break
-            
+
             if not limit_col:
                 # Fallback to any column containing "Valore nominale" and "potenza attiva"
                 limit_cols = [c for c in attiva_df.columns if "Valore nominale" in c and "potenza attiva" in c.lower()]

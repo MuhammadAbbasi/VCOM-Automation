@@ -511,10 +511,26 @@ def _save_wide_metric(df: pd.DataFrame, table_name: str, date_str: str) -> None:
     df_out.insert(0, "_date", date_str)
 
     # Delete existing data for this date (overwrite semantics like the CSV system)
+    table_exists = False
     try:
         _retry_data_operation(conn.execute, f'DELETE FROM "{table_name}" WHERE _date = ?', (date_str,))
+        table_exists = True
     except sqlite3.OperationalError:
         pass  # Table doesn't exist yet — to_sql will create it
+
+    # Auto-migrate schema: if the source added new columns (e.g. VCOM renamed a field),
+    # add them so to_sql(if_exists="append") doesn't fail with "no such column".
+    if table_exists:
+        try:
+            existing_cols = {r[1] for r in conn.execute(f'PRAGMA table_info("{table_name}")').fetchall()}
+            for col in df_out.columns:
+                if col not in existing_cols:
+                    col_type = "TEXT" if str(df_out[col].dtype) == "object" else "REAL"
+                    conn.execute(f'ALTER TABLE "{table_name}" ADD COLUMN "{col}" {col_type}')
+                    logger.info(f"[DB] Schema migration: added column '{col}' to {table_name}")
+            conn.commit()
+        except Exception as e:
+            logger.warning(f"[DB] Schema migration check failed for {table_name}: {e}")
 
     # Write to DB in chunks to avoid long-held write locks
     CHUNK = 200
