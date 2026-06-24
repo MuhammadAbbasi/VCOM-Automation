@@ -70,7 +70,8 @@ DEFAULT_SETTINGS = {
             "green": 5000.0,
             "yellow": 1000.0
         },
-        "min_downtime_minutes": 9
+        "min_downtime_minutes": 9,
+        "tracker_deviation": 5.0
     },
     "colors": {
         "green": "#10b981",
@@ -114,7 +115,8 @@ DEFAULT_SETTINGS = {
         "grid_limit_change": { "dashboard": True, "telegram": True },
         "tracker_comm": { "dashboard": True, "telegram": True },
         "mqtt_pulse": { "dashboard": True, "telegram": True },
-        "recovery": { "telegram": True }
+        "recovery": { "telegram": True },
+        "tracker_deviation": { "dashboard": True, "telegram": True }
     }
 }
 
@@ -1578,8 +1580,12 @@ def analyze_site(date_str: str) -> None:
             ac_alarm_id = f"{inv_id}_LOW_AC"
             checked_ids.add(ac_alarm_id)
             ac_status = h.get("ac_power")
+            # Mirror the PR stabilization gate: skip AC trip/low-power alarms during
+            # the first STABILIZATION_MINUTES after plant start to avoid false positives
+            # caused by inverters that take a few minutes longer to come online at dawn.
+            ac_is_stabilized = h.get("is_stabilized", True)
 
-            if ac_status in ["red", "yellow"]:
+            if ac_status in ["red", "yellow"] and ac_is_stabilized:
                 ac_cat  = "inverter_trip" if ac_status == "red" else "ac_drop"
                 ac_type = "INVERTER SCATTATO" if ac_status == "red" else "POTENZA AC BASSA"
                 ac_msg  = "Produzione <5% della media impianto — probabilmente scattato." if ac_status == "red" else "Potenza significativamente sotto la media impianto."
