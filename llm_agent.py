@@ -353,14 +353,26 @@ def get_pr_data(date_str=None):
     if df is None or df.empty:
         return {"date": date_str, "error": "No PR data for this date"}
 
+    # The pr_readings table is LONG format: columns are
+    #   _date | Timestamp Fetch | "PR inverter" (name) | "PR inverter [%]" (value)
+    # Detect this layout by checking for the inverter-name column.
+    inv_col = next((c for c in df.columns if c == "PR inverter"), None)
+    val_col = next((c for c in df.columns if "%" in c and "PR" in c and c != inv_col), None)
+
+    if inv_col and val_col:
+        df[val_col] = pd.to_numeric(df[val_col], errors="coerce")
+        avg_by_inv = df.groupby(inv_col)[val_col].mean().dropna()
+        result = {k: round(float(v), 2) for k, v in avg_by_inv.items()}
+        plant_avg = round(float(avg_by_inv.mean()), 2) if not avg_by_inv.empty else None
+        return {"date": date_str, "plant_avg_pr": plant_avg, "by_inverter": result}
+
+    # Fallback: legacy wide format (one column per inverter)
     pr_cols = [c for c in df.columns if c not in ("Ora", "Timestamp Fetch", "_date")]
     if not pr_cols:
         return {"date": date_str, "error": "No PR columns found"}
-
     df_valid = df[pr_cols].apply(pd.to_numeric, errors="coerce").dropna(how="all")
     if df_valid.empty:
         return {"date": date_str, "error": "All PR rows are empty"}
-
     avg_by_inverter = df_valid.mean().dropna()
     result = {col: round(float(v), 2) for col, v in avg_by_inverter.items()}
     plant_avg = round(float(avg_by_inverter.mean()), 2) if not avg_by_inverter.empty else None
