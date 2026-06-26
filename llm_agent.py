@@ -364,7 +364,23 @@ def get_pr_data(date_str=None):
         avg_by_inv = df.groupby(inv_col)[val_col].mean().dropna()
         result = {k: round(float(v), 2) for k, v in avg_by_inv.items()}
         plant_avg = round(float(avg_by_inv.mean()), 2) if not avg_by_inv.empty else None
-        return {"date": date_str, "plant_avg_pr": plant_avg, "by_inverter": result}
+
+        # Pre-compute per-transformer averages so the AI does not need to filter
+        # by_inverter itself and accidentally use plant_avg_pr for TX-specific queries.
+        import re as _re
+        by_tx: dict[str, list] = {}
+        for inv_name, pr_val in result.items():
+            m = _re.search(r"(TX\d+)", inv_name)
+            if m:
+                by_tx.setdefault(m.group(1), []).append(pr_val)
+        tx_avg = {tx: round(sum(vals) / len(vals), 2) for tx, vals in sorted(by_tx.items())}
+
+        return {
+            "date": date_str,
+            "plant_avg_pr": plant_avg,
+            "by_transformer": tx_avg,   # TX1/TX2/TX3 averages — USE THESE for per-TX questions
+            "by_inverter": result,       # individual inverter values
+        }
 
     # Fallback: legacy wide format (one column per inverter)
     pr_cols = [c for c in df.columns if c not in ("Ora", "Timestamp Fetch", "_date")]
