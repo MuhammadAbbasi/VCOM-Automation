@@ -124,7 +124,7 @@ def analyze_dc_current(dc_df: pd.DataFrame, output_md_path: Path, date_str: str)
     df.replace(['x', ' x '], np.nan, inplace=True)
     if "Ora" in df.columns:
         df["Ora"] = pd.to_numeric(df["Ora"], errors="coerce")
-        df = df[(df["Ora"] >= 6.30) & (df["Ora"] <= 19.00)].copy()
+        df = df[(df["Ora"] >= 6.30) & (df["Ora"] <= 19.00)].copy().reset_index(drop=True)
 
     for col in df.columns:
         if col not in ["Ora", "Timestamp Fetch", "Data"]:
