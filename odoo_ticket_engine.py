@@ -74,6 +74,7 @@ FAULT_THRESHOLDS: dict[str, int] = {
     "CRIT TEMP":          30,
     "TRACKER":            60,
     "GRID LIMIT CHANGE":   0,  # immediate
+    "PLANT OUTAGE":       15,
 }
 
 # Maps snapshot fault type → Odoo model field values
@@ -150,6 +151,13 @@ FAULT_ODOO_MAP: dict[str, dict] = {
     },
     "INVERTER DC OFFLINE": {
         "anomalia_tipo":       "inverter_fault",
+        "anomalia_priorita":   "urgente",
+        "intervento_tipo":     "guasto",
+        "intervento_priorita": "urgente",
+        "intervento_richiesto": True,
+    },
+    "PLANT OUTAGE": {
+        "anomalia_tipo":       "rete",
         "anomalia_priorita":   "urgente",
         "intervento_tipo":     "guasto",
         "intervento_priorita": "urgente",

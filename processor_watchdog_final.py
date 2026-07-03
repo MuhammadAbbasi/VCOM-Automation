@@ -440,7 +440,8 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
         priority_names = [
             "Valore nominale potenza attiva",
             "Valore nominale della potenza attiva (gestore di rete)",
-            "Valore nominale della potenza attiva (terzi)"
+            "Valore nominale della potenza attiva (terzi)",
+            "Regolazione della potenza attiva",
         ]
         limit_col = None
         for p_name in priority_names:
@@ -1372,6 +1373,83 @@ def analyze_site(date_str: str) -> None:
             historical_trail.append(prev_alarm)
             if should_alert("recovery", "telegram"):
                 add_tg_msg("RIPRISTINO", f"✅ INTERRUZIONE DATI SITO (pulizia)")
+
+        # --- Site-Wide Plant Outage (Blackout) Alarm ---
+        outage_alarm_id = "PLANT_OUTAGE"
+        
+        ac_cols = [c for c in ac_df.columns if "Potenza AC" in c] if ac_df is not None else []
+        ac_row = None
+        ora = 0.0
+        avg_ac_power = 0.0
+        if ac_df is not None and not ac_df.empty:
+            if "Ora" in ac_df.columns:
+                ac_dedup = ac_df.drop_duplicates(subset=["Ora"], keep="last").copy()
+                ac_dedup["Ora_num"] = pd.to_numeric(ac_dedup["Ora"], errors="coerce")
+                ac_dedup = ac_dedup.sort_values("Ora_num", ascending=False)
+            else:
+                ac_dedup = ac_df.copy()
+            
+            for _, row in ac_dedup.iterrows():
+                valid_count = sum(
+                    1 for c in ac_cols
+                    if pd.notna(row.get(c)) and str(row.get(c)).strip().lower() not in ['x', '']
+                )
+                if valid_count > 10:
+                    ac_row = row
+                    try:
+                        ora = float(row.get("Ora", 0))
+                    except:
+                        ora = 0.0
+                    
+                    ac_valid_vals = []
+                    for c in ac_cols:
+                        val = row.get(c)
+                        if pd.notna(val) and str(val).strip().lower() not in ['x', '']:
+                            try:
+                                ac_valid_vals.append(float(val))
+                            except:
+                                pass
+                    if ac_valid_vals:
+                        avg_ac_power = sum(ac_valid_vals) / len(ac_valid_vals)
+                    break
+        
+        has_ac_data = (ac_row is not None and any(pd.notna(ac_row.get(c)) and str(ac_row.get(c)).strip().lower() not in ['x', ''] for c in ac_cols))
+        is_daylight = (daylight_start + 0.5 <= ora <= actual_sunset - 0.5)
+        is_poa_active = (poa_val is not None and poa_val >= 100.0)
+        is_power_zero = (avg_ac_power is not None and avg_ac_power < 2000.0)
+        is_grid_active = (current_grid_limit > 5.0)
+
+        is_outage = has_ac_data and is_daylight and is_poa_active and is_power_zero and is_grid_active
+
+        if is_outage:
+            checked_ids.add(outage_alarm_id)
+            message = f"Allarme blackout: produzione impianto a zero ({format_ora(ora)}) con irraggiamento a {poa_val:.1f} W/m²."
+            
+            if outage_alarm_id in prev_alarm_map:
+                alarm = prev_alarm_map[outage_alarm_id]
+                alarm["message"] = message  # refresh message/time
+            else:
+                alarm = {
+                    "id": outage_alarm_id,
+                    "inverter": "SITE",
+                    "type": "PLANT OUTAGE",
+                    "severity": "red",
+                    "trip_time": timestamp,
+                    "message": message
+                }
+            
+            if site_comm_db:
+                current_active.append(alarm)
+            if site_comm_tg and should_send_tg(alarm):
+                fire_tg(alarm, "PLANT OUTAGE", f"🚨 *PLANT OUTAGE* (SITE)\n{alarm['message']}")
+        else:
+            if outage_alarm_id in prev_alarm_map:
+                past_alarm = prev_alarm_map[outage_alarm_id]
+                past_alarm["recovery_time"] = timestamp
+                historical_trail.append(past_alarm)
+                checked_ids.add(outage_alarm_id)
+                if should_alert("recovery", "telegram"):
+                    add_tg_msg("RIPRISTINO", f"✅ PLANT OUTAGE (SITO) ripristinato")
 
         # --- Grid Limit Change Alarm ---
         grid_alarm_id = "GRID_LIMIT_CHANGE"

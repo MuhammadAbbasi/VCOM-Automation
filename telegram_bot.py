@@ -414,7 +414,7 @@ def build_status_message(data: dict) -> str:
         f"🔋 *Energia:*   {energy_mwh:.1f} MWh oggi",
         f"📊 *PR Medio:* {avg_pr:.1f}%",
     ]
-    if poa:
+    if poa and poa > 0:
         lines.append(f"☀️ *Irragg.:* {poa:.0f} W/m²")
     if grid_limit < 87.0:
         lines.append(f"🔌 *Limite Rete:* {grid_limit:.1f}% (Limitazione Attiva)")
@@ -475,7 +475,7 @@ def build_plant_message(data: dict) -> str:
         "",
         f"🔋 *Energia Oggi:* {energy_mwh:.1f} MWh",
         f"🟢 *Inverter Online:* {online}/{total_inverters}",
-        f"☀️ *Irraggiamento (POA):* {poa:.0f} W/m²" if poa else "☀️ *Irraggiamento (POA):* 0 W/m²",
+        f"☀️ *Irraggiamento (POA):* {poa:.0f} W/m²" if (poa and poa > 0) else "☀️ *Irraggiamento (POA):* 0 W/m²",
         f"📊 *PR Medio:* {avg_pr:.1f}%",
         f"🔌 *Limite Rete:* {grid_limit:.1f}%" + (" (Limitazione Attiva)" if grid_limit < 87.0 else " (Nominale)"),
     ]
@@ -559,7 +559,7 @@ def build_daily_message(data: dict) -> str:
         f"🔋 *Energia Oggi:*   {h.get('total_energy_mwh', 0):.2f} MWh\n"
         f"📈 *PR Medio:*       {h.get('avg_pr', 0):.1f}%\n"
     )
-    if poa:
+    if poa and poa > 0:
         msg += f"☀️ *Irraggiamento:*  {poa:.0f} W/m²\n"
     msg += f"\n🟢 Online: *{h.get('online','-')}/36*\n"
     if tripped: msg += f"🔴 Scattati: *{tripped}*\n"
@@ -835,11 +835,12 @@ def build_weather_message(data: dict) -> str:
     h   = data.get("macro_health", {})
     inv = data.get("inverter_health", {})
     poa = h.get("poa", h.get("avg_irradiance", 0.0))
+    poa_display = max(poa, 0.0)
     temps = [float(v.get("temp_v") or 0) for v in inv.values() if v.get("temp_v") is not None]
     lines = [
         "🌤 *Dati Ambientali*",
         "━━━━━━━━━━━━━━━━━━━",
-        f"☀️  *Irraggiamento:*  {poa:.0f} W/m²",
+        f"☀️  *Irraggiamento:*  {poa_display:.0f} W/m²",
     ]
     if temps:
         lines += [
