@@ -1,7 +1,7 @@
 # Mazara Solar Plant — Forensic Analysis Method
 
 ## Document Purpose
-This document defines the **data structure, analysis workflow, and forensic rules** used by `processor_watchdog.py` to detect anomalies and compute health status for the 36-inverter solar plant at Mazara del Vallo (System ID: 2144635).
+This document defines the **data structure, analysis workflow, and forensic rules** used by `processor_watchdog.py` to detect anomalies and compute health status for the 36-inverter solar plant at Mazara del Vallo (System ID: YOUR_SYSTEM_ID).
 
 ---
 

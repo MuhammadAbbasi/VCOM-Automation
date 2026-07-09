@@ -145,7 +145,7 @@ Required variables:
 ```env
 VCOM_USERNAME=your_vcom_username
 VCOM_PASSWORD=your_vcom_password
-VCOM_SYSTEM_URL=https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635
+VCOM_SYSTEM_URL=https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/YOUR_SYSTEM_ID
 INVERTER_IDS_JSON=[...]
 DASHBOARD_USER=your_dashboard_user
 DASHBOARD_PASS=your_dashboard_password
@@ -459,7 +459,7 @@ Parallel paths:
 # VCOM Credentials
 VCOM_USER=your_username
 VCOM_PASS=your_password
-VCOM_SYSTEM_ID=2144635
+VCOM_SYSTEM_ID=YOUR_SYSTEM_ID
 
 # Optional: Custom URLs (defaults to production VCOM)
 VCOM_URL=https://vcom.meteocontrol.com/vcom/
@@ -633,7 +633,7 @@ tail -f watchdog.log
 
 ## 📋 Plant Topology (Mazara del Vallo)
 
-- **System ID:** 2144635
+- **System ID:** YOUR_SYSTEM_ID
 - **Inverters:** 36 total (TX1-01 through TX3-12)
 - **Topology:** 3 transformers (TX1, TX2, TX3), 12 inverters each
 - **DC Strings:** 12 MPPT channels per inverter

@@ -32,7 +32,7 @@ A real-time SCADA monitoring and forensic analysis pipeline for the Mazara 01 PV
 - **CSV Columns:** Pattern `Metric MPPT X (INV TX#-##) [Unit]`
 
 ## 🌍 Plant Topology (Hardcoded)
-- **System ID:** 2144635
+- **System ID:** YOUR_SYSTEM_ID
 - **Configuration:** 3 Transformers (TX1, TX2, TX3), 12 inverters each.
 - **Inverter IDs:** `INV TX1-01` through `INV TX3-12`.
 - **Location:** Mazara del Vallo, Italy.
