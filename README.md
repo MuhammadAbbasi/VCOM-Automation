@@ -426,27 +426,67 @@ VCOM Automation/
 └── requirements.txt
 ```
 
-**Data Flow:**
-```
-VCOM (meteocontrol.com)
-  ↓  Playwright browser automation
-vcom_monitor.py  (scrapes 7 metrics every ~10 min)
-  ↓  pandas DataFrame → SQLite WAL (scada_data.db)
-db/db_manager.py  (auto-migrates schema on new VCOM columns)
-  ↓  file-change event
-processor_watchdog_final.py  (forensic analysis: PR, AC, DC, ISO, Temp, Grid)
-  ↓  + mppt_dc_analyzer.py  (fleet-median-based MPPT current comparison)
-snapshot_queue.py  (background single-writer thread → scada_snapshots.db)
-  ↓  load_latest_snapshot()
-dashboard/app.py  (FastAPI WebSocket broadcast every 3 min)
-  ↓
-http://localhost:8080  (11-tab reactive dark-mode UI)
+**System Flowchart:**
 
-Parallel paths:
-  → telegram_bot.py       (commands + AI chat via local LLM)
-  → llm_agent.py          (Qwen 2.5 7B at localhost:11434)
-  → odoo_ticket_engine.py (auto-creates Odoo fault tickets from alarms)
-  → tracker_testing/      (solar tracker MQTT monitoring via NCU/TCU)
+```mermaid
+flowchart TD
+    ORCH(["🎯 run_monitor.py · Orchestrator"])
+
+    subgraph CLOUD ["☁️ External"]
+        VCOM["VCOM Platform\nmeteocontrol.com"]
+        OLLAMA["Ollama :11434\nQwen 2.5 7B"]
+        ODOOCRM["Odoo CRM :8069"]
+    end
+
+    subgraph EXTRACT ["📥 Extraction"]
+        PL["vcom_monitor.py\nPlaywright / Chromium\n7 metrics · ~10 min cycle"]
+    end
+
+    subgraph STORE ["🗄️ SQLite WAL Storage"]
+        DB1[("scada_data.db\nPR · AC · DC · Temp · ISO · Irr · Grid")]
+        DB2[("scada_snapshots.db\n50 snapshots / day")]
+    end
+
+    subgraph ANALYSE ["🔬 Forensic Analysis"]
+        WD["processor_watchdog_final.py\nalarm engine · health matrix"]
+        MPPT["mppt_dc_analyzer.py\nMPPT string analysis"]
+        SQ["snapshot_queue.py\nbackground single-writer"]
+        TICKET["odoo_ticket_engine.py\nauto fault tickets"]
+    end
+
+    subgraph OUTPUT ["📤 Output Services"]
+        DASH["dashboard/app.py\nFastAPI + WebSocket :8080"]
+        TG["telegram_bot.py\n15+ commands + AI chat"]
+        LLM["llm_agent.py\nforensic AI sandbox"]
+    end
+
+    TRK["🔭 tracker_testing/\nMQTT broker + receiver"]
+    UI_WEB(["🌐 Web Dashboard\n11 tabs · dark mode"])
+    UI_TG(["📲 Telegram\nMobile Interface"])
+
+    ORCH -->|"spawns & auto-restarts"| PL
+    ORCH -->|"spawns & auto-restarts"| WD
+    ORCH -->|"spawns & auto-restarts"| DASH
+    ORCH -->|"spawns & auto-restarts"| TG
+
+    VCOM -->|"Playwright browser session"| PL
+    PL -->|"pandas DataFrame → SQLite WAL"| DB1
+    TRK -->|"MQTT heartbeat"| DB1
+
+    DB1 -->|"file-change trigger"| WD
+    WD --- MPPT
+    WD --> SQ
+    SQ --> DB2
+    WD --> TICKET
+    TICKET --> ODOOCRM
+
+    DB2 -->|"WebSocket push · every ~3 min"| DASH
+    DB2 --> TG
+    TG <-->|"forensic Q&A"| LLM
+    LLM <-->|"inference"| OLLAMA
+
+    DASH --> UI_WEB
+    TG --> UI_TG
 ```
 
 ---
