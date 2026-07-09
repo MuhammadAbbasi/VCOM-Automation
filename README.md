@@ -1,14 +1,52 @@
-# 🌞 Mazara VCOM Automation - AI-Powered SCADA Monitoring Pipeline
+# 🌞 Mazara VCOM Automation — AI-Powered SCADA Monitoring Pipeline
 
-[![Local AI: Qwen 3.5 9B](https://img.shields.io/badge/Local%20AI-Qwen%203.5%209B-blueviolet)](https://ollama.com)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://python.org)
+[![Local AI: Qwen 2.5](https://img.shields.io/badge/Local%20AI-Qwen%202.5%207B-blueviolet)](https://ollama.com)
+[![DB: SQLite WAL](https://img.shields.io/badge/DB-SQLite%20WAL-orange)](#)
 [![Status: Production](https://img.shields.io/badge/Status-Production--Ready-success)](#)
+[![Docker](https://img.shields.io/badge/Docker-Compose%20Stack-2496ED?logo=docker&logoColor=white)](#)
 
-A complete, high-performance automated monitoring system for utility-scale solar photovoltaic (PV) plants. This project integrates **Local LLMs (Qwen 2.5 Coder)** for deep forensic analysis, extracts real-time telemetry from VCOM (meteocontrol.com) every 15 minutes, and serves a reactive, WebSocket-driven dark-mode dashboard.
+A complete, production-hardened automated monitoring pipeline for a **12.625 MWp** utility-scale solar plant (Mazara del Vallo, Sicily). The system integrates a **local LLM (Qwen 2.5 via Ollama)** for forensic diagnostics, scrapes real-time telemetry from VCOM (meteocontrol.com) every ~10 minutes via Playwright browser automation, stores everything in a SQLite WAL database, and serves a reactive WebSocket-driven dark-mode dashboard with 11 data tabs — plus a full Telegram bot with AI chat capability.
 
 > [!TIP]
 > **AI-Search Ready:** This repository is optimized for LLM indexing (see [llms.txt](./llms.txt)).
 
-**System Status:** ✅ Active Forensic Analysis | ✅ Remote AI Agent (High Speed) | ✅ Concurrent Telegram Bot | ✅ Production-Stable Orchestrator
+**System Status:** ✅ Active Forensic Analysis | ✅ Local AI Agent (Qwen 2.5 7B via Ollama) | ✅ Concurrent Telegram Bot | ✅ Production-Stable Orchestrator | ✅ Odoo Ticket Integration | ✅ Solar Tracker Monitoring
+
+---
+
+## 🚀 Key Improvements (July 2026 Update)
+
+### Data Quality Tab ("Qualità Dati")
+- New dashboard tab showing a **36-inverter × 7-metric coverage matrix** with per-cell colour coding: green (data present), red (missing), grey (night/no history).
+- Summary cards per metric show how many inverters have complete data for the day.
+- Extraction file status row shows the last successful pull time and age for each source.
+- `buildDataCoverage()` in `app.js` classifies each cell by checking `inverter_health` snapshot fields.
+
+### AI Per-Inverter and Per-Transformer PR
+- `get_pr_data()` in `llm_agent.py` now handles the **long-format PR table** (`PR inverter | PR inverter [%]` columns): groups by inverter, computes individual averages, then aggregates per transformer.
+- `ai_system_prompt.txt` now contains explicit PR data rules preventing the LLM from reporting `plant_avg_pr` as a per-TX value.
+- The AI correctly answers "PR di TX3" → `by_transformer["TX3"]`, not the plant average.
+
+### MPPT DC Dot Fix
+- All 432 MPPT LED indicators (12 per inverter × 36 inverters) were rendering grey due to an off-by-one bounds check after the daylight filter.
+- Root cause: `fleet_ref_idx` held a pandas label from the unfiltered index (0–750); after slicing to daylight rows (361 entries with labels 378–750) the check `750 < 361` was False, skipping `.iloc` for every MPPT.
+- Fix: `.reset_index(drop=True)` after the daylight filter in `mppt_dc_analyzer.py` so `fleet_ref_idx` aligns with the new 0-based positional index.
+
+### ACT Column in Data Quality Tab
+- `compute_latest_health()` was missing `"Regolazione della potenza attiva"` from its `priority_names` list (only the curtailment check block had it), so `act_val` always resolved to `None` — all 36 ACT cells stayed red.
+- Fixed by syncing both `priority_names` lists.
+
+### POA Night Display
+- Irradiance sensor returns `−1` at night; `if poa:` treated it as truthy, so Telegram `/status`, `/plant`, `/weather`, and `/daily` showed "−1 W/m²".
+- Fixed to `if poa and poa > 0:` in all four message builders.
+
+### Snapshot Queue Reliability
+- `snapshot_queue.py` was missing `import random`; the retry back-off (`random.random()`) raised `NameError` on every failed DB write, causing all snapshots to fall through to the JSON fallback while the old DB row served stale data to the dashboard.
+
+### Startup Grace Period for AC Trip Alarms
+- AC trip ("INVERTER SCATTATO") alarms were firing during the 30-minute plant warm-up window when inverters are still ramping and AC output is legitimately zero.
+- Watchdog now gates AC trip alarms on `is_stabilized` (same as PR alarms).
 
 ---
 
@@ -270,26 +308,82 @@ http://localhost:8080
 ## 📋 What This Does
 
 ### 1. **Extraction Pipeline** (`vcom_monitor.py`)
-Logs into VCOM every 10 minutes and scrapes 6 metrics:
-- **PR** (Performance Ratio), **Potenza AC**, **Corrente DC**, **Temperatura**, **Resistenza Isolamento**, **Irraggiamento**.
+Logs into VCOM every ~10 minutes and scrapes **7 metrics** via Playwright:
 
-**Universal Login & Session Shield:** Automatically handles both legacy VCOM login and modern Keycloak flows. Includes automated session-expiry detection and real-time Bootstrap modal dismissal (DOM-stripping method) to prevent extraction stalls.
+| Metric | Table | Format |
+|--------|-------|--------|
+| Performance Ratio (PR) | `pr_readings` | Long (inverter × value rows) |
+| AC Power | `potenza_ac` | Wide (1 col per inverter) |
+| DC Current | `corrente_dc` | Long (normalized) |
+| Temperature | `temperatura` | Wide |
+| Insulation Resistance | `resistenza_isolamento` | Wide |
+| Irradiance (POA) | `irraggiamento` | Wide |
+| Grid Active Power Limit | `potenza_attiva` | Wide (time series) |
+
+**Universal Login & Session Shield:** Handles both legacy VCOM and modern Keycloak SSO flows. Automated session-expiry detection and Bootstrap modal auto-dismissal prevent extraction stalls.
+
+**Schema Auto-Migration:** When VCOM adds new columns (e.g., `"Regolazione della potenza attiva [%]"`), `db_manager.py` issues `ALTER TABLE ADD COLUMN` automatically rather than failing the write.
 
 ### 2. **Forensic Analysis** (`processor_watchdog_final.py`)
-- Scans for 6 anomaly types.
-- **Downtime Filter:** Events < 9 minutes are automatically ignored to reduce noise.
-- **Dynamic Daylight:** Detects plant start time from production data.
+- Triggers on every new DB write via file-change detection; also runs on a 3-minute fallback timer.
+- Scans for **7 anomaly types**: Low PR, High Temperature, DC String Loss, Comms Loss, Inverter Trip, Grid Curtailment, MPPT Mismatch.
+- **Startup grace period (30 min):** PR and AC alarms are suppressed during plant ramp-up to prevent false positives.
+- **Grid curtailment suppression:** Low PR alarms silenced when grid limit < 87 % to avoid alarm storms during forced curtailment.
+- **Dynamic daylight:** Production start/end detected from actual AC data rather than fixed sun-times.
+- **MPPT analysis** (`mppt_dc_analyzer.py`): fleet-median-based expected-current comparison, time-aligned via `fleet_ref_idx`, identifies single-string faults vs. design exceptions.
 
-### 3. **Live Dashboard** (`dashboard/static/`)
-- **Health Matrix:** 36-inverters × 4 LEDs (PR | Temp | DC | AC).
-- **Downtime Tracker:** Tracks production interruptions based on user-configured duration limits.
-- **Dynamic Configuration:** Front-end "⚙️ SETTINGS" modal saves configurations to `user_settings.json` across reboots.
-- **Premium Mission Control UI:** A high-fidelity "Plant Reference Manual" footer providing:
-  - **Technical Specifications:** Accurate site metadata (12.625 MWp, 808 strings, 3 TX stations).
-  - **Diagnostic Matrix:** A color-coded SCADA guide with luminous LED status indicators.
-  - **System Metadata:** Real-time visibility into the forensic engine and AI inference nodes.
+### 3. **Live Dashboard** (`dashboard/static/`) — 11 Tabs
 
-**Data Push:** FastAPI **WebSockets** stream real-time JSON updates continuously without page reloads.
+| Tab | Content |
+|-----|---------|
+| Panoramica | Plant overview: power, energy, PR, inverter health matrix |
+| Mappa Impianto | Visual plant map with TX/inverter layout |
+| Dettaglio PR | Per-inverter and per-transformer PR breakdown |
+| Temperatura | Inverter temperature heatmap |
+| Corrente DC | MPPT-level current LEDs (432 dots: 12 × 36 inverters) |
+| Potenza AC | AC power per inverter |
+| Sensori | Irradiance and environmental sensor history |
+| Analisi | Downtime tracker and forensic event log |
+| Campo Tracker | Solar tracker NCU/TCU status and angle monitoring |
+| Qualità Dati | **36 × 7 data coverage matrix** — per-cell colour: green/red/grey |
+| Chat AI | In-browser AI diagnostics chat (Qwen 2.5 via Ollama) |
+
+**Data Push:** FastAPI **WebSockets** stream real-time JSON every ~3 minutes without page reloads.
+
+### 4. **Telegram Bot** (`telegram_bot.py`)
+Full-featured SCADA assistant over Telegram with 15+ commands and free-text AI chat:
+
+```
+/status    — live power, energy, PR, alarm summary
+/plant     — compact plant state (energy, online count, grid limit)
+/pr        — PR by transformer (TX1/TX2/TX3)
+/pr_inverter — PR for all 36 inverters
+/inverters — 36-inverter health matrix
+/inverter TX1-03 — single inverter deep-dive
+/alerts    — active anomalies
+/daily     — today's energy summary
+/week      — 7-day production history
+/energy    — 30-day / yearly totals
+/compare   — TX1 vs TX2 vs TX3 production
+/weather   — POA irradiance + temperatures
+/peak      — today's peak power and time
+/uptime    — plant availability percentage
+/generate_ticket — create Odoo fault ticket interactively
+```
+
+Any free-text message routes to the local LLM for forensic Q&A.
+
+### 5. **Local LLM** (`llm_agent.py`)
+- Model: **Qwen 2.5 7B** via Ollama at `localhost:11434` (runs fully offline)
+- Pre-computed snapshot injected into context: PR by transformer, active anomalies, MPPT details, tracker summary
+- Safe code execution sandbox: LLM can write Python code blocks that are executed against live DB functions (`query_db`, `load_metric`, `get_dc_currents`, etc.)
+- `num_ctx=8192`, `temperature=0.1` for deterministic diagnostic output
+
+### 6. **Odoo Ticket Engine** (`odoo_ticket_engine.py`)
+Auto-creates fault tickets in the local Odoo instance (localhost:8069) from watchdog alarms:
+- Alarm types: INVERTER TRIP, LOW PR, CRIT PR, ISO FAULT, COMM LOST, DC MPPT FAULT, HIGH TEMP, CRIT TEMP, TRACKER OFFLINE, GRID LIMIT CHANGE, PLANT OUTAGE
+- Deduplicates tickets (configurable suppression window per fault type)
+- Links Odoo `anomalia` records to `intervento` work orders automatically
 
 ---
 
@@ -297,48 +391,62 @@ Logs into VCOM every 10 minutes and scrapes 6 metrics:
 
 ```
 VCOM Automation/
-├── vcom_monitor.py                    ← Extraction loop (10-min cycle)
-├── extraction_code/                   ← 6 metric scrapers (sync-Playwright)
-│   ├── base_monitor.py                ← Shared login, nav, helpers
+├── run_monitor.py                     ← Orchestrator (launches all services)
+├── vcom_monitor.py                    ← Extraction loop (~10-min cycle)
+├── extraction_code/                   ← 7 metric scrapers (sync-Playwright)
+│   ├── base_monitor.py                ← Shared login, nav, VCOM session helpers
 │   ├── pr_monitor.py
 │   ├── potenza_ac_monitor.py
 │   ├── corrente_dc_monitor.py
 │   ├── resistenza_monitor.py
 │   ├── temperatura_monitor.py
-│   └── irraggiamento_monitor.py
-├── processor_watchdog_final.py        ← Forensic analyzer (ACTIVE v4.2)
-├── processor_watchdog*.py             ← Legacy versions (reference only)
+│   ├── irraggiamento_monitor.py
+│   └── potenza_attiva_monitor.py      ← Grid limit / active power curtailment
+├── processor_watchdog_final.py        ← Forensic analyzer + alarm engine
+├── mppt_dc_analyzer.py                ← Per-MPPT string-level current analysis
+├── llm_agent.py                       ← Local LLM (Qwen 2.5 via Ollama)
+├── ai_system_prompt.txt               ← Plant topology + LLM reasoning rules
+├── telegram_bot.py                    ← Multi-command Telegram bot + AI chat
+├── odoo_ticket_engine.py              ← Auto fault-ticket creation in Odoo
+├── tracker_testing/
+│   ├── broker.py                      ← MQTT broker for tracker NCU messages
+│   └── receiver.py                    ← Tracker data → SQLite + link heartbeat
 ├── dashboard/
-│   ├── app.py                         ← FastAPI server
+│   ├── app.py                         ← FastAPI + WebSocket broadcast server
 │   └── static/
-│       ├── index.html                 ← Premium Glassmorphism UI
-│       ├── app.js
-│       └── style.css                  ← Outfit Typography & Luminous Accents
-├── run_monitor.py                     ← Orchestrator (all 3 services)
-├── extracted_data/                    ← Generated at runtime
-│   ├── PR_YYYY-MM-DD.xlsx
-│   ├── Potenza_AC_YYYY-MM-DD.xlsx
-│   ├── ... (4 more metrics)
-│   ├── extraction_status.json         ← Real-time ingestion progress
-│   └── dashboard_data_YYYY-MM-DD.json
+│       ├── index.html                 ← 11-tab dark-mode dashboard
+│       ├── app.js                     ← WebSocket client + all tab renderers
+│       └── style.css                  ← Glassmorphism UI, pulse animations
+├── db/
+│   ├── db_manager.py                  ← All SQLite I/O, WAL connections, migration
+│   ├── snapshot_queue.py              ← Background single-writer snapshot queue
+│   ├── scada_data.db                  ← All metric tables (wide + long format)
+│   └── scada_snapshots.db             ← Analysis snapshots (JSON blobs, 50/day)
+├── dashboard_doctor.py                ← Hourly DB health check + auto-backup
 └── requirements.txt
 ```
 
 **Data Flow:**
 ```
-VCOM (meteocontrol)
+VCOM (meteocontrol.com)
+  ↓  Playwright browser automation
+vcom_monitor.py  (scrapes 7 metrics every ~10 min)
+  ↓  pandas DataFrame → SQLite WAL (scada_data.db)
+db/db_manager.py  (auto-migrates schema on new VCOM columns)
+  ↓  file-change event
+processor_watchdog_final.py  (forensic analysis: PR, AC, DC, ISO, Temp, Grid)
+  ↓  + mppt_dc_analyzer.py  (fleet-median-based MPPT current comparison)
+snapshot_queue.py  (background single-writer thread → scada_snapshots.db)
+  ↓  load_latest_snapshot()
+dashboard/app.py  (FastAPI WebSocket broadcast every 3 min)
   ↓
-vcom_monitor.py (Playwright scraper)
-  ↓
-extracted_data/*.xlsx (daily rolling files)
-  ↓
-processor_watchdog_final.py (file watcher + analyzer)
-  ↓
-dashboard_data_YYYY-MM-DD.json (JSON snapshots)
-  ↓
-dashboard/app.py (FastAPI background task broadasts JSON via WebSocket)
-  ↓
-http://localhost:8080 (Reactive dark-mode UI with dynamic settings)
+http://localhost:8080  (11-tab reactive dark-mode UI)
+
+Parallel paths:
+  → telegram_bot.py       (commands + AI chat via local LLM)
+  → llm_agent.py          (Qwen 2.5 7B at localhost:11434)
+  → odoo_ticket_engine.py (auto-creates Odoo fault tickets from alarms)
+  → tracker_testing/      (solar tracker MQTT monitoring via NCU/TCU)
 ```
 
 ---
@@ -582,5 +690,5 @@ This project is provided as-is. Adapt and use freely, but ensure compliance with
 
 ---
 
-**Last Updated:** 2026-06-16
-**System Status:** ✅ Production-hardened — grid curtailment intelligence active, Docker stack containerized, Telegram bot fully bilingual (Italian), Odoo ticket integration live.
+**Last Updated:** 2026-07-09
+**System Status:** ✅ Production-hardened — SQLite WAL pipeline, grid curtailment intelligence, Docker stack, Telegram bot with AI chat (Qwen 2.5 7B), Odoo ticket integration, solar tracker monitoring, 11-tab dashboard with data-quality matrix.
