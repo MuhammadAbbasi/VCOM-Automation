@@ -590,13 +590,31 @@ def query_db(sql: str) -> str:
     # potenza_attiva has 288 rows/day (VCOM pre-fills the full day with planned values).
     # We must filter to rows at or before NOW so future slots (100% planned) are excluded.
     sql_lower = sql.lower()
-    if "potenza" in sql_lower and ("nominale" in sql_lower or "limit" in sql_lower):
+    if "potenza" in sql_lower and ("nominale" in sql_lower or "limit" in sql_lower or '"potenza attiva"' in sql_lower):
         _now = datetime.now()
         _now_hhmm = _now.hour + _now.minute / 100.0  # HH.MM float, e.g. 15.22
+        # VCOM renamed the column to "Potenza attiva" in 2026-07; try new name first then fall back
+        _grid_col_candidates = [
+            "Potenza attiva",
+            "Valore nominale potenza attiva [%]",
+            "Regolazione della potenza attiva",
+        ]
+        _grid_col = _grid_col_candidates[0]
+        try:
+            import sqlite3, os
+            _db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "db", "scada_data.db")
+            with sqlite3.connect(_db_path) as _c:
+                _cols = {row[1] for row in _c.execute("PRAGMA table_info(potenza_attiva)").fetchall()}
+            for _cand in _grid_col_candidates:
+                if _cand in _cols:
+                    _grid_col = _cand
+                    break
+        except Exception:
+            pass
         sql = (
-            f'SELECT "Valore nominale potenza attiva [%]", Ora FROM potenza_attiva '
+            f'SELECT "{_grid_col}", Ora FROM potenza_attiva '
             f'WHERE _date = (SELECT MAX(_date) FROM potenza_attiva) '
-            f'AND "Valore nominale potenza attiva [%]" IS NOT NULL '
+            f'AND "{_grid_col}" IS NOT NULL '
             f'AND CAST(Ora AS REAL) <= {_now_hhmm:.2f} '
             f'ORDER BY CAST(Ora AS REAL) DESC LIMIT 1'
         )
@@ -604,16 +622,18 @@ def query_db(sql: str) -> str:
         # 4. Normalize known LLM hallucinations for the potenza_attiva table
         if "potenza_attiva" in sql:
             hallucinations = {
-                'Valore nominale potenza attiva [W]': '"Valore nominale potenza attiva [%]"',
-                'valore nominale potenza attiva [w]': '"Valore nominale potenza attiva [%]"',
-                'Valore nominale potenza attiva [kW]': '"Valore nominale potenza attiva [%]"',
-                'valore nominale potenza attiva [kw]': '"Valore nominale potenza attiva [%]"',
-                'Valore nominale potenza attiva %': '"Valore nominale potenza attiva [%]"',
-                'valore nominale potenza attiva %': '"Valore nominale potenza attiva [%]"',
-                "Valore_nominale_potenza_attiva": '"Valore nominale potenza attiva [%]"',
-                "valore_nominale_potenza_attiva": '"Valore nominale potenza attiva [%]"',
-                "Valore nominale potenza attiva": '"Valore nominale potenza attiva [%]"',
-                "valore nominale potenza attiva": '"Valore nominale potenza attiva [%]"',
+                'Valore nominale potenza attiva [W]': '"Potenza attiva"',
+                'valore nominale potenza attiva [w]': '"Potenza attiva"',
+                'Valore nominale potenza attiva [kW]': '"Potenza attiva"',
+                'valore nominale potenza attiva [kw]': '"Potenza attiva"',
+                'Valore nominale potenza attiva %': '"Potenza attiva"',
+                'valore nominale potenza attiva %': '"Potenza attiva"',
+                "Valore_nominale_potenza_attiva": '"Potenza attiva"',
+                "valore_nominale_potenza_attiva": '"Potenza attiva"',
+                "Valore nominale potenza attiva": '"Potenza attiva"',
+                "valore nominale potenza attiva": '"Potenza attiva"',
+                'Valore nominale potenza attiva [%]': '"Potenza attiva"',
+                'valore nominale potenza attiva [%]': '"Potenza attiva"',
             }
             for hallucinated, real in hallucinations.items():
                 if hallucinated in sql and real not in sql:
@@ -753,7 +773,7 @@ def build_data_snapshot(plant_data, question):
         "temperatura (_date,Ora,<inverter cols>), "
         "pr_readings (_date,Ora,<inverter cols>), "
         "resistenza_isolamento (_date,Ora,<inverter cols>), "
-        "potenza_attiva (_date,Ora,'Valore nominale potenza attiva [%]'), "
+        "potenza_attiva (_date,Ora,'Potenza attiva' or 'Valore nominale potenza attiva [%]' depending on VCOM version), "
         "analysis_snapshots (date,timestamp,snapshot_json). "
         "There is NO 'metrics' table."
     )

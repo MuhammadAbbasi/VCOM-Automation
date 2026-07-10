@@ -438,6 +438,7 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
     act_val = None
     if attiva_df is not None and not attiva_df.empty:
         priority_names = [
+            "Potenza attiva",
             "Valore nominale potenza attiva",
             "Valore nominale della potenza attiva (gestore di rete)",
             "Valore nominale della potenza attiva (terzi)",
@@ -1171,7 +1172,9 @@ def analyze_site(date_str: str) -> None:
         if attiva_df is not None and not attiva_df.empty:
             # Priority 1: General limit, Priority 2: Gestore (Network), Priority 3: Terzi
             # Priority 4: New VCOM column name introduced 2026-06 (Regolazione della potenza attiva)
+            # Priority 5: VCOM tab renamed to "Potenza attiva" in 2026-07
             priority_names = [
+                "Potenza attiva",
                 "Valore nominale potenza attiva",
                 "Valore nominale della potenza attiva (gestore di rete)",
                 "Valore nominale della potenza attiva (terzi)",
