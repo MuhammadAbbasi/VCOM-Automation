@@ -27,6 +27,13 @@ logging.basicConfig(
     ]
 )
 
+# Corrections for known SCADA OCR misreads on specific NCU/TCU pairs.
+# Key: (ncu, tcu) exactly as received. Value: correct tracker_no.
+TRACKER_CORRECTIONS = {
+    ("NCU_03", "TCU 04"): "Tracker 247",
+    ("NCU_03", "TCU 92"): "Tracker 325",
+}
+
 def on_connect(client, userdata, flags, reason_code, properties):
     if reason_code == 0:
         logging.info("Connected to MQTT Broker successfully.")
@@ -89,6 +96,14 @@ def handle_sync_request(client, payload):
 
     if duplicates:
         logging.warning(f"Detected {len(duplicates)} duplicates in batch.")
+
+    # Apply tracker number corrections for known SCADA OCR misreads
+    for record in unique_data:
+        key = (record.get("ncu"), record.get("tcu"))
+        if key in TRACKER_CORRECTIONS:
+            original = record.get("tracker_no")
+            record["tracker_no"] = TRACKER_CORRECTIONS[key]
+            logging.info(f"Corrected {key}: {original} → {record['tracker_no']}")
 
     # Send Telegram Summary
     try:
