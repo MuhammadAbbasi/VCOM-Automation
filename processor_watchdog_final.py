@@ -161,6 +161,10 @@ else:
 
 logger = logging.getLogger("watchdog_final")
 
+# Keyed by alarm_id → last_sent ISO string. Lives for the process lifetime so
+# cooldown windows survive alarm-object recreation (fault clears and re-fires).
+_tg_cooldown: dict = {}
+
 if is_watchdog_proc:
     # Add SQLite log handler for the watchdog process only
     try:
@@ -1297,13 +1301,15 @@ def analyze_site(date_str: str) -> None:
 
         def should_send_tg(alarm: dict) -> bool:
             """Decide whether to push a Telegram message for this active alarm now."""
-            last_sent = alarm.get("last_tg_sent")
+            alarm_id = alarm.get("id", "")
+            # _tg_cooldown persists across cycles even when the alarm object is recreated
+            last_sent = _tg_cooldown.get(alarm_id) or alarm.get("last_tg_sent")
             if not last_sent:
                 return True  # First time notifying
-            
+
             severity = alarm.get("severity", "yellow")
             threshold = TG_REFIRE_CRIT_SEC if severity == "red" else TG_REFIRE_NONCRIT_SEC
-            
+
             try:
                 last_dt = datetime.fromisoformat(last_sent)
                 return (now_dt - last_dt).total_seconds() >= threshold
@@ -1312,12 +1318,12 @@ def analyze_site(date_str: str) -> None:
 
         def fire_tg(alarm: dict, category: str, line: str) -> None:
             """Queue a Telegram line and stamp the alarm with the send time."""
-            # Only send critical (red) alarms or urgent grid alerts to Telegram to reduce noise
             severity = alarm.get("severity", "yellow")
             if severity == "red" or "GRID" in category:
                 add_tg_msg(category, line)
-            
+
             alarm["last_tg_sent"] = timestamp
+            _tg_cooldown[alarm.get("id", "")] = timestamp
 
         # Track ALL evaluated IDs to prevent filtered alerts from leaking back in via cleanup loop
         checked_ids = set()
@@ -1852,13 +1858,17 @@ def analyze_site(date_str: str) -> None:
                 msg = f"⚡ {inv_label} — DC CRITICO (MPPT: {mppt_list})"
                 add_tg_msg("DC CRITICO", msg)
                 for alarm, dtype in details["alarms"]:
-                    if alarm["severity"] == "red": alarm["last_tg_sent"] = timestamp
+                    if alarm["severity"] == "red":
+                        alarm["last_tg_sent"] = timestamp
+                        _tg_cooldown[alarm.get("id", "")] = timestamp
             if details["warn"]:
                 mppt_list = ", ".join(details["warn"])
                 msg = f"🔌 {inv_label} — Avviso DC (MPPT: {mppt_list})"
                 add_tg_msg("AVVISO DC", msg)
                 for alarm, dtype in details["alarms"]:
-                    if alarm["severity"] != "red": alarm["last_tg_sent"] = timestamp
+                    if alarm["severity"] != "red":
+                        alarm["last_tg_sent"] = timestamp
+                        _tg_cooldown[alarm.get("id", "")] = timestamp
 
         # Recover resolved DC faults
         for past_alarm_id, past_alarm in prev_alarm_map.items():
