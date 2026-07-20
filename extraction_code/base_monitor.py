@@ -596,38 +596,3 @@ def extract_infotab_table_js(page, metric_name: str, row_timeout: int = 20_000) 
     return pd.DataFrame(parsed_rows, columns=headers) if headers else pd.DataFrame(parsed_rows)
 
 
-def extract_infotab_table(page, metric_name: str) -> pd.DataFrame:
-    """Extract the standard #infotab-data table (used by 5 of 6 metrics)."""
-    rows_locator = page.locator("#infotab-data table tbody tr")
-    try:
-        rows_locator.first.wait_for(state="visible", timeout=20_000)
-    except Exception:
-        logger.warning(f"No data rows found for {metric_name}.")
-        return pd.DataFrame()
-
-    # Headers
-    headers_raw = [h.inner_text().strip() for h in page.locator("#infotab-data table thead tr th").all()]
-    header_texts = []
-    ignored_indices = set()
-    for i, h in enumerate(headers_raw):
-        if "SunGrow" in h:
-            ignored_indices.add(i)
-        else:
-            header_texts.append(h)
-
-    logger.info(f"{metric_name} headers: {header_texts[:5]}{'…' if len(header_texts) > 5 else ''}")
-
-    # Rows
-    results = []
-    for row in rows_locator.all():
-        cells = row.locator("td").all_inner_texts()
-        filtered = [cells[i].strip() for i in range(len(cells)) if i not in ignored_indices]
-        converted = []
-        for j, cell in enumerate(filtered):
-            if j == 0:  # Ora column — keep as string
-                converted.append(cell)
-            else:
-                converted.append(parse_italian_number(cell))
-        results.append(converted)
-
-    return pd.DataFrame(results, columns=header_texts) if header_texts else pd.DataFrame(results)
