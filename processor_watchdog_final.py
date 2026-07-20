@@ -27,6 +27,7 @@ from mppt_dc_analyzer import analyze_dc_current
 from logging.handlers import RotatingFileHandler
 
 from db.snapshot_queue import shutdown_snapshot_worker
+from db.db_manager import NumpyEncoder
 
 # Ensure UTF-8 for console output on Windows
 if sys.platform == "win32":
@@ -175,26 +176,6 @@ if is_watchdog_proc:
     except Exception:
         pass  # DB module may not be ready yet
 
-
-class NumpyEncoder(json.JSONEncoder):
-    """JSON encoder that handles numpy types and Pandas objects."""
-    def default(self, obj):
-        if isinstance(obj, (np.integer, np.int64, np.int32)):
-            return int(obj)
-        if isinstance(obj, (np.floating, np.float64, np.float32)):
-            if np.isnan(obj) or np.isinf(obj):
-                return None
-            return float(obj)
-        if isinstance(obj, np.ndarray):
-            return obj.tolist()
-        if isinstance(obj, (pd.Timestamp, datetime)):
-            return obj.isoformat()
-        if hasattr(obj, 'to_dict'):
-            return obj.to_dict()
-        try:
-            return super().default(obj)
-        except TypeError:
-            return str(obj)
 
 # ---------------------------------------------------------------------------
 # Constants
