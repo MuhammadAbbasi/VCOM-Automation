@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css" />
   <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+  <script src="/static/lucide.min.js"></script>
 </head>
 
 <body>
@@ -43,23 +44,23 @@
     </div>
 
     <div class="header-actions">
-      <button id="settings-btn" class="btn-rescan"><span>⚙️</span> IMPOSTAZIONI</button>
-      <button id="rescan-btn" class="btn-rescan"><span>🔍</span> RISCANSIONE FORENSICA</button>
+      <button id="settings-btn" class="btn-rescan" aria-label="Apri impostazioni"><i data-lucide="settings" class="icon"></i> IMPOSTAZIONI</button>
+      <button id="rescan-btn" class="btn-rescan" aria-label="Avvia riscansione forensica"><i data-lucide="search" class="icon"></i> RISCANSIONE FORENSICA</button>
     </div>
   </header>
 
   <nav class="tab-nav" id="tab-nav">
-    <button class="tab-btn active" data-tab="tab-overview"><span class="tab-icon">📊</span> Panoramica</button>
-    <button class="tab-btn" data-tab="tab-plant-map"><span class="tab-icon">🗺️</span> Mappa Impianto</button>
-    <button class="tab-btn" data-tab="tab-pr"><span class="tab-icon">⚡</span> Dettaglio PR</button>
-    <button class="tab-btn" data-tab="tab-temp"><span class="tab-icon">🌡️</span> Temperatura</button>
-    <button class="tab-btn" data-tab="tab-dc"><span class="tab-icon">🔌</span> Corrente DC</button>
-    <button class="tab-btn" data-tab="tab-ac"><span class="tab-icon">⚙️</span> Potenza AC</button>
-    <button class="tab-btn" data-tab="tab-sensors"><span class="tab-icon">📡</span> Sensori</button>
-    <button class="tab-btn" data-tab="tab-analytics"><span class="tab-icon">📈</span> Analisi</button>
-    <button class="tab-btn" data-tab="tab-trackers"><span class="tab-icon">🛰️</span> Campo Tracker</button>
-    <button class="tab-btn" data-tab="tab-logger"><span class="tab-icon">📋</span> Qualità Dati</button>
-    <button class="tab-btn" data-tab="tab-chat"><span class="tab-icon">💬</span> Chat AI</button>
+    <button class="tab-btn active" data-tab="tab-overview"><i data-lucide="bar-chart-2" class="icon"></i><span class="tab-btn-label"> Panoramica</span></button>
+    <button class="tab-btn" data-tab="tab-plant-map"><i data-lucide="map" class="icon"></i><span class="tab-btn-label"> Mappa Impianto</span></button>
+    <button class="tab-btn" data-tab="tab-pr"><i data-lucide="zap" class="icon"></i><span class="tab-btn-label"> Dettaglio PR</span></button>
+    <button class="tab-btn" data-tab="tab-temp"><i data-lucide="thermometer" class="icon"></i><span class="tab-btn-label"> Temperatura</span></button>
+    <button class="tab-btn" data-tab="tab-dc"><i data-lucide="plug-zap" class="icon"></i><span class="tab-btn-label"> Corrente DC</span></button>
+    <button class="tab-btn" data-tab="tab-ac"><i data-lucide="settings-2" class="icon"></i><span class="tab-btn-label"> Potenza AC</span></button>
+    <button class="tab-btn" data-tab="tab-sensors"><i data-lucide="radio" class="icon"></i><span class="tab-btn-label"> Sensori</span></button>
+    <button class="tab-btn" data-tab="tab-analytics"><i data-lucide="trending-up" class="icon"></i><span class="tab-btn-label"> Analisi</span></button>
+    <button class="tab-btn" data-tab="tab-trackers"><i data-lucide="satellite" class="icon"></i><span class="tab-btn-label"> Campo Tracker</span></button>
+    <button class="tab-btn" data-tab="tab-logger"><i data-lucide="clipboard-list" class="icon"></i><span class="tab-btn-label"> Qualità Dati</span></button>
+    <button class="tab-btn" data-tab="tab-chat"><i data-lucide="message-circle" class="icon"></i><span class="tab-btn-label"> Chat AI</span></button>
   </nav>
 
   <main id="tab-overview" class="tab-content active">
@@ -67,7 +68,7 @@
       <h2>Stato Generale Impianto</h2>
       <div id="metrics-grid">
         <div class="card metric-card plant-status-card" style="grid-column: span 1;">
-          <div class="metric-value" id="val-online">--</div>
+          <div class="metric-value skeleton" id="val-online">--</div>
           <div class="metric-label">Inverter Online</div>
           <div class="status-breakdown">
             <span class="breakdown-item"><span class="dot red"></span> <b id="val-tripped">0</b> Scattati</span>
@@ -77,33 +78,33 @@
           </div>
         </div>
         <div class="card metric-card total-power">
-          <div class="metric-value" id="val-total-power">-</div>
+          <div class="metric-value skeleton" id="val-total-power">-</div>
           <div class="metric-label">Potenza Totale Impianto</div>
         </div>
         <div class="card metric-card daily-energy">
-          <div class="metric-value" id="val-daily-energy">-</div>
+          <div class="metric-value skeleton" id="val-daily-energy">-</div>
           <div class="metric-label">Energia Prodotta Oggi</div>
         </div>
         <div class="card metric-card pr-status">
-          <div class="metric-value" id="val-avg-pr">-</div>
+          <div class="metric-value skeleton" id="val-avg-pr">-</div>
           <div class="metric-label">PR Medio Oggi</div>
         </div>
         <div class="card metric-card sensor-status">
-          <div class="metric-value" id="val-poa">-</div>
+          <div class="metric-value skeleton" id="val-poa">-</div>
           <div class="metric-label">Irraggiamento Impianto (POA)</div>
         </div>
         <div class="card metric-card grid-limit" id="card-grid-limit">
-          <div class="metric-value" id="val-grid-limit">100.0%</div>
+          <div class="metric-value skeleton" id="val-grid-limit">100.0%</div>
           <div class="metric-label">Limite Produzione Rete</div>
         </div>
         <div class="card metric-card action-card" style="grid-column: span 1; background: var(--glass-glow)">
           <button id="btn-trigger-extraction" onclick="triggerExtraction()">
-            <span id="trigger-icon">🚀</span> <span id="trigger-text">Aggiorna Dati</span>
+            <span id="trigger-icon"><i data-lucide="zap" class="icon"></i></span> <span id="trigger-text">Aggiorna Dati</span>
           </button>
           <div class="metric-label">VCOM: <span id="extraction-status-label" class="status-pulse">INATTIVO</span></div>
         </div>
         <div class="card metric-card tracker-health-card" id="card-tracker-health" style="grid-column: span 1; cursor:pointer" onclick="document.querySelector('[data-tab=tab-trackers]').click()">
-          <div class="metric-value" id="val-tracker-health">0/370</div>
+          <div class="metric-value skeleton" id="val-tracker-health">0/370</div>
           <div class="metric-label">Tracker in Auto (AM)</div>
           <div class="ncu-breakdown-row">
              <div class="ncu-mini-stat"><b>N1:</b> <span id="val-n1-am">0</span></div>
@@ -125,8 +126,8 @@
 
     <div class="matrix-alerts-row">
       <section class="matrix-col">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.5rem;">
-          <h2 style="margin:0;">Matrice Salute Inverter
+        <div class="section-row with-border">
+          <h2>Matrice Salute Inverter
             <span style="font-size:0.65rem;font-weight:400;color:var(--muted);margin-left:0.75rem;">
               LED: PR | Temp | DC | AC | ISO
             </span>
@@ -137,8 +138,8 @@
       </section>
 
       <section class="alerts-col">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
-          <h2 style="margin:0;">Allarmi Critici</h2>
+        <div class="section-row" style="margin-bottom:0.75rem;">
+          <h2>Allarmi Critici</h2>
           <div id="alert-filter-chips" class="filter-chip-group">
           </div>
         </div>
@@ -152,10 +153,9 @@
     </section>
 
     <section>
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem;">
-        <h2 style="margin:0;">Storico Allarmi</h2>
-        <select id="history-filter"
-          style="background:var(--surface); border:1px solid var(--border); color:var(--text); padding:0.25rem; font-size: 0.7rem;">
+      <div class="section-row">
+        <h2>Storico Allarmi</h2>
+        <select id="history-filter" class="filter-select">
           <option value="ALL">Tutte le Categorie</option>
         </select>
       </div>
@@ -184,8 +184,8 @@
 
   <main id="tab-plant-map" class="tab-content">
     <section>
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-        <h2 style="margin: 0;">🗺️ Mappa Interattiva Impianto</h2>
+      <div class="section-row" style="margin-bottom:1.5rem;">
+        <h2><i data-lucide="map" class="icon"></i> Mappa Interattiva Impianto</h2>
         <div style="font-size: 0.85rem; color: #aaa;">
           <span style="display: inline-block; margin-right: 1.5rem;">
             <span style="display: inline-block; width: 12px; height: 12px; background: #00ff00; border-radius: 50%; margin-right: 6px;"></span>
@@ -202,14 +202,14 @@
         </div>
       </div>
 
-      <div style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 20px; margin-bottom: 20px; overflow: auto;">
+      <div class="plant-map-svg-wrap">
         <svg id="plant-map-svg" style="width: 100%; min-height: 600px; background: rgba(10,10,20,0.8); border-radius: 4px;"></svg>
       </div>
 
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px;">
-        <div class="card" style="background: var(--glass-dark); border: 1px solid rgba(255,255,255,0.1);">
+      <div class="plant-map-cards">
+        <div class="card plant-map-card">
           <div style="padding: 15px;">
-            <h3 style="margin: 0 0 12px 0; font-size: 0.95rem;">📍 Come Usare</h3>
+            <h3 style="margin: 0 0 12px 0; font-size: 0.95rem;"><i data-lucide="map-pin" class="icon"></i> Come Usare</h3>
             <div style="font-size: 0.85rem; color: #ccc; line-height: 1.6;">
               <div style="margin-bottom: 10px;">
                 <b style="color: #00ff00;">Livello 1:</b> Visualizza tutti gli inverter sulla mappa. Ogni cerchio mostra lo stato di salute dell'inverter.
@@ -224,9 +224,9 @@
           </div>
         </div>
 
-        <div class="card" style="background: var(--glass-dark); border: 1px solid rgba(255,255,255,0.1);">
+        <div class="card plant-map-card">
           <div style="padding: 15px;">
-            <h3 style="margin: 0 0 12px 0; font-size: 0.95rem;">⚙️ Calcolo Salute</h3>
+            <h3 style="margin: 0 0 12px 0; font-size: 0.95rem;"><i data-lucide="settings" class="icon"></i> Calcolo Salute</h3>
             <div style="font-size: 0.85rem; color: #ccc; line-height: 1.6;">
               <div>Il punteggio combina:</div>
               <div style="margin-top: 8px; font-family: monospace; font-size: 0.80rem; background: rgba(0,0,0,0.5); padding: 8px; border-radius: 3px;">
@@ -239,31 +239,21 @@
           </div>
         </div>
 
-        <div class="card" style="background: var(--glass-dark); border: 1px solid rgba(255,255,255,0.1);">
+        <div class="card plant-map-card">
           <div style="padding: 15px;">
-            <h3 style="margin: 0 0 12px 0; font-size: 0.95rem;">📊 Panoramica Impianto</h3>
+            <h3 style="margin: 0 0 12px 0; font-size: 0.95rem;"><i data-lucide="bar-chart-2" class="icon"></i> Panoramica Impianto</h3>
             <div style="font-size: 0.85rem; color: #ccc; line-height: 1.8;">
-              <div>
-                <b>Inverter Totali:</b> <span style="color: #00ff00;">36</span>
-              </div>
-              <div>
-                <b>Tracker Totali:</b> <span style="color: #ffff00;">370</span>
-              </div>
-              <div>
-                <b>Stringhe Totali:</b> <span style="color: #ff0000;">1.110</span>
-              </div>
-              <div style="margin-top: 8px; font-size: 0.75rem; color: #888;">
-                Organizzato in 6 sezioni su 3 campi
-              </div>
+              <div><b>Inverter Totali:</b> <span style="color: #00ff00;">36</span></div>
+              <div><b>Tracker Totali:</b> <span style="color: #ffff00;">370</span></div>
+              <div><b>Stringhe Totali:</b> <span style="color: #ff0000;">1.110</span></div>
+              <div style="margin-top: 8px; font-size: 0.75rem; color: #888;">Organizzato in 6 sezioni su 3 campi</div>
             </div>
           </div>
         </div>
       </div>
 
-      <div style="margin-top: 25px; padding: 15px; background: rgba(0,150,255,0.05); border: 1px solid rgba(0,150,255,0.2); border-radius: 6px;">
-        <div style="font-size: 0.9rem; color: #aaa;">
-          <b style="color: #00aaff;">💡 Suggerimento:</b> Passa il cursore sui cerchi inverter per vedere info rapide sulla salute. Clicca per vedere il layout dettagliato delle stringhe. La mappa si aggiorna automaticamente ogni 30 secondi.
-        </div>
+      <div class="plant-map-tip">
+        <b><i data-lucide="lightbulb" class="icon"></i> Suggerimento:</b> Passa il cursore sui cerchi inverter per vedere info rapide sulla salute. Clicca per vedere il layout dettagliato delle stringhe. La mappa si aggiorna automaticamente ogni 30 secondi.
       </div>
     </section>
   </main>
@@ -271,7 +261,7 @@
   <main id="tab-pr" class="tab-content">
     <section>
       <div class="detail-header">
-        <h2>⚡ Dettaglio Performance Ratio</h2>
+        <h2><i data-lucide="zap" class="icon"></i> Dettaglio Performance Ratio</h2>
         <div class="detail-stats">
           <div class="stat-card">
             <div class="stat-value" id="pr-avg">-</div>
@@ -312,7 +302,7 @@
   <main id="tab-temp" class="tab-content">
     <section>
       <div class="detail-header">
-        <h2>🌡️ Dettaglio Temperatura</h2>
+        <h2><i data-lucide="thermometer" class="icon"></i> Dettaglio Temperatura</h2>
         <div class="detail-stats">
           <div class="stat-card">
             <div class="stat-value" id="temp-avg">-</div>
@@ -353,7 +343,7 @@
   <main id="tab-dc" class="tab-content">
     <section>
       <div class="detail-header">
-        <h2>🔌 Dettaglio Corrente DC</h2>
+        <h2><i data-lucide="plug-zap" class="icon"></i> Dettaglio Corrente DC</h2>
         <div class="detail-stats">
           <div class="stat-card">
             <div class="stat-value" id="dc-avg">-</div>
@@ -394,7 +384,7 @@
   <main id="tab-ac" class="tab-content">
     <section>
       <div class="detail-header">
-        <h2>⚙️ Dettaglio Potenza AC</h2>
+        <h2><i data-lucide="settings-2" class="icon"></i> Dettaglio Potenza AC</h2>
         <div class="detail-stats">
           <div class="stat-card">
             <div class="stat-value" id="ac-avg">-</div>
@@ -434,7 +424,7 @@
 
   <main id="tab-sensors" class="tab-content">
     <section>
-      <h2>📡 Sensori Ambientali</h2>
+      <h2><i data-lucide="radio" class="icon"></i> Sensori Ambientali</h2>
       <div id="sensor-macro-stats" class="detail-stats" style="margin-bottom:1.5rem;"></div>
       <div id="sensor-grid-container" class="sensor-container"></div>
     </section>
@@ -546,9 +536,35 @@
        </div>
     </div>
 
-    <div id="tracker-deviation-container" class="deviation-container">
+    <!-- Deviation LED Strips (Accuracy Health LED indicators) -->
+    <div id="tracker-deviation-container" class="deviation-container" style="margin-bottom: 1.5rem;">
     </div>
 
+    <!-- Tracker Graphical Visualization Card -->
+    <div class="card chart-card" style="margin-bottom: 1.5rem; padding: 1.25rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem;">
+        <h3 style="margin: 0; font-size: 1.1rem; font-weight: 600; color: #fff; display: flex; align-items: center; gap: 0.5rem;">
+          <i data-lucide="trending-up" class="icon"></i> Allineamento Campo Tracker (36h)
+        </h3>
+        
+        <!-- Combined Chart Filters and Controls -->
+        <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+          <!-- NCU Filter Group -->
+          <div class="tracker-chart-filters" style="display: flex; gap: 0.35rem; border-right: 1px solid rgba(255,255,255,0.1); padding-right: 1rem;">
+            <button class="filter-btn active" id="btn-chart-ncu-all" onclick="setTrackerChartNcu('all')">Tutto Impianto</button>
+            <button class="filter-btn" id="btn-chart-ncu-n1" onclick="setTrackerChartNcu('NCU 01')">NCU 1</button>
+            <button class="filter-btn" id="btn-chart-ncu-n2" onclick="setTrackerChartNcu('NCU 02')">NCU 2</button>
+            <button class="filter-btn" id="btn-chart-ncu-n3" onclick="setTrackerChartNcu('NCU 03')">NCU 3</button>
+          </div>
+          
+          <!-- Mode Group -->
+          <div class="tracker-chart-modes" style="display: flex; gap: 0.35rem;">
+            <button class="filter-btn active" id="btn-chart-angles" onclick="setTrackerChartMode('angles')">Angoli (Reale & Target)</button>
+            <button class="filter-btn" id="btn-chart-deviation" onclick="setTrackerChartMode('deviation')">Deviazione</button>
+          </div>
+        </div>
+      </div>
+      <div id="tracker-history-chart" style="min-height: 350px;"></div>
     <div class="tracker-navigation-bar">
       <div class="tracker-filters">
         <button class="filter-btn active" data-ncu="all">Tutti i Campi</button>
@@ -576,11 +592,9 @@
           </div>
         </div>
         <div class="chat-suggestions">
-          <button class="chat-suggestion" onclick="sendSuggestion('Ci sono allarmi attivi?')">🚨 Allarmi</button>
-          <button class="chat-suggestion" onclick="sendSuggestion('Quali inverter hanno temperatura elevata?')">🌡️ Alta
-            Temp</button>
-          <button class="chat-suggestion" onclick="sendSuggestion('Confronta la produzione TX1 vs TX2 vs TX3 oggi')">📊 TX
-            Check</button>
+          <button class="chat-suggestion" onclick="sendSuggestion('Ci sono allarmi attivi?')"><i data-lucide="alert-triangle" class="icon"></i> Allarmi</button>
+          <button class="chat-suggestion" onclick="sendSuggestion('Quali inverter hanno temperatura elevata?')"><i data-lucide="thermometer" class="icon"></i> Alta Temp</button>
+          <button class="chat-suggestion" onclick="sendSuggestion('Confronta la produzione TX1 vs TX2 vs TX3 oggi')"><i data-lucide="bar-chart-2" class="icon"></i> TX Check</button>
         </div>
         <div class="chat-input-area">
           <input type="text" id="chat-input" placeholder="Chiedi all'AI riguardo l'impianto..." />
@@ -594,7 +608,7 @@
   <main id="tab-logger" class="tab-content">
     <section>
       <div class="detail-header">
-        <h2>📋 Qualità &amp; Copertura Dati</h2>
+        <h2><i data-lucide="clipboard-list" class="icon"></i> Qualità &amp; Copertura Dati</h2>
         <span class="dq-updated-at" id="dq-updated-at"></span>
       </div>
 
@@ -603,14 +617,14 @@
 
       <!-- ── Extraction file status ── -->
       <div class="dq-section-title">
-        <span>📂 Stato Estrazione File</span>
+        <span><i data-lucide="folder-open" class="icon"></i> Stato Estrazione File</span>
         <span class="dq-section-hint">Ultimo ciclo di estrazione per sorgente dati</span>
       </div>
       <div class="dq-extraction-grid" id="dq-extraction-grid"></div>
 
       <!-- ── Coverage matrix ── -->
       <div class="dq-section-title" style="margin-top:1.5rem;">
-        <span>🔲 Matrice Copertura (36 Inverter × 7 Metriche)</span>
+        <span><i data-lucide="layout-grid" class="icon"></i> Matrice Copertura (36 Inverter × 7 Metriche)</span>
         <span class="dq-section-hint">
           <span class="dq-legend-item dq-ok">■</span> Dato presente
           <span class="dq-legend-item dq-missing">■</span> Dato mancante
@@ -623,13 +637,13 @@
           <thead>
             <tr>
               <th class="dq-inv-col">Inverter</th>
-              <th><span title="Performance Ratio">⚡ PR</span></th>
-              <th><span title="Temperatura">🌡️ Temp</span></th>
-              <th><span title="Corrente DC">🔌 DC</span></th>
-              <th><span title="Potenza AC">⚙️ AC</span></th>
-              <th><span title="Resistenza Isolamento">🛡️ ISO</span></th>
-              <th><span title="Irraggiamento">☀️ IRR</span></th>
-              <th><span title="Potenza Attiva">📊 ACT</span></th>
+              <th><span title="Performance Ratio"><i data-lucide="zap" class="icon"></i> PR</span></th>
+              <th><span title="Temperatura"><i data-lucide="thermometer" class="icon"></i> Temp</span></th>
+              <th><span title="Corrente DC"><i data-lucide="plug-zap" class="icon"></i> DC</span></th>
+              <th><span title="Potenza AC"><i data-lucide="settings-2" class="icon"></i> AC</span></th>
+              <th><span title="Resistenza Isolamento"><i data-lucide="shield" class="icon"></i> ISO</span></th>
+              <th><span title="Irraggiamento"><i data-lucide="sun" class="icon"></i> IRR</span></th>
+              <th><span title="Potenza Attiva"><i data-lucide="bar-chart-2" class="icon"></i> ACT</span></th>
             </tr>
           </thead>
           <tbody id="dq-matrix-body"></tbody>
@@ -638,7 +652,7 @@
 
       <!-- ── Missing data detail per metric ── -->
       <div class="dq-section-title" style="margin-top:1.5rem;">
-        <span>⚠️ Dettaglio Dati Mancanti</span>
+        <span><i data-lucide="alert-triangle" class="icon"></i> Dettaglio Dati Mancanti</span>
         <span class="dq-section-hint">Solo metriche con inverter senza dato nell'ultimo ciclo</span>
       </div>
       <div id="dq-missing-detail"></div>
@@ -696,7 +710,7 @@
         <div id="m-tab-telegram" class="m-tab-panel">
           <div class="settings-column">
             <h3>Integrazione Bot Telegram</h3>
-            <label class="checkbox-label"><input type="checkbox" id="cfg-tg-enabled"> ⚡ Abilita Notifiche Forensiche Telegram</label>
+            <label class="checkbox-label"><input type="checkbox" id="cfg-tg-enabled"> <i data-lucide="send" class="icon"></i> Abilita Notifiche Forensiche Telegram</label>
             <label>Token API Bot <input type="password" id="cfg-tg-token" placeholder="123456789:ABCDEF..."></label>
             <label>ID Gruppo/Chat <input type="text" id="cfg-tg-chat" placeholder="-123456789"></label>
             <label>ID Admin Personale (Opzionale) <input type="text" id="cfg-tg-personal" placeholder="123456789"></label>
@@ -718,14 +732,12 @@
               </thead>
               <tbody>
                 <tr>
-                  <td style="padding:0.75rem;"><span
-                      style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">📡</span> Perdita Comunicazione (Inverter)</td>
+                  <td style="padding:0.75rem;"><i data-lucide="radio" class="icon" style="margin-right:0.5rem;"></i> Perdita Comunicazione (Inverter)</td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-comm-db"></td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-comm-tg"></td>
                 </tr>
                 <tr>
-                  <td style="padding:0.75rem;"><span
-                      style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">🌍</span> Interruzione Impianto (Caduta Totale)</td>
+                  <td style="padding:0.75rem;"><i data-lucide="globe" class="icon" style="margin-right:0.5rem;"></i> Interruzione Impianto (Caduta Totale)</td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-site-db"></td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-site-tg"></td>
                 </tr>
@@ -736,14 +748,12 @@
                     ALLARMI POTENZA AC</td>
                 </tr>
                 <tr>
-                  <td style="padding:0.75rem;"><span
-                      style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">🟡</span> Avviso AC (Bassa Potenza)</td>
+                  <td style="padding:0.75rem;"><i data-lucide="zap" class="icon" style="margin-right:0.5rem;color:var(--yellow);"></i> Avviso AC (Bassa Potenza)</td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-ac-db"></td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-ac-tg"></td>
                 </tr>
                 <tr>
-                  <td style="padding:0.75rem;"><span
-                      style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">🔴</span> Inverter Scattato (AC Zero)</td>
+                  <td style="padding:0.75rem;"><i data-lucide="alert-circle" class="icon" style="margin-right:0.5rem;color:var(--red);"></i> Inverter Scattato (AC Zero)</td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-trip-db"></td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-trip-tg"></td>
                 </tr>
@@ -754,14 +764,12 @@
                     PERFORMANCE RATIO (PR)</td>
                 </tr>
                 <tr>
-                  <td style="padding:0.75rem;"><span
-                      style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">⚡</span> PR Basso (Avviso)</td>
+                  <td style="padding:0.75rem;"><i data-lucide="zap" class="icon" style="margin-right:0.5rem;color:var(--yellow);"></i> PR Basso (Avviso)</td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-pr-low-db"></td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-pr-low-tg"></td>
                 </tr>
                 <tr>
-                  <td style="padding:0.75rem;"><span
-                      style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">🚨</span> PR Critico (Rosso)</td>
+                  <td style="padding:0.75rem;"><i data-lucide="alert-triangle" class="icon" style="margin-right:0.5rem;color:var(--red);"></i> PR Critico (Rosso)</td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-pr-crit-db"></td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-pr-crit-tg"></td>
                 </tr>
@@ -772,14 +780,12 @@
                     ALLARMI TEMPERATURA</td>
                 </tr>
                 <tr>
-                  <td style="padding:0.75rem;"><span
-                      style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">🌡️</span> Temperatura Alta (Giallo)</td>
+                  <td style="padding:0.75rem;"><i data-lucide="thermometer" class="icon" style="margin-right:0.5rem;color:var(--yellow);"></i> Temperatura Alta (Giallo)</td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-temp-warn-db"></td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-temp-warn-tg"></td>
                 </tr>
                 <tr>
-                  <td style="padding:0.75rem;"><span
-                      style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">🔥</span> Temperatura Critica (Rosso)</td>
+                  <td style="padding:0.75rem;"><i data-lucide="thermometer" class="icon" style="margin-right:0.5rem;color:var(--red);"></i> Temperatura Critica (Rosso)</td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-temp-crit-db"></td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-temp-crit-tg"></td>
                 </tr>
@@ -790,14 +796,12 @@
                     FORENSICA STRINGHE DC</td>
                 </tr>
                 <tr>
-                  <td style="padding:0.75rem;"><span
-                      style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">🔌</span> Avviso DC (Sbilancio MPPT)</td>
+                  <td style="padding:0.75rem;"><i data-lucide="plug-zap" class="icon" style="margin-right:0.5rem;color:var(--yellow);"></i> Avviso DC (Sbilancio MPPT)</td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-dc-warn-db"></td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-dc-warn-tg"></td>
                 </tr>
                 <tr>
-                  <td style="padding:0.75rem;"><span
-                      style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">⚡</span> DC Critico (Stringhe Offline)</td>
+                  <td style="padding:0.75rem;"><i data-lucide="plug-zap" class="icon" style="margin-right:0.5rem;color:var(--red);"></i> DC Critico (Stringhe Offline)</td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-dc-crit-db"></td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-dc-crit-tg"></td>
                 </tr>
@@ -808,20 +812,17 @@
                     CONNETTIVITÀ TRACKER &amp; MQTT</td>
                 </tr>
                 <tr>
-                  <td style="padding:0.75rem;"><span
-                      style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">🛰️</span> Comunicazione Tracker (MQTT Mancante)</td>
+                  <td style="padding:0.75rem;"><i data-lucide="satellite" class="icon" style="margin-right:0.5rem;"></i> Comunicazione Tracker (MQTT Mancante)</td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-tracker-db"></td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-tracker-tg"></td>
                 </tr>
                 <tr>
-                  <td style="padding:0.75rem;"><span
-                      style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">📐</span> Deviazione Angolo Tracker (>Soglia)</td>
+                  <td style="padding:0.75rem;"><i data-lucide="ruler" class="icon" style="margin-right:0.5rem;"></i> Deviazione Angolo Tracker (>Soglia)</td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-tracker-dev-db"></td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-tracker-dev-tg"></td>
                 </tr>
                 <tr>
-                  <td style="padding:0.75rem;"><span
-                      style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">📡</span> Impulso Dati Sistema (Dati Mancanti)</td>
+                  <td style="padding:0.75rem;"><i data-lucide="radio" class="icon" style="margin-right:0.5rem;"></i> Impulso Dati Sistema (Dati Mancanti)</td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-mqtt-db"></td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-mqtt-tg"></td>
                 </tr>
@@ -832,23 +833,20 @@
                     SICUREZZA &amp; RETE</td>
                 </tr>
                 <tr>
-                  <td style="padding:0.75rem;"><span
-                      style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">🔌</span> Guasto Isolamento
+                  <td style="padding:0.75rem;"><i data-lucide="shield-off" class="icon" style="margin-right:0.5rem;color:var(--red);"></i> Guasto Isolamento
                     (ISO &lt;50k&#x2126;)</td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-iso-db"></td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-iso-tg"></td>
                 </tr>
                 <tr>
-                  <td style="padding:0.75rem;"><span
-                      style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">⚠️</span> Variazione Limite Rete
+                  <td style="padding:0.75rem;"><i data-lucide="alert-triangle" class="icon" style="margin-right:0.5rem;color:var(--yellow);"></i> Variazione Limite Rete
                     (&ne;87.6%)</td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-grid-db"></td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-grid-tg"></td>
                 </tr>
 
                 <tr style="border-top: 2px solid var(--border);">
-                  <td style="padding:0.75rem; font-weight:700;"><span
-                      style="font-size:1.1rem; vertical-align:middle; margin-right:0.5rem;">✅</span> Recuperi Evento</td>
+                  <td style="padding:0.75rem; font-weight:700;"><i data-lucide="check-circle" class="icon" style="margin-right:0.5rem;color:var(--green);"></i> Recuperi Evento</td>
                   <td style="text-align:center;">-</td>
                   <td style="text-align:center;"><input type="checkbox" id="pref-recovery-tg"></td>
                 </tr>
@@ -869,7 +867,7 @@
     <div class="footer-grid">
       <div class="footer-card">
         <div class="footer-card-header">
-          <div class="header-icon-box blue">📊</div>
+          <div class="header-icon-box blue"><i data-lucide="bar-chart-2" class="icon"></i></div>
           <h3>Riferimento Tecnico</h3>
         </div>
         <div class="spec-list">
@@ -885,7 +883,7 @@
 
       <div class="footer-card">
         <div class="footer-card-header">
-          <div class="header-icon-box green">🛡️</div>
+          <div class="header-icon-box green"><i data-lucide="shield" class="icon"></i></div>
           <h3>Guida Salute SCADA</h3>
         </div>
         <div class="legend-multi-row">
@@ -917,33 +915,33 @@
 
       <div class="footer-card">
         <div class="footer-card-header">
-          <div class="header-icon-box orange">ℹ️</div>
+          <div class="header-icon-box orange"><i data-lucide="info" class="icon"></i></div>
           <h3>Pipeline Sistema</h3>
         </div>
         <div class="sys-meta">
           <div class="sys-meta-item">
-            <div class="meta-icon">🔍</div>
+            <div class="meta-icon"><i data-lucide="search" class="icon"></i></div>
             <div class="meta-content">
               <div class="meta-label">Motore Forensico</div>
               <div class="meta-value">Forensic Watchdog - Produzione</div>
             </div>
           </div>
           <div class="sys-meta-item">
-            <div class="meta-icon">🤖</div>
+            <div class="meta-icon"><i data-lucide="cpu" class="icon"></i></div>
             <div class="meta-content">
               <div class="meta-label">Modello AI Diagnostico</div>
               <div class="meta-value">Qwen 2.5 7B</div>
             </div>
           </div>
           <div class="sys-meta-item">
-            <div class="meta-icon">⚡</div>
+            <div class="meta-icon"><i data-lucide="zap" class="icon"></i></div>
             <div class="meta-content">
               <div class="meta-label">Aggiornamento Dati</div>
               <div class="meta-value">Attivo ogni 15 Minuti</div>
             </div>
           </div>
           <div class="sys-meta-item">
-            <div class="meta-icon">👨‍💻</div>
+            <div class="meta-icon"><i data-lucide="user" class="icon"></i></div>
             <div class="meta-content">
               <div class="meta-label">Manutenzione Impianto</div>
               <div class="meta-value">Marcello Lombardo - Photon Monitoring</div>
@@ -959,5 +957,6 @@
 
   <script src="/static/app.js"></script>
   <script src="/static/plant_map.js"></script>
+  <script>lucide.createIcons();</script>
 </body>
 </html>

@@ -62,6 +62,7 @@ function getDomain(name) {
 
 function updateDashboard(data) {
   if (!data || Object.keys(data).length === 0) return;
+  document.querySelectorAll('.skeleton').forEach(e => e.classList.remove('skeleton'));
   updateMacro(data);
   updateIngestion(data);
   updateInverterGrid(data);
@@ -961,6 +962,11 @@ function initTabs() {
       if (lastData && targetId !== "tab-overview") {
         renderActiveDetailTab();
       }
+
+      // Initialize tracker chart when entering the Campo Tracker tab
+      if (targetId === "tab-trackers") {
+        initTrackerChart();
+      }
     });
   });
 }
@@ -1241,6 +1247,9 @@ function connectWebSocket() {
           lastTrackerData = payload.trackers;
           updateTrackers(payload.trackers);
           if (lastData) updateIngestion(lastData);
+          if (payload.timestamp) {
+            updateTrackerChartRealtime(payload.trackers, payload.timestamp);
+          }
         }
 
         // Global Last Update
@@ -1385,121 +1394,120 @@ function applyConfig(config) {
 
 async function handleSaveSettings() {
   const btn = el("save-settings-btn");
-  if (btn.classList.contains("loading")) return;
+  if (!btn || btn.classList.contains("loading")) return;
   
   btn.classList.add("loading");
-  btn.textContent = "SAVING...";
-
-  const val = (id) => el(id) ? el(id).value : null;
-  const num = (id, def) => el(id) ? (parseFloat(el(id).value) || def) : def;
-
-  const newConfig = {
-    thresholds: {
-      pr: {
-        green: num("cfg-pr-green", 85.0),
-        yellow: num("cfg-pr-yellow", 75.0)
-      },
-      temp: {
-        yellow: num("cfg-temp-yellow", 40.0),
-        red: num("cfg-temp-red", 45.0)
-      },
-      ac: {
-        green: num("cfg-ac-green", 5000),
-        yellow: num("cfg-ac-yellow", 1000)
-      },
-      dc: {
-        morning_green: num("cfg-dcm-green", 10.0),
-        morning_yellow: num("cfg-dcm-yellow", 2.0),
-        afternoon_green: num("cfg-dca-green", 5.0),
-        afternoon_yellow: num("cfg-dca-yellow", 0.5)
-      },
-      min_downtime_minutes: num("cfg-min-downtime", 9),
-      tracker_deviation: num("cfg-tracker-deviation", 5.0)
-    },
-    colors: {
-      green: val("cfg-color-green") || "#10b981",
-      yellow: val("cfg-color-yellow") || "#f59e0b",
-      red: val("cfg-color-red") || "#ef4444",
-      grey: val("cfg-color-grey") || "#6b7280"
-    },
-    collection_interval: num("cfg-collection-interval", 15),
-    telegram: {
-      enabled: el("cfg-tg-enabled") ? el("cfg-tg-enabled").checked : false,
-      bot_token: val("cfg-tg-token") || "",
-      chat_id: val("cfg-tg-chat") || "",
-      personal_id: val("cfg-tg-personal") || ""
-    },
-    alert_preferences: {
-      comm_lost: { 
-        dashboard: !!el("pref-comm-db")?.checked,
-        telegram: !!el("pref-comm-tg")?.checked
-      },
-      plant_drop: {
-        dashboard: !!el("pref-site-db")?.checked,
-        telegram: !!el("pref-site-tg")?.checked
-      },
-      inverter_trip: {
-        dashboard: !!el("pref-trip-db")?.checked,
-        telegram: !!el("pref-trip-tg")?.checked
-      },
-      ac_drop: {
-        dashboard: !!el("pref-ac-db")?.checked,
-        telegram: !!el("pref-ac-tg")?.checked
-      },
-      low_pr: {
-        dashboard: !!el("pref-pr-low-db")?.checked,
-        telegram: !!el("pref-pr-low-tg")?.checked
-      },
-      crit_pr: {
-        dashboard: !!el("pref-pr-crit-db")?.checked,
-        telegram: !!el("pref-pr-crit-tg")?.checked
-      },
-      high_temp: {
-        dashboard: !!el("pref-temp-warn-db")?.checked,
-        telegram: !!el("pref-temp-warn-tg")?.checked
-      },
-      crit_temp: {
-        dashboard: !!el("pref-temp-crit-db")?.checked,
-        telegram: !!el("pref-temp-crit-tg")?.checked
-      },
-      dc_warning: {
-        dashboard: !!el("pref-dc-warn-db")?.checked,
-        telegram: !!el("pref-dc-warn-tg")?.checked
-      },
-      dc_critical: {
-        dashboard: !!el("pref-dc-crit-db")?.checked,
-        telegram: !!el("pref-dc-crit-tg")?.checked
-      },
-      iso_fault: {
-        dashboard: !!el("pref-iso-db")?.checked,
-        telegram: !!el("pref-iso-tg")?.checked
-      },
-      grid_limit_change: {
-        dashboard: !!el("pref-grid-db")?.checked,
-        telegram: !!el("pref-grid-tg")?.checked
-      },
-      tracker_comm: {
-        dashboard: !!el("pref-tracker-db")?.checked,
-        telegram: !!el("pref-tracker-tg")?.checked
-      },
-      tracker_deviation: {
-        dashboard: !!el("pref-tracker-dev-db")?.checked,
-        telegram: !!el("pref-tracker-dev-tg")?.checked
-      },
-      mqtt_pulse: {
-        dashboard: !!el("pref-mqtt-db")?.checked,
-        telegram: !!el("pref-mqtt-tg")?.checked
-      },
-      recovery: {
-        telegram: !!el("pref-recovery-tg")?.checked
-      }
-    }
-  };
+  btn.textContent = "SALVATAGGIO...";
 
   try {
-    // Add a controller to timeout the request if it hangs
+    const val = (id) => el(id) ? el(id).value : null;
+    const num = (id, def) => el(id) ? (parseFloat(el(id).value) || def) : def;
+
+    const newConfig = {
+      thresholds: {
+        pr: {
+          green: num("cfg-pr-green", 85.0),
+          yellow: num("cfg-pr-yellow", 75.0)
+        },
+        temp: {
+          yellow: num("cfg-temp-yellow", 40.0),
+          red: num("cfg-temp-red", 45.0)
+        },
+        ac: {
+          green: num("cfg-ac-green", 5000),
+          yellow: num("cfg-ac-yellow", 1000)
+        },
+        dc: {
+          morning_green: num("cfg-dcm-green", 10.0),
+          morning_yellow: num("cfg-dcm-yellow", 2.0),
+          afternoon_green: num("cfg-dca-green", 5.0),
+          afternoon_yellow: num("cfg-dca-yellow", 0.5)
+        },
+        min_downtime_minutes: num("cfg-min-downtime", 9),
+        tracker_deviation: num("cfg-tracker-deviation", 5.0)
+      },
+      colors: {
+        green: val("cfg-color-green") || "#10b981",
+        yellow: val("cfg-color-yellow") || "#f59e0b",
+        red: val("cfg-color-red") || "#ef4444",
+        grey: val("cfg-color-grey") || "#6b7280"
+      },
+      collection_interval: num("cfg-collection-interval", 15),
+      telegram: {
+        enabled: el("cfg-tg-enabled") ? el("cfg-tg-enabled").checked : false,
+        bot_token: val("cfg-tg-token") || "",
+        chat_id: val("cfg-tg-chat") || "",
+        personal_id: val("cfg-tg-personal") || ""
+      },
+      alert_preferences: {
+        comm_lost: { 
+          dashboard: !!el("pref-comm-db")?.checked,
+          telegram: !!el("pref-comm-tg")?.checked
+        },
+        plant_drop: {
+          dashboard: !!el("pref-site-db")?.checked,
+          telegram: !!el("pref-site-tg")?.checked
+        },
+        inverter_trip: {
+          dashboard: !!el("pref-trip-db")?.checked,
+          telegram: !!el("pref-trip-tg")?.checked
+        },
+        ac_drop: {
+          dashboard: !!el("pref-ac-db")?.checked,
+          telegram: !!el("pref-ac-tg")?.checked
+        },
+        low_pr: {
+          dashboard: !!el("pref-pr-low-db")?.checked,
+          telegram: !!el("pref-pr-low-tg")?.checked
+        },
+        crit_pr: {
+          dashboard: !!el("pref-pr-crit-db")?.checked,
+          telegram: !!el("pref-pr-crit-tg")?.checked
+        },
+        high_temp: {
+          dashboard: !!el("pref-temp-warn-db")?.checked,
+          telegram: !!el("pref-temp-warn-tg")?.checked
+        },
+        crit_temp: {
+          dashboard: !!el("pref-temp-crit-db")?.checked,
+          telegram: !!el("pref-temp-crit-tg")?.checked
+        },
+        dc_warning: {
+          dashboard: !!el("pref-dc-warn-db")?.checked,
+          telegram: !!el("pref-dc-warn-tg")?.checked
+        },
+        dc_critical: {
+          dashboard: !!el("pref-dc-crit-db")?.checked,
+          telegram: !!el("pref-dc-crit-tg")?.checked
+        },
+        iso_fault: {
+          dashboard: !!el("pref-iso-db")?.checked,
+          telegram: !!el("pref-iso-tg")?.checked
+        },
+        grid_limit_change: {
+          dashboard: !!el("pref-grid-db")?.checked,
+          telegram: !!el("pref-grid-tg")?.checked
+        },
+        tracker_comm: {
+          dashboard: !!el("pref-tracker-db")?.checked,
+          telegram: !!el("pref-tracker-tg")?.checked
+        },
+        tracker_deviation: {
+          dashboard: !!el("pref-tracker-dev-db")?.checked,
+          telegram: !!el("pref-tracker-dev-tg")?.checked
+        },
+        mqtt_pulse: {
+          dashboard: !!el("pref-mqtt-db")?.checked,
+          telegram: !!el("pref-mqtt-tg")?.checked
+        },
+        recovery: {
+          telegram: !!el("pref-recovery-tg")?.checked
+        }
+      }
+    };
+
     const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), 10000);
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
 
     const resp = await fetch("/api/settings", {
       method: "POST",
@@ -1508,36 +1516,36 @@ async function handleSaveSettings() {
       signal: controller.signal
     });
     
-    clearTimeout(id);
+    clearTimeout(timeoutId);
     
     if (resp.ok) {
-      const summary = `
-✅ SETTINGS SAVED SUCCESSFULLY
+      const settingsModal = el("settings-modal");
+      if (settingsModal) settingsModal.classList.add("modal-hidden");
 
-Threshold Updated:
-- PR Green: ${newConfig.thresholds.pr.green}%
-- Temp Red: ${newConfig.thresholds.temp.red}°C
-- Min Downtime: ${newConfig.thresholds.min_downtime_minutes} min
-- Tracker Deviation: ${newConfig.thresholds.tracker_deviation}°
-- Collection: ${newConfig.collection_interval} min
+      const summary = `✅ IMPOSTAZIONI SALVATE CON SUCCESSO
 
-Telegram: ${newConfig.telegram.enabled ? "ENABLED" : "DISABLED"}
-      `;
-      alert(summary);
-      el("settings-modal").classList.add("modal-hidden");
+Soglia PR Verde: ${newConfig.thresholds.pr.green}%
+Soglia Temp Rossa: ${newConfig.thresholds.temp.red}°C
+Intervallo Estrazione: ${newConfig.collection_interval} min
+Telegram: ${newConfig.telegram.enabled ? "ABILITATO" : "DISABILITATO"}`;
+      setTimeout(() => alert(summary), 50);
     } else {
-      const err = await resp.json();
-      alert("Failed to save: " + (err.message || "Unknown error"));
+      let errMsg = "Errore sconosciuto";
+      try {
+        const err = await resp.json();
+        errMsg = err.message || err.detail || JSON.stringify(err);
+      } catch (e) {}
+      alert("Impossibile salvare: " + errMsg);
     }
   } catch (err) {
     if (err.name === 'AbortError') {
-      alert("Error: Saving timed out. The server is taking too long to respond.");
+      alert("Errore: Salvataggio in timeout. Il server non risponde.");
     } else {
-      alert("Error saving settings: " + err);
+      alert("Errore durante il salvataggio: " + (err.message || err));
     }
   } finally {
     btn.classList.remove("loading");
-    btn.textContent = "SAVE & APPLY";
+    btn.textContent = "SALVA E APPLICA";
   }
 }
 
@@ -1948,7 +1956,7 @@ function updateExtractionUI(isExtracting) {
   } else {
     btn.classList.remove("extracting");
     btn.disabled = false;
-    if (icon) icon.textContent = "🚀";
+    if (icon) icon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>';
     if (text) text.textContent = "Get Data Now";
     statusLabel.textContent = "Idle";
     statusLabel.style.color = "var(--text)";
@@ -2268,14 +2276,325 @@ function updateTrackers(trackers) {
 
 // Re-bind filter buttons (since they might have changed or need to handle new container)
 function initTrackerFilters() {
-    document.querySelectorAll(".filter-btn").forEach(btn => {
+    document.querySelectorAll(".tracker-filters .filter-btn").forEach(btn => {
         btn.onclick = () => {
-          document.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+          document.querySelectorAll(".tracker-filters .filter-btn").forEach(b => b.classList.remove("active"));
           btn.classList.add("active");
           currentNcuFilter = btn.dataset.ncu;
+          
+          // Sync to chart NCU filter buttons
+          document.querySelectorAll(".tracker-chart-filters .filter-btn").forEach(b => {
+            b.classList.remove("active");
+          });
+          let chartBtnId = "btn-chart-ncu-all";
+          if (currentNcuFilter === "NCU 01") chartBtnId = "btn-chart-ncu-n1";
+          else if (currentNcuFilter === "NCU 02") chartBtnId = "btn-chart-ncu-n2";
+          else if (currentNcuFilter === "NCU 03") chartBtnId = "btn-chart-ncu-n3";
+          const chartBtn = el(chartBtnId);
+          if (chartBtn) chartBtn.classList.add("active");
+
           if (lastTrackerData) updateTrackers(lastTrackerData);
+          if (trackerChart) renderTrackerChart();
         };
     });
+}
+
+// ─── Tracker Chart Visualization ──────────────────────────────────────────
+
+let trackerChart = null;
+let trackerChartMode = "angles"; // angles, deviation
+let trackerHistoryData = null;
+
+async function initTrackerChart() {
+  const chartDiv = el("tracker-history-chart");
+  if (!chartDiv) return;
+
+  chartDiv.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--grey);"><span class="spinner"></span> Caricamento dati storici dei tracker...</div>`;
+
+  try {
+    const res = await fetch("/api/trackers/history");
+    trackerHistoryData = await res.json();
+    renderTrackerChart();
+  } catch (err) {
+    console.error("Failed to load tracker chart history:", err);
+    chartDiv.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--red);">Errore nel caricamento della cronologia dei tracker.</div>`;
+  }
+}
+
+function setTrackerChartNcu(ncuFilter) {
+  currentNcuFilter = ncuFilter;
+  
+  // Update chart filter buttons active state
+  document.querySelectorAll(".tracker-chart-filters .filter-btn").forEach(btn => {
+    btn.classList.remove("active");
+  });
+  
+  let btnId = "btn-chart-ncu-all";
+  if (ncuFilter === "NCU 01") btnId = "btn-chart-ncu-n1";
+  else if (ncuFilter === "NCU 02") btnId = "btn-chart-ncu-n2";
+  else if (ncuFilter === "NCU 03") btnId = "btn-chart-ncu-n3";
+  
+  const activeBtn = el(btnId);
+  if (activeBtn) activeBtn.classList.add("active");
+  
+  // Also update main grid filter buttons at the bottom for consistency
+  document.querySelectorAll(".tracker-filters .filter-btn").forEach(btn => {
+    btn.classList.remove("active");
+    if (btn.dataset.ncu === ncuFilter) {
+      btn.classList.add("active");
+    }
+  });
+
+  // Re-render chart and grid
+  renderTrackerChart();
+  if (lastTrackerData) updateTrackers(lastTrackerData);
+}
+
+function renderTrackerChart() {
+  const chartDiv = el("tracker-history-chart");
+  if (!chartDiv || !trackerHistoryData) return;
+
+  const { timestamps, trackers } = trackerHistoryData;
+  if (!timestamps || timestamps.length === 0) {
+    chartDiv.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--grey);">Nessun dato storico dei tracker disponibile per le ultime 36 ore.</div>`;
+    return;
+  }
+
+  const series = [];
+  const sortedTids = Object.keys(trackers).sort((a,b) => parseInt(a) - parseInt(b));
+
+  sortedTids.forEach(tid => {
+    const t = trackers[tid];
+    const ncuKey = String(t.ncu || "").replace("_", " ");
+    
+    if (currentNcuFilter !== "all" && ncuKey !== currentNcuFilter) {
+      return;
+    }
+
+    if (trackerChartMode === "angles") {
+      // 1. Actual Series (Solid)
+      series.push({
+        name: `Tracker #${tid} Reale`,
+        ncu: t.ncu,
+        data: t.actual
+      });
+      // 2. Target Series (Dashed)
+      series.push({
+        name: `Tracker #${tid} Target`,
+        ncu: t.ncu,
+        data: t.target
+      });
+    } else if (trackerChartMode === "deviation") {
+      const devData = t.actual.map((act, idx) => {
+        const tgt = t.target[idx];
+        if (act === null || tgt === null) return null;
+        return parseFloat(Math.abs(act - tgt).toFixed(2));
+      });
+      series.push({
+        name: `Tracker #${tid} Deviazione`,
+        ncu: t.ncu,
+        data: devData
+      });
+    }
+  });
+
+  const formattedTimestamps = timestamps.map(ts => {
+    try {
+      if (ts.includes("T")) {
+        const time = ts.split("T")[1];
+        return time.substring(0, 5);
+      }
+      return ts;
+    } catch(e) {
+      return ts;
+    }
+  });
+
+  const options = {
+    series: series,
+    chart: {
+      type: 'line',
+      height: 350,
+      animations: { enabled: false }, // Critical for performance with hundreds of series
+      background: 'transparent',
+      toolbar: { show: true },
+      zoom: { enabled: true }
+    },
+    theme: {
+      mode: 'dark'
+    },
+    stroke: {
+      width: series.map((s, idx) => {
+        if (trackerChartMode === "angles") {
+          return idx % 2 === 0 ? 1.2 : 0.8; // Actual is slightly thicker than target
+        }
+        return 1.2;
+      }),
+      curve: 'straight',
+      dashArray: series.map((s, idx) => {
+        if (trackerChartMode === "angles") {
+          return idx % 2 === 0 ? 0 : 4; // Solid for Actual, Dashed for Target
+        }
+        return 0; // Solid for Deviation
+      })
+    },
+    grid: {
+      borderColor: 'rgba(255,255,255,0.08)',
+      xaxis: { lines: { show: true } },
+      yaxis: { lines: { show: true } }
+    },
+    xaxis: {
+      categories: formattedTimestamps,
+      labels: {
+        style: { colors: '#aaa', fontSize: '10px' },
+        rotate: -45,
+        hideOverlappingLabels: true
+      },
+      tickAmount: 15
+    },
+    yaxis: {
+      title: {
+        text: trackerChartMode === "deviation" ? 'Deviazione (°)' : 'Angolo (°)',
+        style: { color: '#ccc', fontSize: '12px' }
+      },
+      labels: {
+        style: { colors: '#aaa' }
+      }
+    },
+    legend: {
+      show: false
+    },
+    tooltip: {
+      shared: false,
+      x: {
+        formatter: function(val, { seriesIndex, dataPointIndex, w }) {
+          const rawTs = timestamps[dataPointIndex] || "";
+          if (rawTs.includes("T")) {
+            const parts = rawTs.split("T");
+            return `${parts[0]} ${parts[1].substring(0, 5)}`;
+          }
+          return rawTs;
+        }
+      },
+      y: {
+        formatter: function (val) {
+          return val !== null ? val.toFixed(1) + "°" : "N/D";
+        }
+      }
+    }
+  };
+
+  // Generate HSL colors in pairs for actual/target so they share the exact same hue
+  const colors = [];
+  series.forEach((s, idx) => {
+    const ncuStr = String(s.ncu || "").replace("_", " ");
+    
+    if (trackerChartMode === "angles") {
+      if (idx % 2 === 0) {
+        let hue = 200;
+        if (ncuStr.includes("NCU 01") || ncuStr.includes("NCU 1")) {
+          hue = 200 + Math.random() * 20; // Azure/Blue
+        } else if (ncuStr.includes("NCU 02") || ncuStr.includes("NCU 2")) {
+          hue = 135 + Math.random() * 20; // Emerald Green/Teal
+        } else {
+          hue = 20 + Math.random() * 20; // Golden Amber/Orange/Yellow
+        }
+        const color = `hsl(${hue}, 85%, 55%)`;
+        colors.push(color); // Actual
+        colors.push(color); // Target
+      }
+    } else {
+      let hue = 200;
+      if (ncuStr.includes("NCU 01") || ncuStr.includes("NCU 1")) {
+        hue = 200 + Math.random() * 20;
+      } else if (ncuStr.includes("NCU 02") || ncuStr.includes("NCU 2")) {
+        hue = 135 + Math.random() * 20;
+      } else {
+        hue = 20 + Math.random() * 20;
+      }
+      colors.push(`hsl(${hue}, 85%, 55%)`);
+    }
+  });
+  options.colors = colors;
+
+  if (trackerChart) {
+    trackerChart.destroy();
+  }
+
+  trackerChart = new ApexCharts(chartDiv, options);
+  trackerChart.render();
+}
+
+function setTrackerChartMode(mode) {
+  trackerChartMode = mode;
+  document.querySelectorAll(".tracker-chart-modes .filter-btn").forEach(btn => {
+    btn.classList.remove("active");
+  });
+  const activeBtn = el(`btn-chart-${mode === "angles" ? "angles" : "deviation"}`);
+  if (activeBtn) activeBtn.classList.add("active");
+  renderTrackerChart();
+}
+
+function updateTrackerChartRealtime(trackersList, serverTimestamp) {
+  if (!trackerChart || !trackerHistoryData || !trackersList || trackersList.length === 0) return;
+
+  const rawTs = serverTimestamp || new Date().toISOString();
+  const cleanTs = rawTs.includes(".") ? rawTs.split(".")[0] : rawTs;
+
+  if (trackerHistoryData.timestamps.includes(cleanTs)) {
+    return;
+  }
+
+  trackerHistoryData.timestamps.push(cleanTs);
+  if (trackerHistoryData.timestamps.length > 250) {
+    trackerHistoryData.timestamps.shift();
+  }
+
+  const newValuesMap = {};
+  trackersList.forEach(t => {
+    let tid = null;
+    if (t.tracker_no && String(t.tracker_no).match(/(\d+)/)) {
+      tid = parseInt(String(t.tracker_no).match(/(\d+)/)[1]);
+    } else {
+      const extractNum = (str) => {
+        if (!str) return null;
+        const match = String(str).match(/(\d+)/);
+        return match ? parseInt(match[1]) : null;
+      };
+      const tcu = extractNum(t.tcu_id);
+      const ncuStr = String(t.ncu_id || "").replace("_", " ");
+      if (tcu) {
+        if (ncuStr.includes("NCU 01") || ncuStr.includes("NCU 1")) tid = tcu;
+        else if (ncuStr.includes("NCU 02") || ncuStr.includes("NCU 2")) tid = 121 + tcu;
+        else if (ncuStr.includes("NCU 03") || ncuStr.includes("NCU 3")) tid = 121 + 122 + tcu;
+      }
+    }
+
+    if (tid) {
+      newValuesMap[String(tid)] = t;
+    }
+  });
+
+  Object.keys(trackerHistoryData.trackers).forEach(tidStr => {
+    const tHistory = trackerHistoryData.trackers[tidStr];
+    const newVal = newValuesMap[tidStr];
+
+    let actual = newVal ? newVal.actual_angle : null;
+    let target = newVal ? newVal.target_angle : null;
+    let mode = newVal ? newVal.mode : null;
+
+    tHistory.actual.push(actual);
+    tHistory.target.push(target);
+    tHistory.mode.push(mode);
+
+    if (tHistory.actual.length > trackerHistoryData.timestamps.length) {
+      tHistory.actual.shift();
+      tHistory.target.shift();
+      tHistory.mode.shift();
+    }
+  });
+
+  renderTrackerChart();
 }
 
 // ─── Link Status Monitoring ──────────────────────────────────────────────
