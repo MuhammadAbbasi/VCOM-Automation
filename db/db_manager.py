@@ -88,8 +88,11 @@ def _refresh_connection_args(args, kwargs):
     return tuple(new_args), new_kwargs
 
 
-def _retry_data_operation(func, *args, retries: int = 6, delay: float = 0.25, **kwargs):
-    """Retry a data database operation when SQLite reports a locked, closed, or corrupted database."""
+def _retry_operation(func, *args, kind: str, retries: int = 6, delay: float = 0.25, **kwargs):
+    """Retry a database operation when SQLite reports a locked, closed, or corrupted database."""
+    repair_fn = _repair_data_db if kind == "data" else _repair_snapshot_db
+    reset_fn = _reset_data_conn if kind == "data" else _reset_snapshot_conn
+    label = "data DB" if kind == "data" else "snapshot DB"
     for attempt in range(1, retries + 1):
         try:
             return func(*args, **kwargs)
@@ -99,81 +102,55 @@ def _retry_data_operation(func, *args, retries: int = 6, delay: float = 0.25, **
                 if attempt == retries:
                     raise
                 if any(keyword in msg for keyword in ("disk image is malformed", "file is not a database", "file is encrypted")):
-                    logger.warning(f"[DB] Detected corrupted scada_data.db during operation: {exc}")
-                    _repair_data_db()
+                    logger.warning(f"[DB] Detected corrupted {label} during operation: {exc}")
+                    repair_fn()
                 time.sleep(delay * attempt)
-                _reset_data_conn()
+                reset_fn()
                 func = _refresh_bound_method(func, args)
                 args, kwargs = _refresh_connection_args(args, kwargs)
                 continue
             raise
+
+
+def _retry_data_operation(func, *args, retries: int = 6, delay: float = 0.25, **kwargs):
+    """Retry a data database operation when SQLite reports a locked, closed, or corrupted database."""
+    return _retry_operation(func, *args, kind="data", retries=retries, delay=delay, **kwargs)
 
 
 def _retry_snapshot_operation(func, *args, retries: int = 6, delay: float = 0.25, **kwargs):
     """Retry a snapshot database operation when SQLite reports a lock, closed, or corrupted database."""
-    for attempt in range(1, retries + 1):
+    return _retry_operation(func, *args, kind="snapshot", retries=retries, delay=delay, **kwargs)
+
+
+def _repair_db(path: Path, reset_fn, label: str) -> None:
+    """Rename a corrupted database and prepare a fresh replacement."""
+    DB_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    if path.exists():
+        backup_path = path.with_name(f"{path.name}.corrupt_{timestamp}.bak")
         try:
-            return func(*args, **kwargs)
-        except sqlite3.DatabaseError as exc:
-            msg = str(exc).lower()
-            if any(keyword in msg for keyword in ("database is locked", "cannot operate on a closed database", "disk image is malformed", "file is not a database", "file is encrypted")):
-                if attempt == retries:
-                    raise
-                if any(keyword in msg for keyword in ("disk image is malformed", "file is not a database", "file is encrypted")):
-                    logger.warning(f"[DB] Detected corrupted snapshot DB during operation: {exc}")
-                    _repair_snapshot_db()
-                time.sleep(delay * attempt)
-                _reset_snapshot_conn()
-                func = _refresh_bound_method(func, args)
-                args, kwargs = _refresh_connection_args(args, kwargs)
-                continue
-            raise
+            path.rename(backup_path)
+            logger.warning(f"[DB] Corrupted {label} renamed to: {backup_path}")
+        except Exception as exc:
+            logger.error(f"[DB] Failed to backup corrupted {label}: {exc}")
+    for suffix in ("-wal", "-shm"):
+        extra = path.with_name(f"{path.name}{suffix}")
+        if extra.exists():
+            backup_extra = extra.with_name(f"{extra.name}.corrupt_{timestamp}.bak")
+            try:
+                extra.rename(backup_extra)
+                logger.warning(f"[DB] Corrupted {label} journal renamed to: {backup_extra}")
+            except Exception as exc:
+                logger.error(f"[DB] Failed to backup corrupted {label} journal {extra}: {exc}")
+    reset_fn()
 
 
 def _repair_data_db() -> None:
-    """Rename a corrupted data database and prepare a fresh replacement."""
-    DB_DIR.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    if DATA_DB_PATH.exists():
-        backup_path = DATA_DB_PATH.with_name(f"{DATA_DB_PATH.name}.corrupt_{timestamp}.bak")
-        try:
-            DATA_DB_PATH.rename(backup_path)
-            logger.warning(f"[DB] Corrupted data DB renamed to: {backup_path}")
-        except Exception as exc:
-            logger.error(f"[DB] Failed to backup corrupted DB: {exc}")
-    for suffix in ("-wal", "-shm"):
-        extra = DATA_DB_PATH.with_name(f"{DATA_DB_PATH.name}{suffix}")
-        if extra.exists():
-            backup_extra = extra.with_name(f"{extra.name}.corrupt_{timestamp}.bak")
-            try:
-                extra.rename(backup_extra)
-                logger.warning(f"[DB] Corrupted DB journal renamed to: {backup_extra}")
-            except Exception as exc:
-                logger.error(f"[DB] Failed to backup corrupted DB journal {extra}: {exc}")
-    _reset_data_conn()
+    _repair_db(DATA_DB_PATH, _reset_data_conn, "data DB")
 
 
 def _repair_snapshot_db() -> None:
-    """Rename a corrupted snapshot database and prepare a fresh replacement."""
-    DB_DIR.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    if SNAPSHOT_DB_PATH.exists():
-        backup_path = SNAPSHOT_DB_PATH.with_name(f"{SNAPSHOT_DB_PATH.name}.corrupt_{timestamp}.bak")
-        try:
-            SNAPSHOT_DB_PATH.rename(backup_path)
-            logger.warning(f"[DB] Corrupted snapshot DB renamed to: {backup_path}")
-        except Exception as exc:
-            logger.error(f"[DB] Failed to backup corrupted snapshot DB: {exc}")
-    for suffix in ("-wal", "-shm"):
-        extra = SNAPSHOT_DB_PATH.with_name(f"{SNAPSHOT_DB_PATH.name}{suffix}")
-        if extra.exists():
-            backup_extra = extra.with_name(f"{extra.name}.corrupt_{timestamp}.bak")
-            try:
-                extra.rename(backup_extra)
-                logger.warning(f"[DB] Corrupted snapshot DB journal renamed to: {backup_extra}")
-            except Exception as exc:
-                logger.error(f"[DB] Failed to backup corrupted snapshot DB journal {extra}: {exc}")
-    _reset_snapshot_conn()
+    _repair_db(SNAPSHOT_DB_PATH, _reset_snapshot_conn, "snapshot DB")
 
 
 def get_data_conn() -> sqlite3.Connection:
