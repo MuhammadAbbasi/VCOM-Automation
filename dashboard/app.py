@@ -97,6 +97,9 @@ async def add_security_headers(request, call_next):
     response = await call_next(request)
     response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline' cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' fonts.googleapis.com cdn.jsdelivr.net; font-src 'self' fonts.gstatic.com; img-src 'self' data:; connect-src 'self' ws: wss:;"
     response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
     return response
 
 # WebSocket Manager
@@ -207,6 +210,15 @@ async def trigger_extraction(user: str = Depends(verify_credentials)):
 async def get_extraction_status(user: str = Depends(verify_credentials)):
     busy_path = ROOT / ".extraction_busy"
     return JSONResponse({"is_extracting": busy_path.exists()})
+
+@app.get("/api/trackers/history")
+async def api_tracker_history():
+    try:
+        from db.db_manager import get_tracker_history_compact
+        data = await asyncio.to_thread(get_tracker_history_compact)
+        return JSONResponse(data)
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
 
 @app.get("/")
 async def index():
@@ -376,7 +388,7 @@ async def test_telegram(user: str = Depends(verify_credentials)):
 # LLM Chat Endpoint
 # ---------------------------------------------------------------------------
 try:
-    from llm_agent_v2 import ask_agent as ask_llm
+    from llm_agent import ask_agent as ask_llm
 except ImportError:
     ask_llm = None
 

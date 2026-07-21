@@ -1852,22 +1852,25 @@ document.addEventListener("DOMContentLoaded", () => {
   const chatSendBtn = el("chat-send-btn");
   const chatMessages = el("chat-messages");
 
+  function escapeHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
   function appendChatMessage(text, sender) {
     if (!chatMessages) return;
     const msgDiv = document.createElement("div");
     msgDiv.className = `chat-message ${sender}`;
     if (sender === "user") msgDiv.setAttribute("data-avatar", "ME");
     else msgDiv.setAttribute("data-avatar", "AI");
-    
+
     chatMessages.appendChild(msgDiv);
-    
+
     const contentDiv = document.createElement("div");
     contentDiv.className = "msg-content";
-    
-    // Auto-formatting for AI responses
+
     if (sender.includes("bot") && (text.includes("```") || text.includes("**"))) {
-        // Very basic markdown formatting (bullet points and bold)
-        let formatted = text
+        // Escape HTML first, then apply safe markdown substitutions only
+        let formatted = escapeHtml(text)
             .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
             .replace(/^\s*[-*]\s+(.*)/gm, '• $1')
             .replace(/```python([\s\S]*?)```/g, '<code>$1</code>');
@@ -2616,3 +2619,5 @@ function updateLinkStatusUI(linkInfo) {
     badge.textContent = "LINK: OFFLINE";
   }
 }
+
+lucide.createIcons();
