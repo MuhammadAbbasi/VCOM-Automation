@@ -103,7 +103,7 @@ def handle_sync_request(client, payload):
         if key in TRACKER_CORRECTIONS:
             original = record.get("tracker_no")
             record["tracker_no"] = TRACKER_CORRECTIONS[key]
-            logging.info(f"Corrected {key}: {original} → {record['tracker_no']}")
+            logging.info(f"Corrected {key}: {original} -> {record['tracker_no']}")
 
     # Send Telegram Summary
     try:

@@ -278,7 +278,7 @@ SERVICES = [
     {
         "name": "DASHBOARD",
         "cmd": DASHBOARD_CMD,
-        "new_console": True,
+        "new_console": False,
     },
     {
         "name": "WATCHDOG",
