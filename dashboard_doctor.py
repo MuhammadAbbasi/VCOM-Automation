@@ -566,35 +566,37 @@ def check_ui_state() -> dict:
 # 6. Self-Healing
 # ---------------------------------------------------------------------------
 
-def attempt_self_heal(dead_processes: list, tracker_stale: bool) -> list:
+def attempt_self_heal(dead_processes: list, vcom_stale: bool, tracker_stale: bool) -> list:
     healed = []
     cfg = get_config()
     user = cfg.get("DASHBOARD_USER") or os.environ.get("DASHBOARD_USER", "admin")
     pw = cfg.get("DASHBOARD_PASS") or os.environ.get("DASHBOARD_PASS", "")
 
-    # Trigger forensic rescan
-    try:
-        resp = requests.post(
-            "http://localhost:8080/api/forensic/rescan", auth=(user, pw), timeout=15
-        )
-        if resp.ok:
-            healed.append("Forensic re-scan triggered via Dashboard API")
-            logger.info("[HEAL] Forensic rescan triggered.")
-        else:
-            logger.warning(f"[HEAL] Rescan API returned {resp.status_code}")
-    except Exception as e:
-        logger.debug(f"[HEAL] Rescan not available: {e}")
+    # ONLY trigger forensic rescan and manual extraction if VCOM data is stale
+    if vcom_stale:
+        # Trigger forensic rescan
+        try:
+            resp = requests.post(
+                "http://localhost:8080/api/forensic/rescan", auth=(user, pw), timeout=15
+            )
+            if resp.ok:
+                healed.append("Forensic re-scan triggered via Dashboard API")
+                logger.info("[HEAL] Forensic rescan triggered.")
+            else:
+                logger.warning(f"[HEAL] Rescan API returned {resp.status_code}")
+        except Exception as e:
+            logger.debug(f"[HEAL] Rescan not available: {e}")
 
-    # Trigger manual extraction
-    try:
-        resp = requests.post(
-            "http://localhost:8080/api/extraction/trigger", auth=(user, pw), timeout=10
-        )
-        if resp.ok:
-            healed.append("Manual extraction triggered via API")
-            logger.info("[HEAL] Extraction triggered.")
-    except Exception as e:
-        logger.debug(f"[HEAL] Extraction trigger skipped: {e}")
+        # Trigger manual extraction
+        try:
+            resp = requests.post(
+                "http://localhost:8080/api/extraction/trigger", auth=(user, pw), timeout=10
+            )
+            if resp.ok:
+                healed.append("Manual extraction triggered via API")
+                logger.info("[HEAL] Extraction triggered.")
+        except Exception as e:
+            logger.debug(f"[HEAL] Extraction trigger skipped: {e}")
 
     # Attempt to restart dead services by killing their processes via psutil
     # run_monitor.py will auto-respawn them
@@ -625,8 +627,8 @@ def attempt_self_heal(dead_processes: list, tracker_stale: bool) -> list:
         except Exception as e:
             logger.warning(f"[HEAL] Could not terminate {svc_name}: {e}")
 
-    # For stale trackers during daylight: unstuck the busy flag if it's stuck
-    if tracker_stale and EXTRACTION_BUSY_PATH.exists():
+    # For stale VCOM extraction during daylight: unstuck the busy flag if it's stuck
+    if vcom_stale and EXTRACTION_BUSY_PATH.exists():
         age_s = (
             datetime.now() - datetime.fromtimestamp(EXTRACTION_BUSY_PATH.stat().st_mtime)
         ).total_seconds()
@@ -750,11 +752,15 @@ def run_daily_ai_audit():
         try:
             ans = llm_agent.ask_llm(q, {}, user_id="doctor_daily")
             section_title = q.split(":")[0].strip()
-            report_sections.append(f"❓ <b>{section_title}</b>\n{ans}")
+            import html
+            ans_safe = html.escape(ans)
+            report_sections.append(f"❓ <b>{section_title}</b>\n{ans_safe}")
         except Exception as e:
             logger.error(f"AI Audit question failed: {e}")
             section_title = q.split(":")[0].strip()
-            report_sections.append(f"❓ <b>{section_title}</b>\n⚠️ AI Error: {e}")
+            import html
+            error_safe = html.escape(str(e))
+            report_sections.append(f"❓ <b>{section_title}</b>\n⚠️ AI Error: {error_safe}")
             
     header = f"🤖 <b>AI DAILY DEEP AUDIT REPORT</b>\n⏰ <code>{datetime.now().strftime('%Y-%m-%d %H:%M')}</code>\n\n"
     
@@ -809,14 +815,15 @@ def run_doctor():
 
     all_info = db_report["info"] + conn_report["info"] + proc_report["info"] + log_report["info"] + ui_report["info"]
 
-    # Self-heal if warranted (only during daylight for tracker issues)
+    # Self-heal if warranted
     heal_actions = []
     tracker_stale = any("Stale" in i and "Tracker" in i for i in db_report["issues"])
+    vcom_stale = any("potenza_ac" in i.lower() or "potenza ac" in i.lower() for i in db_report["issues"])
     need_heal = overall_status in ("CRITICAL", "WARNING") and (
-        proc_report["dead"] or tracker_stale
+        proc_report["dead"] or vcom_stale or tracker_stale
     )
     if need_heal:
-        heal_actions = attempt_self_heal(proc_report["dead"], tracker_stale)
+        heal_actions = attempt_self_heal(proc_report["dead"], vcom_stale, tracker_stale)
 
     # ---- Build Telegram message ----
     status_icon = {"HEALTHY": "✅", "WARNING": "⚠️", "CRITICAL": "🚨"}.get(overall_status, "❓")
