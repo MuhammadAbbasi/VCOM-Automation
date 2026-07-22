@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Monitored Assets Portfolio | GET Client Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+  <script src="/static/lucide.min.js"></script>
+
+  <style>
+    :root {
+      --bg-dark: #090d16;
+      --bg-card: rgba(18, 25, 41, 0.85);
+      --bg-card-hover: rgba(26, 36, 58, 0.95);
+      --accent-green: #10b981;
+      --accent-green-bright: #34d399;
+      --accent-green-glow: rgba(16, 185, 129, 0.35);
+      --accent-gold: #f59e0b;
+      --accent-cyan: #06b6d4;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --border-light: rgba(255, 255, 255, 0.08);
+      --border-glow: rgba(16, 185, 129, 0.3);
+      --font-heading: 'Outfit', sans-serif;
+      --font-body: 'Inter', sans-serif;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: var(--font-body);
+      min-height: 100vh;
+      background-image: 
+        radial-gradient(circle at 10% 10%, rgba(16, 185, 129, 0.06) 0%, transparent 40%),
+        radial-gradient(circle at 90% 90%, rgba(6, 182, 212, 0.05) 0%, transparent 40%);
+    }
+
+    /* ── Header ── */
+    header {
+      background: rgba(18, 25, 41, 0.9);
+      border-bottom: 1px solid var(--border-light);
+      backdrop-filter: blur(16px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .nav-container {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 1rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      text-decoration: none;
+      color: var(--text-main);
+    }
+
+    .logo-badge {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, var(--accent-green), var(--accent-cyan));
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #000;
+    }
+
+    .brand-title {
+      font-family: var(--font-heading);
+      font-size: 1.25rem;
+      font-weight: 800;
+    }
+
+    .brand-title span { color: var(--accent-green-bright); }
+
+    .user-profile {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .user-info {
+      text-align: right;
+    }
+
+    .user-name {
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+
+    .user-role {
+      font-size: 0.75rem;
+      color: var(--accent-green-bright);
+    }
+
+    .btn-logout {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border-light);
+      color: var(--text-muted);
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      text-decoration: none;
+      font-size: 0.85rem;
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+
+    .btn-logout:hover {
+      background: rgba(239, 68, 68, 0.15);
+      border-color: rgba(239, 68, 68, 0.3);
+      color: #fca5a5;
+    }
+
+    /* ── Main Container ── */
+    .container {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 3rem 2rem;
+    }
+
+    .page-header {
+      margin-bottom: 2.5rem;
+    }
+
+    .page-title {
+      font-family: var(--font-heading);
+      font-size: 2.2rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 0.5rem;
+    }
+
+    .page-desc {
+      color: var(--text-muted);
+      font-size: 1.05rem;
+    }
+
+    /* ── Portfolio Overview Stats ── */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 3rem;
+    }
+
+    .summary-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-light);
+      border-radius: 16px;
+      padding: 1.5rem;
+      backdrop-filter: blur(12px);
+    }
+
+    .summary-label {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+    }
+
+    .summary-val {
+      font-family: var(--font-heading);
+      font-size: 2rem;
+      font-weight: 800;
+      color: var(--accent-green-bright);
+    }
+
+    /* ── Plants Grid ── */
+    .grid-plants {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+      gap: 2rem;
+    }
+
+    .plant-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-light);
+      border-radius: 20px;
+      padding: 2rem;
+      transition: all 0.35s ease;
+      position: relative;
+    }
+
+    .plant-card:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--border-glow);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+      transform: translateY(-4px);
+    }
+
+    .card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 1.25rem;
+      border-bottom: 1px solid var(--border-light);
+      padding-bottom: 1rem;
+    }
+
+    .plant-title {
+      font-family: var(--font-heading);
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: 0.2rem;
+    }
+
+    .plant-loc {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: var(--accent-green-bright);
+      padding: 0.35rem 0.8rem;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    .status-badge::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      background: var(--accent-green-bright);
+      border-radius: 50%;
+      box-shadow: 0 0 10px var(--accent-green-bright);
+    }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1.75rem;
+    }
+
+    .metric-cell {
+      background: rgba(9, 13, 22, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 1rem;
+    }
+
+    .metric-cell-lbl {
+      font-size: 0.78rem;
+      color: var(--text-dim);
+      margin-bottom: 0.2rem;
+    }
+
+    .metric-cell-val {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .btn-dashboard {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.6rem;
+      width: 100%;
+      background: linear-gradient(135deg, var(--accent-green), #047857);
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 600;
+      padding: 0.9rem;
+      border-radius: 12px;
+      text-decoration: none;
+      box-shadow: 0 0 20px var(--accent-green-glow);
+      transition: all 0.3s ease;
+    }
+
+    .btn-dashboard:hover {
+      box-shadow: 0 0 30px rgba(16, 185, 129, 0.6);
+      transform: translateY(-2px);
+    }
+
+    .card-add {
+      background: rgba(18, 25, 41, 0.4);
+      border: 2px dashed rgba(255, 255, 255, 0.1);
+      border-radius: 20px;
+      padding: 3rem 2rem;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s ease;
+      cursor: pointer;
+    }
+
+    .card-add:hover {
+      border-color: var(--accent-green);
+      background: rgba(16, 185, 129, 0.05);
+    }
+
+    .add-icon {
+      width: 48px;
+      height: 48px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      margin-bottom: 1rem;
+    }
+
+    .card-add:hover .add-icon {
+      background: rgba(16, 185, 129, 0.2);
+      color: var(--accent-green-bright);
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="nav-container">
+      <a href="/" class="brand">
+        <div class="logo-badge">
+          <i data-lucide="zap"></i>
+        </div>
+        <div class="brand-title">GET <span>Client Portal</span></div>
+      </a>
+
+      <div class="user-profile">
+        <div class="user-info">
+          <div class="user-name">Asset Manager</div>
+          <div class="user-role">GET Monitored Client</div>
+        </div>
+        <a href="/logout" class="btn-logout">
+          <i data-lucide="log-out" style="width:14px;height:14px;vertical-align:middle;"></i> Logout
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="page-header">
+      <h1 class="page-title">Monitored Solar PV Assets</h1>
+      <p class="page-desc">Real-time SCADA telemetry, inverter health, and O&M contract operational status.</p>
+    </div>
+
+    <!-- Summary Bar -->
+    <div class="summary-grid">
+      <div class="summary-card">
+        <div class="summary-label">Active Monitored Contracts</div>
+        <div class="summary-val">1 Plant</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">Total Managed Capacity</div>
+        <div class="summary-val">12.625 MWp</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">Inverter Fleet Health</div>
+        <div class="summary-val">36/36 <span style="font-size:1rem;color:var(--accent-green-bright);">Online</span></div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">Contract Status</div>
+        <div class="summary-val" style="color:var(--accent-cyan); font-size:1.5rem; margin-top:0.3rem;">GET Active O&M</div>
+      </div>
+    </div>
+
+    <!-- Portfolio Plants Grid -->
+    <div class="grid-plants">
+      
+      <!-- Monitored Plant 1: Mazara del Vallo -->
+      <div class="plant-card">
+        <div class="card-top">
+          <div>
+            <div class="plant-title">Mazara del Vallo PV Plant</div>
+            <div class="plant-loc">
+              <i data-lucide="map-pin" style="width:14px;height:14px;"></i> Sicily, Italy
+            </div>
+          </div>
+          <div class="status-badge">Live SCADA</div>
+        </div>
+
+        <div class="metrics-grid">
+          <div class="metric-cell">
+            <div class="metric-cell-lbl">Capacity</div>
+            <div class="metric-cell-val">12.625 MWp</div>
+          </div>
+          <div class="metric-cell">
+            <div class="metric-cell-lbl">Inverters</div>
+            <div class="metric-cell-val" id="inv-status-val">36 Active</div>
+          </div>
+          <div class="metric-cell">
+            <div class="metric-cell-lbl">Active Power</div>
+            <div class="metric-cell-val" id="power-val" style="color:var(--accent-green-bright);">Loading...</div>
+          </div>
+          <div class="metric-cell">
+            <div class="metric-cell-lbl">Daily Yield</div>
+            <div class="metric-cell-val" id="yield-val">Loading...</div>
+          </div>
+        </div>
+
+        <div style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1.5rem;">
+          <i data-lucide="shield-check" style="width:14px;height:14px;vertical-align:middle;color:var(--accent-green-bright);"></i> Contract: Full O&M, 24/7 Telemetry, Auto-Ticketing
+        </div>
+
+        <a href="https://mazara.monitoraggioget.it" id="btn-launch-scada" class="btn-dashboard">
+          <i data-lucide="layout-dashboard"></i> Launch Live SCADA Control Room
+        </a>
+      </div>
+
+      <!-- Add New Monitored Contract Card -->
+      <div class="card-add" onclick="alert('Contact GET Operations at contact@monitoraggioget.it to add a new Photovoltaic O&M contract.');">
+        <div class="add-icon">
+          <i data-lucide="plus" style="width:24px;height:24px;"></i>
+        </div>
+        <h3 style="font-family:var(--font-heading); font-size:1.2rem; margin-bottom:0.4rem;">Add New PV Contract</h3>
+        <p style="color:var(--text-muted); font-size:0.88rem; max-width:260px;">Expand GET active monitoring and O&M coverage to another solar plant.</p>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    lucide.createIcons();
+
+    // Dynamically set control room destination for local vs public access
+    const btnLaunch = document.getElementById("btn-launch-scada");
+    if (btnLaunch) {
+      const h = window.location.hostname;
+      if (h === "localhost" || h === "127.0.0.1" || h.startsWith("192.168.")) {
+        btnLaunch.href = "/dashboard";
+      }
+    }
+
+    // Fetch live summary metrics from API
+    async function loadPlantSummary() {
+      try {
+        const res = await fetch("/api/plants/summary");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.active_power !== undefined && data.active_power !== null) {
+            const kw = data.active_power;
+            document.getElementById("power-val").textContent = kw >= 1000 
+              ? `${(kw / 1000).toFixed(2)} MW` 
+              : `${kw.toFixed(1)} kW`;
+          } else {
+            document.getElementById("power-val").textContent = "— kW";
+          }
+
+          if (data.daily_energy !== undefined && data.daily_energy !== null) {
+            const kwh = data.daily_energy;
+            document.getElementById("yield-val").textContent = kwh >= 1000 
+              ? `${(kwh / 1000).toFixed(1)} MWh` 
+              : `${kwh.toFixed(0)} kWh`;
+          } else {
+            document.getElementById("yield-val").textContent = "— kWh";
+          }
+
+          if (data.inverters_online !== undefined) {
+            document.getElementById("inv-status-val").textContent = `${data.inverters_online}/${data.total_inverters || 36} Active`;
+          }
+        }
+      } catch (err) {
+        document.getElementById("power-val").textContent = "Live";
+        document.getElementById("yield-val").textContent = "Live";
+      }
+    }
+
+    loadPlantSummary();
+  </script>
+</body>
+</html>

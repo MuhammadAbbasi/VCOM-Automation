@@ -27,16 +27,16 @@ import socket
 import asyncio
 import logging
 import secrets
+import base64
 
-if sys.platform == "win32":
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 
 # Suppress asyncio's noisy log for WebSocket keepalive ping timeouts.
 # These fire when a browser tab goes idle — harmless, already handled in broadcast().
 logging.getLogger("asyncio").setLevel(logging.CRITICAL)
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks, Request, Depends, HTTPException, status
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
@@ -80,12 +80,19 @@ def verify_credentials(credentials: HTTPBasicCredentials = Depends(security)):
         )
     return credentials.username
 
+async def delayed_broadcaster_start():
+    await asyncio.sleep(2)
+    asyncio.create_task(data_broadcaster())
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    asyncio.create_task(data_broadcaster())
+    asyncio.create_task(delayed_broadcaster_start())
     yield
 
+from fastapi.middleware.gzip import GZipMiddleware
+
 app = FastAPI(title="Mazara SCADA Monitor", docs_url=None, redoc_url=None, lifespan=lifespan)
+app.add_middleware(GZipMiddleware, minimum_size=500)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # Include plant map routes
@@ -94,6 +101,19 @@ if plant_map_router:
 
 @app.middleware("http")
 async def add_security_headers(request, call_next):
+    # Protect sensitive static assets
+    path = request.url.path.lower()
+    if path.startswith("/static/"):
+        public_assets = {
+            "/static/login.html",
+            "/static/get_landing.html",
+            "/static/lucide.min.js",
+            "/static/style.css"
+        }
+        if path not in public_assets:
+            if not is_authenticated(request):
+                return RedirectResponse(url="/login", status_code=307)
+
     response = await call_next(request)
     response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline' cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' fonts.googleapis.com cdn.jsdelivr.net; font-src 'self' fonts.gstatic.com; img-src 'self' data:; connect-src 'self' ws: wss:;"
     response.headers["X-Frame-Options"] = "DENY"
@@ -158,8 +178,13 @@ def fetch_broadcaster_data(today, link_status_path):
 # Background Task for Data Push
 async def data_broadcaster():
     prev_is_extracting = False
+    await asyncio.sleep(2)
     while True:
         try:
+            if not manager.active_connections:
+                await asyncio.sleep(3)
+                continue
+
             today = datetime.now().strftime("%Y-%m-%d")
             busy_path = ROOT / ".extraction_busy"
             if not hasattr(manager, "_logged_path"):
@@ -212,7 +237,9 @@ async def get_extraction_status(user: str = Depends(verify_credentials)):
     return JSONResponse({"is_extracting": busy_path.exists()})
 
 @app.get("/api/trackers/history")
-async def api_tracker_history():
+async def api_tracker_history(request: Request):
+    if not is_authenticated(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
     try:
         from db.db_manager import get_tracker_history_compact
         data = await asyncio.to_thread(get_tracker_history_compact)
@@ -220,9 +247,131 @@ async def api_tracker_history():
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
 
+def is_authenticated(request: Request) -> bool:
+    """Check if request is authenticated via session cookie or Basic Auth."""
+    session = request.cookies.get("get_session")
+    if session == "authenticated":
+        return True
+    
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Basic "):
+        try:
+            encoded_credentials = auth_header.split(" ", 1)[1]
+            decoded = base64.b64decode(encoded_credentials).decode("utf-8")
+            username, password = decoded.split(":", 1)
+            cfg = load_config()
+            expected_user = cfg.get("DASHBOARD_USER") or os.environ.get("DASHBOARD_USER", "admin")
+            expected_pass = cfg.get("DASHBOARD_PASS") or os.environ.get("DASHBOARD_PASS", "")
+            if secrets.compare_digest(username, expected_user) and secrets.compare_digest(password, expected_pass):
+                return True
+        except Exception:
+            pass
+    return False
+
+# ---------------------------------------------------------------------------
+# Page & Portal Routes
+# ---------------------------------------------------------------------------
 @app.get("/")
-async def index():
+async def landing_page(request: Request):
+    """Public GET (Green Energy Team) Landing Page or protected plant dashboard."""
+    # Check X-Forwarded-Host first (preserving original host through Cloudflare Tunnel)
+    host = request.headers.get("x-forwarded-host", "").lower()
+    if not host:
+        host = request.headers.get("host", "").lower()
+        
+    print(f"[DASHBOARD] Root request received. Host header: '{host}'", flush=True)
+    if host.startswith("mazara."):
+        if not is_authenticated(request):
+            return RedirectResponse(url="https://monitoraggioget.it/login", status_code=307)
+        return FileResponse(str(STATIC_DIR / "index.html"))
+    return FileResponse(str(STATIC_DIR / "get_landing.html"))
+
+@app.get("/login")
+async def login_page():
+    """Client Portal Login Page."""
+    return FileResponse(str(STATIC_DIR / "login.html"))
+
+@app.post("/api/auth/login")
+async def process_login(request: Request, data: dict):
+    """Authenticate Client Credentials."""
+    username = data.get("username", "").strip()
+    password = data.get("password", "").strip()
+    cfg = load_config()
+    expected_user = cfg.get("DASHBOARD_USER") or os.environ.get("DASHBOARD_USER", "admin")
+    expected_pass = cfg.get("DASHBOARD_PASS") or os.environ.get("DASHBOARD_PASS", "")
+
+    if secrets.compare_digest(username, expected_user) and secrets.compare_digest(password, expected_pass):
+        response = JSONResponse({"status": "success", "message": "Login successful"})
+        host = request.headers.get("host", "").split(":")[0].lower()
+        is_https = request.headers.get("x-forwarded-proto", "http").lower() == "https" or request.url.scheme == "https"
+        cookie_domain = ".monitoraggioget.it" if "monitoraggioget.it" in host else None
+
+        response.set_cookie(
+            key="get_session", 
+            value="authenticated", 
+            max_age=86400, 
+            httponly=True, 
+            samesite="lax",
+            secure=is_https,
+            domain=cookie_domain
+        )
+        return response
+    else:
+        return JSONResponse({"status": "error", "message": "Invalid username or password"}, status_code=401)
+
+@app.get("/logout")
+async def logout(request: Request):
+    """Logout client session."""
+    response = RedirectResponse(url="/login")
+    host = request.headers.get("host", "").split(":")[0].lower()
+    cookie_domain = ".monitoraggioget.it" if "monitoraggioget.it" in host else None
+    if cookie_domain:
+        response.delete_cookie("get_session", domain=cookie_domain)
+    response.delete_cookie("get_session")
+    return response
+
+@app.get("/plants")
+async def plants_page(request: Request):
+    """Monitored Assets Portfolio Portal (Protected)."""
+    if not is_authenticated(request):
+        return RedirectResponse(url="/login", status_code=307)
+    return FileResponse(str(STATIC_DIR / "plants.html"))
+
+@app.get("/dashboard")
+async def scada_dashboard(request: Request):
+    """Live SCADA Control Room Interface (Protected)."""
+    if not is_authenticated(request):
+        return RedirectResponse(url="/login", status_code=307)
     return FileResponse(str(STATIC_DIR / "index.html"))
+
+@app.get("/api/plants/summary")
+async def get_plants_summary(request: Request):
+    """Get high-level summary telemetry for the Monitored Assets card."""
+    if not is_authenticated(request):
+        return JSONResponse({"status": "error", "message": "Unauthorized"}, status_code=401)
+    try:
+        from db.db_manager import load_latest_snapshot
+        today = datetime.now().strftime("%Y-%m-%d")
+        snapshot = await asyncio.to_thread(load_latest_snapshot, today)
+        if snapshot:
+            macro = snapshot.get("macro_health", {})
+            mw = macro.get("total_ac_power_mw", 0.0) or 0.0
+            act_p = mw * 1000.0  # Convert MW to kW
+            mwh = macro.get("total_energy_mwh", 0.0) or 0.0
+            daily_e = mwh * 1000.0  # Convert MWh to kWh
+            online = macro.get("online", 36)
+            total = macro.get("total_inverters", 36)
+            return JSONResponse({
+                "status": "success",
+                "active_power": round(act_p, 1),
+                "daily_energy": round(daily_e, 0),
+                "inverters_online": online,
+                "total_inverters": total
+            })
+    except Exception as e:
+        print(f"[SUMMARY API ERROR] {e}")
+        pass
+    return JSONResponse({"status": "success", "active_power": 0.0, "daily_energy": 0.0, "inverters_online": 36, "total_inverters": 36})
 
 
 def fetch_ws_initial_data(today, link_status_path):
@@ -253,6 +402,13 @@ def fetch_ws_initial_data(today, link_status_path):
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    session = websocket.cookies.get("get_session")
+    host = websocket.headers.get("host", "").split(":")[0].lower()
+    is_local = host in ("localhost", "127.0.0.1", "192.168.10.40")
+
+    if session != "authenticated" and not is_local:
+        await websocket.close(code=1008)
+        return
     await manager.connect(websocket)
     try:
         today = datetime.now().strftime("%Y-%m-%d")
@@ -280,7 +436,7 @@ async def websocket_endpoint(websocket: WebSocket):
 @app.get("/api/trackers")
 async def get_trackers(username: str = Depends(verify_credentials)):
     from db.db_manager import get_all_tracker_status
-    return get_all_tracker_status()
+    return await asyncio.to_thread(get_all_tracker_status)
 
 
 @app.get("/api/status")
@@ -338,7 +494,7 @@ async def rescan(user: str = Depends(verify_credentials)):
         # 1. Delete DB snapshots for today
         try:
             from db.db_manager import delete_snapshots
-            delete_snapshots(today)
+            await asyncio.to_thread(delete_snapshots, today)
         except Exception:
             pass
 
@@ -435,10 +591,12 @@ async def get_analytics_config(user: str = Depends(verify_credentials)):
     """Return available metrics and inverters for the analytics UI."""
     try:
         from db.db_manager import METRIC_TABLE_MAP, get_available_inverters, get_available_dates
+        inverters = await asyncio.to_thread(get_available_inverters)
+        dates = await asyncio.to_thread(get_available_dates)
         return JSONResponse({
             "metrics": list(METRIC_TABLE_MAP.keys()),
-            "inverters": get_available_inverters(),
-            "available_dates": get_available_dates()
+            "inverters": inverters,
+            "available_dates": dates
         })
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
@@ -457,8 +615,8 @@ async def get_analytics_data(
         from db.db_manager import get_metric_history
         
         inv_list = [i.strip() for i in inverters.split(",") if i and i.strip()] if inverters else None
-        data = get_metric_history(metric, start, end, inv_list)
-        
+        data = await asyncio.to_thread(get_metric_history, metric, start, end, inv_list)
+
         return JSONResponse(data)
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
@@ -522,30 +680,25 @@ if __name__ == "__main__":
     print(f"[*] Local:   http://localhost:{port}", flush=True)
     print(f"[*] Network: http://{local_ip}:{port}\n", flush=True)
     
-    # Try to start Ngrok asynchronously
-    ngrok_token = cfg.get("NGROK_AUTH_TOKEN")
-    if ngrok_token and ngrok_token != "YOUR_TOKEN_HERE":
-        print("[*] Queueing Ngrok Tunnel startup in background thread...")
-        ng_user = cfg.get("DASHBOARD_USER", "admin")
-        ng_pass = cfg.get("DASHBOARD_PASS", "")
-        
-        def run_ngrok_bg():
-            import time
-            time.sleep(3)  # Wait for uvicorn to start up
-            try:
-                public_url = setup_ngrok(ngrok_token, port, ng_user, ng_pass)
-                if public_url:
-                    print(f"\n[*] Remote Access (Public): {public_url}", flush=True)
-                    print(f"[*] Security Policy: Basic Auth (User: {ng_user})\n", flush=True)
-                else:
-                    print("\n[!] Ngrok failed to start in background thread.", flush=True)
-            except Exception as e:
-                print(f"\n[!] Ngrok background error: {e}", flush=True)
+    # Start Cloudflare Tunnel (Free, Unlimited Bandwidth) in background
+    def run_tunnel_bg():
+        import time
+        time.sleep(2)
+        try:
+            from tunnel_manager import start_cloudflare_tunnel
+            public_url = start_cloudflare_tunnel(port)
+            if public_url:
+                print(f"[*] Cloudflare Tunnel Public URL: {public_url}", flush=True)
+            else:
+                # Fallback to ngrok if cloudflared failed
+                ngrok_token = cfg.get("NGROK_AUTH_TOKEN")
+                if ngrok_token and ngrok_token != "YOUR_TOKEN_HERE":
+                    setup_ngrok(ngrok_token, port, cfg.get("DASHBOARD_USER", "admin"), cfg.get("DASHBOARD_PASS", ""))
+        except Exception as e:
+            print(f"[!] Tunnel background error: {e}", flush=True)
 
-        import threading
-        threading.Thread(target=run_ngrok_bg, daemon=True).start()
-    else:
-        print("[!] No NGROK_AUTH_TOKEN found in config.json. Remote access via Ngrok is disabled.")
+    import threading
+    threading.Thread(target=run_tunnel_bg, daemon=True).start()
     
     print("="*60 + "\n", flush=True)
 
@@ -554,6 +707,8 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=port,
         log_level="warning",
+        http="h11",
+        loop="asyncio",
         ws_ping_interval=60,
         ws_ping_timeout=30,
     )

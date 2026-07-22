@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GET | Green Energy Team - O&M Fotovoltaico & Telemetria SCADA</title>
+  <meta name="description" content="Green Energy Team (GET) è specializzata in contratti O&M per impianti fotovoltaici, monitoraggio SCADA attivo e risoluzione rapida guasti.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="/static/lucide.min.js"></script>
+
+  <style>
+    :root {
+      --bg-dark: #090d16;
+      --bg-card: rgba(18, 25, 41, 0.75);
+      --bg-card-hover: rgba(28, 38, 62, 0.85);
+      --border-glow: rgba(16, 185, 129, 0.25);
+      --border-light: rgba(255, 255, 255, 0.08);
+      
+      --accent-green: #10b981;
+      --accent-green-bright: #34d399;
+      --accent-green-glow: rgba(16, 185, 129, 0.4);
+      --accent-gold: #f59e0b;
+      --accent-cyan: #06b6d4;
+      
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      
+      --font-heading: 'Outfit', sans-serif;
+      --font-body: 'Inter', sans-serif;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: var(--font-body);
+      overflow-x: hidden;
+      line-height: 1.6;
+      background-image: 
+        radial-gradient(circle at 15% 15%, rgba(16, 185, 129, 0.08) 0%, transparent 45%),
+        radial-gradient(circle at 85% 85%, rgba(6, 182, 212, 0.06) 0%, transparent 50%),
+        radial-gradient(circle at 50% 50%, rgba(245, 158, 11, 0.03) 0%, transparent 60%);
+    }
+
+    /* ── Header Nav ── */
+    header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      z-index: 100;
+      backdrop-filter: blur(16px);
+      background: rgba(9, 13, 22, 0.85);
+      border-bottom: 1px solid var(--border-light);
+    }
+
+    .nav-container {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 1.1rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .brand-logo {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      text-decoration: none;
+      color: var(--text-main);
+    }
+
+    .logo-badge {
+      width: 42px;
+      height: 42px;
+      background: linear-gradient(135deg, var(--accent-green), var(--accent-cyan));
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #000;
+      box-shadow: 0 0 20px var(--accent-green-glow);
+    }
+
+    .brand-title {
+      font-family: var(--font-heading);
+      font-size: 1.4rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+    }
+
+    .brand-title span {
+      color: var(--accent-green-bright);
+    }
+
+    .nav-right {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 1.8rem;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.95rem;
+      font-weight: 500;
+      transition: color 0.25s ease;
+    }
+
+    .nav-links a:hover {
+      color: var(--accent-green-bright);
+    }
+
+    /* Lang Switcher Button */
+    .lang-switcher {
+      display: flex;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border-light);
+      border-radius: 999px;
+      padding: 3px;
+      cursor: pointer;
+    }
+
+    .lang-btn {
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .lang-btn.active {
+      background: var(--accent-green);
+      color: #000;
+      box-shadow: 0 0 10px var(--accent-green-glow);
+    }
+
+    .btn-login {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: linear-gradient(135deg, var(--accent-green), #059669);
+      color: #fff;
+      font-weight: 600;
+      padding: 0.65rem 1.4rem;
+      border-radius: 10px;
+      text-decoration: none;
+      box-shadow: 0 4px 15px var(--accent-green-glow);
+      transition: all 0.3s ease;
+    }
+
+    .btn-login:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 25px rgba(16, 185, 129, 0.6);
+    }
+
+    /* ── Hero Section ── */
+    .hero {
+      padding: 11rem 2rem 6rem;
+      max-width: 1280px;
+      margin: 0 auto;
+      text-align: center;
+    }
+
+    .hero-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: var(--accent-green-bright);
+      padding: 0.4rem 1.1rem;
+      border-radius: 999px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      margin-bottom: 1.5rem;
+    }
+
+    .hero-title {
+      font-family: var(--font-heading);
+      font-size: 3.5rem;
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: -1px;
+      margin-bottom: 1.5rem;
+      background: linear-gradient(180deg, #ffffff 0%, #cbd5e1 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero-title span {
+      background: linear-gradient(135deg, var(--accent-green-bright), var(--accent-cyan));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero-desc {
+      max-width: 820px;
+      margin: 0 auto 2.5rem;
+      font-size: 1.15rem;
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    .hero-actions {
+      display: flex;
+      justify-content: center;
+      gap: 1.25rem;
+      flex-wrap: wrap;
+    }
+
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+      background: linear-gradient(135deg, var(--accent-green), #047857);
+      color: #fff;
+      font-size: 1.05rem;
+      font-weight: 600;
+      padding: 0.9rem 2.2rem;
+      border-radius: 12px;
+      text-decoration: none;
+      box-shadow: 0 0 30px var(--accent-green-glow);
+      transition: all 0.3s ease;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 0 45px rgba(16, 185, 129, 0.7);
+    }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-light);
+      color: var(--text-main);
+      font-size: 1.05rem;
+      font-weight: 600;
+      padding: 0.9rem 2.2rem;
+      border-radius: 12px;
+      text-decoration: none;
+      transition: all 0.3s ease;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.2);
+      transform: translateY(-3px);
+    }
+
+    /* ── Metrics Counter Bar ── */
+    .metrics-bar {
+      max-width: 1100px;
+      margin: 4rem auto 0;
+      background: var(--bg-card);
+      border: 1px solid var(--border-light);
+      border-radius: 20px;
+      padding: 2rem;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 2rem;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+    }
+
+    .metric-item { text-align: center; }
+
+    .metric-value {
+      font-family: var(--font-heading);
+      font-size: 2.5rem;
+      font-weight: 800;
+      color: var(--accent-green-bright);
+      margin-bottom: 0.2rem;
+    }
+
+    .metric-label {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    /* ── Features Section ── */
+    .section {
+      padding: 6rem 2rem;
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+
+    .section-title {
+      text-align: center;
+      font-family: var(--font-heading);
+      font-size: 2.4rem;
+      font-weight: 800;
+      margin-bottom: 1rem;
+    }
+
+    .section-desc {
+      text-align: center;
+      max-width: 650px;
+      margin: 0 auto 4rem;
+      color: var(--text-muted);
+      font-size: 1.05rem;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 2rem;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-light);
+      border-radius: 18px;
+      padding: 2.2rem;
+      transition: all 0.35s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--border-glow);
+      transform: translateY(-5px);
+      box-shadow: 0 15px 30px rgba(0, 0, 0, 0.4);
+    }
+
+    .card-icon {
+      width: 52px;
+      height: 52px;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent-green-bright);
+      margin-bottom: 1.5rem;
+    }
+
+    .card-title {
+      font-family: var(--font-heading);
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: 0.8rem;
+    }
+
+    .card-text {
+      color: var(--text-muted);
+      font-size: 0.98rem;
+      line-height: 1.6;
+    }
+
+    /* ── Monitored Plant Spotlight ── */
+    .spotlight-box {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(6, 182, 212, 0.08));
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      border-radius: 24px;
+      padding: 3rem 2.5rem;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3rem;
+      align-items: center;
+      margin-top: 3rem;
+    }
+
+    @media (max-width: 900px) {
+      .spotlight-box { grid-template-columns: 1fr; }
+    }
+
+    .spotlight-content h3 {
+      font-family: var(--font-heading);
+      font-size: 2.2rem;
+      font-weight: 800;
+      margin-bottom: 1rem;
+    }
+
+    .spotlight-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(16, 185, 129, 0.2);
+      color: var(--accent-green-bright);
+      padding: 0.35rem 0.9rem;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+    }
+
+    .spotlight-list {
+      list-style: none;
+      margin: 1.5rem 0 2rem;
+    }
+
+    .spotlight-list li {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .spotlight-list li i {
+      color: var(--accent-green-bright);
+    }
+
+    .plant-preview-card {
+      background: var(--bg-dark);
+      border: 1px solid var(--border-glow);
+      border-radius: 18px;
+      padding: 2rem;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+    }
+
+    .plant-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border-light);
+      padding-bottom: 1rem;
+    }
+
+    .plant-name {
+      font-family: var(--font-heading);
+      font-size: 1.3rem;
+      font-weight: 700;
+    }
+
+    .status-dot {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--accent-green-bright);
+      padding: 0.3rem 0.75rem;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    .status-dot::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      background: var(--accent-green-bright);
+      border-radius: 50%;
+      box-shadow: 0 0 10px var(--accent-green-bright);
+    }
+
+    .plant-stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .stat-box {
+      background: rgba(255, 255, 255, 0.03);
+      padding: 0.9rem;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .stat-box-lbl {
+      font-size: 0.8rem;
+      color: var(--text-dim);
+    }
+
+    .stat-box-val {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid var(--border-light);
+      background: rgba(9, 13, 22, 0.95);
+      padding: 4rem 2rem 2rem;
+    }
+
+    .footer-container {
+      max-width: 1280px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 2rem;
+      margin-bottom: 3rem;
+    }
+
+    .footer-desc {
+      max-width: 380px;
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      margin-top: 1rem;
+    }
+
+    .footer-bottom {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding-top: 2rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--text-dim);
+      font-size: 0.875rem;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header Navigation -->
+  <header>
+    <div class="nav-container">
+      <a href="/" class="brand-logo">
+        <div class="logo-badge">
+          <i data-lucide="zap"></i>
+        </div>
+        <div class="brand-title">GET <span>Green Energy Team</span></div>
+      </a>
+
+      <div class="nav-right">
+        <ul class="nav-links">
+          <li><a href="#services" data-i18n="nav_services">Servizi O&M</a></li>
+          <li><a href="#technology" data-i18n="nav_tech">Telemetria SCADA</a></li>
+          <li><a href="#monitored" data-i18n="nav_assets">Impianti Monitorati</a></li>
+        </ul>
+
+        <!-- Language Switcher -->
+        <div class="lang-switcher">
+          <button class="lang-btn active" id="btn-it" onclick="setLanguage('it')">🇮🇹 IT</button>
+          <button class="lang-btn" id="btn-en" onclick="setLanguage('en')">🇬🇧 EN</button>
+        </div>
+
+        <a href="/login" class="btn-login">
+          <i data-lucide="lock" style="width:16px;height:16px;"></i> <span data-i18n="nav_login">Area Riservata Clienti</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-pill">
+      <i data-lucide="shield-check" style="width:16px;height:16px;"></i> <span data-i18n="hero_pill">Operazioni O&M e Telemetria Fotovoltaica Avanzata</span>
+    </div>
+    <h1 class="hero-title" data-i18n="hero_title">
+      Massimizziamo la Resa degli Impianti <br><span>Fotovoltaici Industriali</span>
+    </h1>
+    <p class="hero-desc" data-i18n="hero_desc">
+      GET (Green Energy Team) è specializzata nella gestione di contratti di Operation & Maintenance (O&M) per impianti fotovoltaici. Con un team di ingegneri specializzati, strumenti SCADA proprietari e monitoraggio attivo 24/7 per la risoluzione rapida di qualsiasi anomalia.
+    </p>
+    <div class="hero-actions">
+      <a href="/login" class="btn-primary">
+        <i data-lucide="layout-dashboard"></i> <span data-i18n="btn_portal">Accedi al Portale Clienti</span>
+      </a>
+      <a href="#monitored" class="btn-secondary">
+        <i data-lucide="sun"></i> <span data-i18n="btn_assets">Impianti in Gestione</span>
+      </a>
+    </div>
+
+    <!-- Metrics Bar -->
+    <div class="metrics-bar">
+      <div class="metric-item">
+        <div class="metric-value">12.625 MWp</div>
+        <div class="metric-label" data-i18n="metric_power">Potenza Solare Monitorata</div>
+      </div>
+      <div class="metric-item">
+        <div class="metric-value">36/36</div>
+        <div class="metric-label" data-i18n="metric_inv">Inverter Telemetria Attivi</div>
+      </div>
+      <div class="metric-item">
+        <div class="metric-value">&lt;15 Min</div>
+        <div class="metric-label" data-i18n="metric_fault">Rilevamento Automatico Anomalie</div>
+      </div>
+      <div class="metric-item">
+        <div class="metric-value">99.8%</div>
+        <div class="metric-label" data-i18n="metric_avail">Disponibilità Impianti Garantita</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Services Section -->
+  <section class="section" id="services">
+    <h2 class="section-title" data-i18n="sec_services_title">Perché gli Invester Sceglieranno GET</h2>
+    <p class="section-desc" data-i18n="sec_services_desc">Il nostro team dedicato e la tecnologia SCADA proprietaria proteggono l'investimento solare con manutenzione preventiva, tracciamento delle prestazioni e interventi sul campo immediati.</p>
+    
+    <div class="grid-3">
+      <div class="card">
+        <div class="card-icon">
+          <i data-lucide="file-check"></i>
+        </div>
+        <h3 class="card-title" data-i18n="serv1_title">Contratti O&M Fotovoltaico</h3>
+        <p class="card-text" data-i18n="serv1_desc">Accordi di Operation & Maintenance su misura con garanzia di uptime SLA, obiettivi di Performance Ratio (PR), manutenzione preventiva e reportistica di conformità.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-icon">
+          <i data-lucide="activity"></i>
+        </div>
+        <h3 class="card-title" data-i18n="serv2_title">Telemetria SCADA Attiva</h3>
+        <p class="card-text" data-i18n="serv2_desc">Suite di monitoraggio in tempo reale che analizza correnti di stringa, stato inverter, stazioni meteo, sensori di irraggiamento e inseguitori solari biassiali ogni minuto.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-icon">
+          <i data-lucide="wrench"></i>
+        </div>
+        <h3 class="card-title" data-i18n="serv3_title">Ingegneria Specializzata</h3>
+        <p class="card-text" data-i18n="serv3_desc">Tecnici di campo dedicati ed ingegneri di diagnostica remota equipaggiati con strumenti di telemetria proprietari per risolvere stacchi di rete e anomalie di inseguimento.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Monitored Asset Spotlight -->
+  <section class="section" id="monitored">
+    <div class="spotlight-box">
+      <div class="spotlight-content">
+        <div class="spotlight-badge">
+          <i data-lucide="radio" style="width:14px;height:14px;"></i> <span data-i18n="spotlight_badge">Contratto O&M Attivo sotto Monitoraggio</span>
+        </div>
+        <h3>Impianto Fotovoltaico Mazara del Vallo</h3>
+        <p style="color: var(--text-muted);" data-i18n="spotlight_sub">Sicilia, Italia • Impianto Solare Industriale da 12.625 MWp</p>
+        
+        <ul class="spotlight-list">
+          <li><i data-lucide="check-circle-2"></i> <span data-i18n="spot1">36 Inverter ad alta efficienza mappati su 3 Sotto-Domini</span></li>
+          <li><i data-lucide="check-circle-2"></i> <span data-i18n="spot2">Monitoraggio Inseguitori Solari Biassiali via Telemetria MQTT</span></li>
+          <li><i data-lucide="check-circle-2"></i> <span data-i18n="spot3">Workflow Biglietteria Odoo Automatico e Alert Telegram</span></li>
+        </ul>
+
+        <a href="/login" class="btn-primary">
+          <i data-lucide="external-link"></i> <span data-i18n="btn_scada">Apri Control Room SCADA Live</span>
+        </a>
+      </div>
+
+      <div class="plant-preview-card">
+        <div class="plant-header">
+          <div class="plant-name">Impianto Mazara del Vallo</div>
+          <div class="status-dot" data-i18n="plant_status">100% Operativo</div>
+        </div>
+
+        <div class="plant-stats-grid">
+          <div class="stat-box">
+            <div class="stat-box-lbl" data-i18n="lbl_cap">Capacità</div>
+            <div class="stat-box-val">~12.625 MWp</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-box-lbl" data-i18n="lbl_inv">Inverter</div>
+            <div class="stat-box-val">36 Attivi</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-box-lbl" data-i18n="lbl_telem">Telemetria</div>
+            <div class="stat-box-val" style="color:var(--accent-green-bright);">SCADA Live</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-box-lbl" data-i18n="lbl_om">Gestore O&M</div>
+            <div class="stat-box-val">Team GET</div>
+          </div>
+        </div>
+
+        <div style="font-size:0.85rem; color:var(--text-muted); text-align:center;" data-i18n="login_req">
+          Accesso Autenticato Richiesto per la Control Room Completa
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="footer-container">
+      <div>
+        <div class="brand-title">GET <span>Green Energy Team</span></div>
+        <div class="footer-desc" data-i18n="footer_desc">
+          Leader nelle operazioni e manutenzione per impianti fotovoltaici industriali e commerciali.
+        </div>
+      </div>
+      <div>
+        <h4 style="font-family:var(--font-heading); margin-bottom:1rem;" data-i18n="footer_quick">Link Rapidi</h4>
+        <ul style="list-style:none; color:var(--text-muted); font-size:0.95rem; line-height:2;">
+          <li><a href="/login" style="color:var(--accent-green-bright); text-decoration:none;" data-i18n="nav_login">Area Riservata Clienti</a></li>
+          <li><a href="#services" style="color:var(--text-muted); text-decoration:none;" data-i18n="nav_services">Contratti O&M</a></li>
+          <li><a href="#monitored" style="color:var(--text-muted); text-decoration:none;" data-i18n="nav_assets">Impianti Monitorati</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <div>© 2026 GET (Green Energy Team). Tutti i diritti riservati.</div>
+      <div>Domain: monitoraggioget.it</div>
+    </div>
+  </footer>
+
+  <script>
+    lucide.createIcons();
+
+    // Bilingual Dictionary
+    const translations = {
+      it: {
+        nav_services: "Servizi O&M",
+        nav_tech: "Telemetria SCADA",
+        nav_assets: "Impianti Monitorati",
+        nav_login: "Area Riservata Clienti",
+        hero_pill: "Operazioni O&M e Telemetria Fotovoltaica Avanzata",
+        hero_title: 'Massimizziamo la Resa degli Impianti <br><span>Fotovoltaici Industriali</span>',
+        hero_desc: "GET (Green Energy Team) è specializzata nella gestione di contratti di Operation & Maintenance (O&M) per impianti fotovoltaici. Con un team di ingegneri specializzati, strumenti SCADA proprietari e monitoraggio attivo 24/7 per la risoluzione rapida di qualsiasi anomalia.",
+        btn_portal: "Accedi al Portale Clienti",
+        btn_assets: "Impianti in Gestione",
+        metric_power: "Potenza Solare Monitorata",
+        metric_inv: "Inverter Telemetria Attivi",
+        metric_fault: "Rilevamento Automatico Anomalie",
+        metric_avail: "Disponibilità Impianti Garantita",
+        sec_services_title: "Perché gli Invester Sceglieranno GET",
+        sec_services_desc: "Il nostro team dedicato e la tecnologia SCADA proprietaria proteggono l'investimento solare con manutenzione preventiva, tracciamento delle prestazioni e interventi sul campo immediati.",
+        serv1_title: "Contratti O&M Fotovoltaico",
+        serv1_desc: "Accordi di Operation & Maintenance su misura con garanzia di uptime SLA, obiettivi di Performance Ratio (PR), manutenzione preventiva e reportistica di conformità.",
+        serv2_title: "Telemetria SCADA Attiva",
+        serv2_desc: "Suite di monitoraggio in tempo reale che analizza correnti di stringa, stato inverter, stazioni meteo, sensori di irraggiamento e inseguitori solari biassiali ogni minuto.",
+        serv3_title: "Ingegneria Specializzata",
+        serv3_desc: "Tecnici di campo dedicati ed ingegneri di diagnostica remota equipaggiati con strumenti di telemetria proprietari per risolvere stacchi di rete e anomalie di inseguimento.",
+        spotlight_badge: "Contratto O&M Attivo sotto Monitoraggio",
+        spotlight_sub: "Sicilia, Italia • Impianto Solare Industriale da 12.625 MWp",
+        spot1: "36 Inverter ad alta efficienza mappati su 3 Sotto-Domini",
+        spot2: "Monitoraggio Inseguitori Solari Biassiali via Telemetria MQTT",
+        spot3: "Workflow Biglietteria Odoo Automatico e Alert Telegram",
+        btn_scada: "Apri Control Room SCADA Live",
+        plant_status: "100% Operativo",
+        lbl_cap: "Capacità",
+        lbl_inv: "Inverter",
+        lbl_telem: "Telemetria",
+        lbl_om: "Gestore O&M",
+        login_req: "Accesso Autenticato Richiesto per la Control Room Completa",
+        footer_desc: "Leader nelle operazioni e manutenzione per impianti fotovoltaici industriali e commerciali.",
+        footer_quick: "Link Rapidi"
+      },
+      en: {
+        nav_services: "O&M Services",
+        nav_tech: "SCADA Telemetry",
+        nav_assets: "Monitored Plants",
+        nav_login: "Client Portal Login",
+        hero_pill: "Dedicated Photovoltaic O&M Operations & Telemetry",
+        hero_title: 'Securing Peak Yield & Contracted O&M <br>for <span>Solar PV Infrastructure</span>',
+        hero_desc: "GET (Green Energy Team) provides end-to-end Operation & Maintenance contracts for Photovoltaic plants. Driven by a specialized engineering team, active SCADA telemetry monitoring, and real-time fault resolution tools.",
+        btn_portal: "Access Client Portal",
+        btn_assets: "View Monitored Assets",
+        metric_power: "Active Monitored Solar Power",
+        metric_inv: "Inverters Telemetry Healthy",
+        metric_fault: "Automatic Fault Detection",
+        metric_avail: "Contracted Asset Availability",
+        sec_services_title: "Why Asset Owners Choose GET",
+        sec_services_desc: "Our dedicated team and custom SCADA technology safeguard your solar investment with proactive maintenance, performance tracking, and rapid on-site intervention.",
+        serv1_title: "PV O&M Contracts",
+        serv1_desc: "Customized Operation & Maintenance agreements guaranteeing SLA uptime, performance ratio targets, preventive maintenance cycles, and compliance reporting.",
+        serv2_title: "Active SCADA Telemetry",
+        serv2_desc: "Proprietary real-time monitoring suite analyzing string currents, inverter health, weather stations, irradiance sensors, and dual-axis solar trackers every minute.",
+        serv3_title: "Specialized Engineering",
+        serv3_desc: "Dedicated field technicians and remote diagnostics engineers equipped with custom telemetry tools to resolve grid trips, string outages, and tracker misalignment.",
+        spotlight_badge: "Active O&M Contract Under Monitoring",
+        spotlight_sub: "Sicily, Italy • 12.625 MWp Utility-Scale Solar Asset",
+        spot1: "36 High-efficiency Inverters mapped across 3 Sub-Domains",
+        spot2: "Dual-Axis Solar Tracker Monitoring via MQTT Telemetry",
+        spot3: "Automated Odoo Ticket Workflow & Telegram Alerts",
+        btn_scada: "Launch Live SCADA Control Room",
+        plant_status: "100% Operational",
+        lbl_cap: "Capacity",
+        lbl_inv: "Inverters",
+        lbl_telem: "Telemetry",
+        lbl_om: "O&M Provider",
+        login_req: "Authenticated Client Access Required for Full Control Room",
+        footer_desc: "Leading operation and maintenance provider for utility-scale and commercial Photovoltaic solar installations.",
+        footer_quick: "Quick Links"
+      }
+    };
+
+    function setLanguage(lang) {
+      document.documentElement.lang = lang;
+      document.getElementById("btn-it").classList.toggle("active", lang === 'it');
+      document.getElementById("btn-en").classList.toggle("active", lang === 'en');
+
+      const dict = translations[lang];
+      document.querySelectorAll("[data-i18n]").forEach(el => {
+        const key = el.getAttribute("data-i18n");
+        if (dict[key]) {
+          el.innerHTML = dict[key];
+        }
+      });
+      localStorage.setItem("get_lang", lang);
+    }
+
+    // Load saved language preference or default to Italian
+    const savedLang = localStorage.getItem("get_lang") || "it";
+    setLanguage(savedLang);
+  </script>
+</body>
+</html>

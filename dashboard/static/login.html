@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Client Portal Login | GET (Green Energy Team)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+  <script src="/static/lucide.min.js"></script>
+
+  <style>
+    :root {
+      --bg-dark: #090d16;
+      --bg-card: rgba(18, 25, 41, 0.85);
+      --accent-green: #10b981;
+      --accent-green-bright: #34d399;
+      --accent-green-glow: rgba(16, 185, 129, 0.4);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --border-light: rgba(255, 255, 255, 0.1);
+      --font-heading: 'Outfit', sans-serif;
+      --font-body: 'Inter', sans-serif;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: var(--font-body);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-image: 
+        radial-gradient(circle at 20% 20%, rgba(16, 185, 129, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(6, 182, 212, 0.08) 0%, transparent 50%);
+      padding: 1.5rem;
+    }
+
+    .login-card {
+      width: 100%;
+      max-width: 440px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-light);
+      border-radius: 24px;
+      padding: 2.5rem;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 25px 50px rgba(0, 0, 0, 0.6);
+    }
+
+    .brand-header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .logo-badge {
+      width: 54px;
+      height: 54px;
+      background: linear-gradient(135deg, var(--accent-green), #06b6d4);
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #000;
+      margin: 0 auto 1rem;
+      box-shadow: 0 0 25px var(--accent-green-glow);
+    }
+
+    .title {
+      font-family: var(--font-heading);
+      font-size: 1.75rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 0.3rem;
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 0.92rem;
+    }
+
+    .form-group {
+      margin-bottom: 1.25rem;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+    }
+
+    .input-wrapper {
+      position: relative;
+    }
+
+    .input-wrapper i {
+      position: absolute;
+      left: 1rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      width: 18px;
+      height: 18px;
+    }
+
+    .form-input {
+      width: 100%;
+      background: rgba(9, 13, 22, 0.7);
+      border: 1px solid var(--border-light);
+      border-radius: 12px;
+      padding: 0.8rem 1rem 0.8rem 2.8rem;
+      color: var(--text-main);
+      font-size: 0.95rem;
+      outline: none;
+      transition: all 0.25s ease;
+    }
+
+    .form-input:focus {
+      border-color: var(--accent-green-bright);
+      box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);
+    }
+
+    .btn-submit {
+      width: 100%;
+      background: linear-gradient(135deg, var(--accent-green), #047857);
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 600;
+      padding: 0.85rem;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      box-shadow: 0 0 20px var(--accent-green-glow);
+      transition: all 0.3s ease;
+      margin-top: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+
+    .btn-submit:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 30px rgba(16, 185, 129, 0.6);
+    }
+
+    .error-msg {
+      display: none;
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #fca5a5;
+      padding: 0.75rem;
+      border-radius: 10px;
+      font-size: 0.85rem;
+      margin-bottom: 1.25rem;
+      text-align: center;
+    }
+
+    .back-home {
+      display: block;
+      text-align: center;
+      margin-top: 1.5rem;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.85rem;
+    }
+
+    .back-home:hover { color: var(--accent-green-bright); }
+  </style>
+</head>
+<body>
+
+  <div class="login-card">
+    <div class="brand-header">
+      <div class="logo-badge">
+        <i data-lucide="zap"></i>
+      </div>
+      <h1 class="title">GET Client Portal</h1>
+      <p class="subtitle">Access your monitored photovoltaic assets</p>
+    </div>
+
+    <div class="error-msg" id="error-box">
+      Invalid username or password. Please try again.
+    </div>
+
+    <form id="login-form">
+      <div class="form-group">
+        <label class="form-label" for="username">Username</label>
+        <div class="input-wrapper">
+          <i data-lucide="user"></i>
+          <input class="form-input" type="text" id="username" placeholder="Enter your username" required autocomplete="username">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="password">Password</label>
+        <div class="input-wrapper">
+          <i data-lucide="lock"></i>
+          <input class="form-input" type="password" id="password" placeholder="Enter your password" required autocomplete="current-password">
+        </div>
+      </div>
+
+      <button type="submit" class="btn-submit" id="submit-btn">
+        <span>Sign In to Portal</span>
+        <i data-lucide="arrow-right" style="width:18px;height:18px;"></i>
+      </button>
+    </form>
+
+    <a href="/" class="back-home">
+      ← Back to GET Public Website
+    </a>
+  </div>
+
+  <script>
+    lucide.createIcons();
+
+    document.getElementById("login-form").addEventListener("submit", async function(e) {
+      e.preventDefault();
+      const user = document.getElementById("username").value.trim();
+      const pass = document.getElementById("password").value.trim();
+      const errBox = document.getElementById("error-box");
+      const btn = document.getElementById("submit-btn");
+
+      errBox.style.display = "none";
+      btn.disabled = true;
+      btn.querySelector("span").textContent = "Authenticating...";
+
+      try {
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: user, password: pass })
+        });
+
+        const data = await res.json();
+
+        if (res.ok && data.status === "success") {
+          window.location.href = "/plants";
+        } else {
+          errBox.textContent = data.message || "Invalid credentials. Please try again.";
+          errBox.style.display = "block";
+          btn.disabled = false;
+          btn.querySelector("span").textContent = "Sign In to Portal";
+        }
+      } catch (err) {
+        errBox.textContent = "Network error. Please try again.";
+        errBox.style.display = "block";
+        btn.disabled = false;
+        btn.querySelector("span").textContent = "Sign In to Portal";
+      }
+    });
+  </script>
+</body>
+</html>
