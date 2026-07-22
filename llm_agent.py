@@ -80,14 +80,21 @@ def _load_csv(filename):
     return pd.DataFrame()
 
 def get_public_url():
-    """Try to fetch ngrok public URL from local ngrok API."""
+    """Try to fetch public URL from Cloudflare Tunnel or ngrok."""
+    try:
+        from tunnel_manager import get_public_url as get_cf_url
+        cf_url = get_cf_url()
+        if cf_url:
+            return cf_url
+    except Exception:
+        pass
     try:
         resp = requests.get("http://localhost:4040/api/tunnels", timeout=1)
         if resp.ok:
             tunnels = resp.json().get("tunnels", [])
             if tunnels:
                 return tunnels[0].get("public_url")
-    except:
+    except Exception:
         pass
     return None
 
@@ -574,8 +581,12 @@ class Row(dict):
                 raise KeyError(key)
         return super().__getitem__(key)
 
-def query_db(sql: str) -> str:
-    """Run a read-only SQL query on the plant database."""
+def _normalize_and_run_sql(sql: str) -> pd.DataFrame:
+    """Validate, auto-correct known LLM hallucinations, and execute a read-only SQL query.
+
+    Shared by query_db() (code-exec sandbox) and the ReAct query_db tool, so both
+    entry points benefit from the same VCOM-schema corrections below.
+    """
     if not sql.strip().upper().startswith("SELECT"):
         raise ValueError("Error: Only SELECT queries are allowed.")
     
@@ -647,8 +658,12 @@ def query_db(sql: str) -> str:
         sql = re.sub(r'\border\s+by\s+ora\b', 'ORDER BY CAST(Ora AS REAL)', sql, flags=re.IGNORECASE)
 
     conn = get_data_conn()
-    df = pd.read_sql_query(sql, conn)
-    return [Row(r) for r in df.to_dict(orient="records")]
+    return pd.read_sql_query(sql, conn)
+
+
+def query_db(sql: str) -> str:
+    """Run a read-only SQL query on the plant database."""
+    return [Row(r) for r in _normalize_and_run_sql(sql).to_dict(orient="records")]
 
 def search_logs(query: str, limit: int = 20) -> str:
     """Search system logs."""
@@ -673,6 +688,13 @@ def get_tracker_data_all():
     """Retrieve all tracker statuses from the database."""
     try:
         return get_all_tracker_status()
+    except Exception as e:
+        return {"error": str(e)}
+
+def list_data_files():
+    """List raw data files available in the extraction directory."""
+    try:
+        return [f.name for f in DATA_DIR.glob("*")]
     except Exception as e:
         return {"error": str(e)}
 
@@ -904,6 +926,7 @@ def run_python_analysis(code: str, plant_data: dict) -> tuple:
         "search_logs": search_logs,
         "query_db": query_db,
         "get_data_conn": get_data_conn,
+        "list_data_files": list_data_files,
         "load_csv": _load_csv, # Kept but hidden from prompt
         "INV_IDS": INV_IDS,
         "TODAY": datetime.now().strftime("%Y-%m-%d"),
@@ -1041,6 +1064,271 @@ def _save_history(user_id, question, answer):
     CHAT_HISTORY[user_id].append({"q": question, "a": answer, "ts": datetime.now()})
     if len(CHAT_HISTORY[user_id]) > 5:
         CHAT_HISTORY[user_id].pop(0)
+
+# ---------------------------------------------------------------------------
+# ReAct Agent Engine (Tool-Calling) — used by the dashboard chat endpoint.
+# Multi-step Thought/Action/Observation loop over a fixed tool set, as an
+# alternative to ask_llm()'s single-shot + code-exec-fallback approach.
+# Tool wrappers below are prefixed _react_ where their name would otherwise
+# shadow the raw data function above; they all delegate to it.
+# ---------------------------------------------------------------------------
+
+def get_plant_summary(date: str = None, **kwargs) -> str:
+    """Get high-level production and health summary."""
+    d = date or datetime.now().strftime("%Y-%m-%d")
+    prod = get_total_production(d)
+    status = get_inverter_status(d)
+    res = {
+        "production_mwh": prod.get("total_mwh"),
+        "online_count": status.get("online_count"),
+        "total_inverters": status.get("total")
+    }
+    return json.dumps(res)
+
+def _react_get_temperatures(date: str = None, threshold: float = None, **kwargs) -> str:
+    """Get latest temperature readings for all inverters, optionally filtering above a threshold (e.g. threshold=50)."""
+    d = date or datetime.now().strftime("%Y-%m-%d")
+    thresh = float(threshold) if threshold is not None else None
+    return json.dumps(get_temperatures(d, thresh), default=str)
+
+def _react_get_dc_currents(date: str = None, threshold: float = None, **kwargs) -> str:
+    """Get DC currents for all strings, optionally filtering below a threshold (e.g. threshold=0.1)."""
+    d = date or datetime.now().strftime("%Y-%m-%d")
+    thresh = float(threshold) if threshold is not None else None
+    return json.dumps(get_dc_currents(d, thresh), default=str)
+
+def _react_get_inverter_status(date: str = None, **kwargs) -> str:
+    """Get the status of all inverters, identifying which are offline (OFF), low-power (LOW), or active (OK)."""
+    d = date or datetime.now().strftime("%Y-%m-%d")
+    return json.dumps(get_inverter_status(d), default=str)
+
+def _react_get_total_production(date: str = None, **kwargs) -> str:
+    """Get today's total plant energy production in MWh and average production in MW."""
+    d = date or datetime.now().strftime("%Y-%m-%d")
+    return json.dumps(get_total_production(d), default=str)
+
+def _react_get_peak_production(date: str = None, **kwargs) -> str:
+    """Get peak instantaneous power generation in Watts and the time it occurred, with corresponding POA."""
+    d = date or datetime.now().strftime("%Y-%m-%d")
+    return json.dumps(get_peak_production(d), default=str)
+
+def _react_get_transformer_comparison(date: str = None, **kwargs) -> str:
+    """Compare MWh production and active MW across the three transformers (TX1, TX2, TX3)."""
+    d = date or datetime.now().strftime("%Y-%m-%d")
+    return json.dumps(get_transformer_comparison(d), default=str)
+
+def _react_get_irradiance(date: str = None, **kwargs) -> str:
+    """Get latest, peak, and average solar irradiance (POA) readings for the day."""
+    d = date or datetime.now().strftime("%Y-%m-%d")
+    return json.dumps(get_irradiance(d), default=str)
+
+def _react_get_downtime_events(date: str = None, **kwargs) -> str:
+    """Identify which inverters went offline during daylight production hours and for how many minutes."""
+    d = date or datetime.now().strftime("%Y-%m-%d")
+    return json.dumps(get_downtime_events(d), default=str)
+
+def analyze_alarms(date: str = None, inverter: str = None, type: str = None, **kwargs) -> str:
+    """Search for historical alarms."""
+    d = date or datetime.now().strftime("%Y-%m-%d")
+    return json.dumps(get_alarm_history(d, inverter, type))
+
+def get_latest_readings(metric: str, date: str = None, **kwargs) -> str:
+    """Fetch raw sensor data."""
+    d = date or datetime.now().strftime("%Y-%m-%d")
+    df = load_metric(d, metric)
+    if df is None or df.empty: return "No data."
+
+    # Filter out rows that are completely empty/null (common in VCOM pre-populated tables)
+    data_cols = [c for c in df.columns if c not in ("Ora", "Timestamp Fetch")]
+    if data_cols:
+        df_valid = df.dropna(subset=data_cols, how='all')
+        if not df_valid.empty:
+            df = df_valid
+
+    return json.dumps(df.tail(3).to_dict(orient='records'))
+
+def get_tracker_data(ncu: str = None, **kwargs) -> str:
+    """Get status summary for trackers and NCUs."""
+    summary = get_tracker_data_summary()
+    if ncu:
+        match = re.search(r'(\d+)', str(ncu))
+        ncu_key = f"NCU {int(match.group(1)):02d}" if match else ncu
+        stats = summary.get("ncu_stats", {}).get(ncu_key)
+        return json.dumps(stats or {"error": f"NCU {ncu_key} not found", "available": list(summary.get("ncu_stats", {}).keys())})
+    return json.dumps(summary)
+
+def _react_query_db(sql: str, **kwargs) -> str:
+    """Run a read-only SQL query on the plant database. Use for custom analysis."""
+    try:
+        return _normalize_and_run_sql(sql).to_json(orient='records', date_format='iso')
+    except Exception as e:
+        return f"SQL Error: {e}"
+
+def _react_search_logs(query: str, limit: int = 20, **kwargs) -> str:
+    """Search system logs for specific patterns or errors."""
+    return json.dumps(search_logs(query, limit), default=str)
+
+TOOLS = {
+    "get_plant_summary": get_plant_summary,
+    "get_temperatures": _react_get_temperatures,
+    "get_dc_currents": _react_get_dc_currents,
+    "get_inverter_status": _react_get_inverter_status,
+    "get_total_production": _react_get_total_production,
+    "get_peak_production": _react_get_peak_production,
+    "get_transformer_comparison": _react_get_transformer_comparison,
+    "get_irradiance": _react_get_irradiance,
+    "get_downtime_events": _react_get_downtime_events,
+    "analyze_alarms": analyze_alarms,
+    "get_latest_readings": get_latest_readings,
+    "get_tracker_data": get_tracker_data,
+    "get_tracker_summary": get_tracker_data,
+    "query_db": _react_query_db,
+    "search_logs": _react_search_logs,
+    "list_data_files": list_data_files
+}
+
+AGENT_PROMPT = """You are the Mazara Plant Agentic AI.
+You have FULL ACCESS to the entire plant database and raw data files.
+Available Tools:
+- get_plant_summary(date="YYYY-MM-DD") -> High-level production overview.
+- get_temperatures(date="YYYY-MM-DD", threshold=50) -> Get latest temperatures for all inverters, optionally filtering for values above a threshold (yellow=50, red=55).
+- get_dc_currents(date="YYYY-MM-DD", threshold=0.1) -> Get DC currents for all strings, optionally filtering for values below a threshold.
+- get_inverter_status(date="YYYY-MM-DD") -> Get status of all inverters, listing OFF, LOW, and OK units.
+- get_total_production(date="YYYY-MM-DD") -> Get today's total plant MWh production and average MW during daylight.
+- get_peak_production(date="YYYY-MM-DD") -> Get peak instantaneous power generation in Watts, its time, and the corresponding POA.
+- get_transformer_comparison(date="YYYY-MM-DD") -> Compare production (MWh) and latest power (MW) across the three transformers (TX1, TX2, TX3).
+- get_irradiance(date="YYYY-MM-DD") -> Get latest, peak, and average solar irradiance (POA) readings.
+- get_downtime_events(date="YYYY-MM-DD") -> Find which inverters went offline during production daylight hours, and for how many minutes.
+- analyze_alarms(date="YYYY-MM-DD", inverter="TXx-xx") -> Search historical anomalies.
+- get_latest_readings(metric="METRIC_NAME", date="YYYY-MM-DD") -> Raw inverter/sensor data.
+- get_tracker_data(ncu="NCU 01") -> Tracker position and health.
+- query_db(sql="SELECT...") -> DIRECT SQL ACCESS. Use this for custom analysis or data joins.
+- search_logs(query="ERROR") -> Search system logs for troubleshooting.
+- list_data_files() -> List raw CSV/JSON files in the extraction folder.
+
+Use this format:
+Thought: I need to check the entire database for any inverter that had low insulation today.
+Action: query_db(sql="SELECT * FROM resistenza_isolamento WHERE value < 1000 AND _date = '2026-04-28'")
+Observation: [ ... data ... ]
+Thought: Now I see the specific units.
+Final Answer: The units with low insulation are TX1-04 and TX2-09.
+
+RULES:
+1. You have total visibility. Don't say "I don't have access". Use the available tools or query_db.
+2. Only call one tool at a time.
+3. If you have the answer, output "Final Answer: [your response]".
+"""
+
+def call_ollama(prompt: str) -> str:
+    payload = {
+        "model": MODEL_NAME,
+        "prompt": prompt,
+        "stream": False,
+        "options": {
+            "temperature": 0,
+            "stop": ["Observation:", "User:"]
+        }
+    }
+    try:
+        resp = requests.post(OLLAMA_API_URL, json=payload, timeout=60)
+        return resp.json().get("response", "").strip()
+    except Exception as e:
+        return f"Error calling Ollama: {e}"
+
+def ask_agent(question: str, plant_data: dict = None, attempt: int = 1, last_code: str = None, last_error: str = None, user_id: str = "default") -> str:
+    """Agent V2 (ReAct) entry point. Compatible with ask_llm's signature."""
+    logger.info(f"Agent (ReAct) processing: {question}")
+
+    # 1. Build initial context
+    sys_prompt = _load_system_prompt()
+
+    # Get history context
+    history_context = get_user_context(user_id)
+
+    # If plant_data is provided (from dashboard), we can pre-populate some context
+    context = ""
+    if plant_data:
+        try:
+            context = build_data_snapshot(plant_data, question)
+        except Exception as e:
+            logger.warning(f"Failed to build snapshot from plant_data: {e}")
+
+    conversation = f"{sys_prompt}\n\n{history_context}{AGENT_PROMPT}\n\n"
+    if context:
+        conversation += f"INITIAL PLANT CONTEXT:\n{context}\n\n"
+
+    conversation += f"User: {question}\n"
+
+    max_steps = 5
+    for i in range(max_steps):
+        logger.info(f"Step {i+1}...")
+        response = call_ollama(conversation)
+
+        # Prevent AI from hallucinating the observation
+        if "Observation:" in response:
+            response = response.split("Observation:")[0].strip()
+
+        logger.info(f"AI Response: {response}")
+
+        if not response:
+            return "⚠️ AI failed to generate a response."
+
+        conversation += response + "\n"
+
+        # Check for Action first (priority)
+        action_match = re.search(r"Action:\s*(\w+)\((.*)\)", response)
+        if action_match:
+            tool_name = action_match.group(1)
+            args_str = action_match.group(2)
+
+            # Robust parser for args (handles key="val", key='val', key=val, key=TODAY, numbers, etc.)
+            kwargs = {}
+            if args_str:
+                pattern = r'(\w+)\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([a-zA-Z0-9_\-\.]+))'
+                matches = re.findall(pattern, args_str)
+                for item in matches:
+                    k = item[0]
+                    val = item[1] or item[2] or item[3]
+
+                    if val is not None:
+                        val = val.strip()
+                        # Resolve TODAY and YESTERDAY constants
+                        if val.upper() == "TODAY":
+                            val = datetime.now().strftime("%Y-%m-%d")
+                        elif val.upper() == "YESTERDAY":
+                            val = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+                        elif re.match(r'^\-?\d+$', val):
+                            val = int(val)
+                        elif re.match(r'^\-?\d+\.\d+$', val):
+                            val = float(val)
+
+                        kwargs[k] = val
+
+            logger.info(f"Executing tool: {tool_name} with {kwargs}")
+            if tool_name in TOOLS:
+                try:
+                    obs = TOOLS[tool_name](**kwargs)
+                except Exception as e:
+                    obs = f"Error: {e}"
+            else:
+                obs = f"Error: Tool {tool_name} not found."
+
+            logger.info(f"Observation: {obs}")
+            conversation += f"Observation: {obs}\n"
+            continue # Move to next step with the observation
+
+        # Check for Final Answer only if no action was triggered
+        if "Final Answer:" in response:
+            ans = response.split("Final Answer:")[1].strip()
+            _save_history(user_id, question, ans)
+            return ans
+
+        # If no action and no final answer, something is wrong
+        if i == max_steps - 1:
+            return response
+        conversation += "Thought: I must either call a tool using the 'Action: tool_name(key=\"val\")' format, or output a 'Final Answer: ...'.\n"
+
+    return "⚠️ Agent reached maximum reasoning steps without a final answer."
 
 if __name__ == "__main__":
     print(ask_llm("Status?"))
