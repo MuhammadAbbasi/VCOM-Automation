@@ -362,6 +362,23 @@ def _init_data_db() -> None:
         )
     """)
 
+    # Tracker History — historical measurements of the tracker field
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS tracker_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT NOT NULL,
+            ncu_id TEXT,
+            tcu_id TEXT,
+            tracker_no TEXT,
+            target_angle REAL,
+            actual_angle REAL,
+            alarm TEXT,
+            mode TEXT
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_thistory_ts ON tracker_history(timestamp)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_thistory_ncu_tcu ON tracker_history(ncu_id, tcu_id)")
+
     # Extraction status — tracks which metrics were successfully extracted
     conn.execute("""
         CREATE TABLE IF NOT EXISTS extraction_status (
@@ -375,6 +392,12 @@ def _init_data_db() -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_estatus_date ON extraction_status(date)")
 
     conn.commit()
+
+    # Pre-populate history from existing files if table is empty
+    try:
+        _migrate_tracker_history_from_json()
+    except Exception as me:
+        logger.error(f"Auto-migration on startup failed: {me}")
 
 
 def _init_logs_db() -> None:
@@ -1284,17 +1307,57 @@ def resolve_tracker_id(ncu, tcu) -> int:
         return 0
 
 def save_tracker_data(records: list) -> None:
-    """Batch upsert tracker records into the database and prune stale records older than 24 hours."""
+    """Batch upsert tracker records into the database and prune stale records older than 24/36 hours."""
     conn = get_data_conn()
-    timestamp = datetime.now().isoformat()
+    # Clean timestamp without microseconds for cleaner chart displays
+    timestamp = datetime.now().replace(microsecond=0).isoformat()
     from datetime import timedelta
-    limit_time = (datetime.now() - timedelta(hours=24)).isoformat()
+    limit_time_status = (datetime.now() - timedelta(hours=24)).isoformat()
+    limit_time_history = (datetime.now() - timedelta(hours=36)).isoformat()
     
     try:
         with conn:
             # Delete stale tracker status records older than 24 hours
-            conn.execute("DELETE FROM tracker_status WHERE last_update < ?", (limit_time,))
+            conn.execute("DELETE FROM tracker_status WHERE last_update < ?", (limit_time_status,))
             
+            # Delete stale tracker history older than 36 hours
+            conn.execute("DELETE FROM tracker_history WHERE timestamp < ?", (limit_time_history,))
+            
+            # Prepare processed records list
+            processed_records = []
+            for r in records:
+                ncu = r.get("ncu")
+                tcu = r.get("tcu")
+                
+                # Robust parsing of TCU number bounds to filter out VCOM navigation/OCR errors
+                try:
+                    tcu_num = int(re.search(r'(\d+)', str(tcu)).group(1)) if tcu else 0
+                except Exception:
+                    tcu_num = 0
+                
+                ncu_clean = str(ncu or "").upper().replace("_", "").replace(" ", "")
+                if ncu_clean == "NCU01" and tcu_num > 121:
+                    logger.warning(f"Skipping invalid tracker record: {ncu} {tcu} (NCU01 limit is 121)")
+                    continue
+                if ncu_clean == "NCU02" and tcu_num > 122:
+                    logger.warning(f"Skipping invalid tracker record: {ncu} {tcu} (NCU02 limit is 122)")
+                    continue
+                if ncu_clean == "NCU03" and tcu_num > 127:
+                    logger.warning(f"Skipping invalid tracker record: {ncu} {tcu} (NCU03 limit is 127)")
+                    continue
+                
+                tno = str(re.search(r'(\d+)', str(r.get("tracker_no"))).group(1)) if r.get("tracker_no") and re.search(r'(\d+)', str(r.get("tracker_no"))) else str(resolve_tracker_id(ncu, tcu))
+                processed_records.append((
+                    ncu,
+                    tcu,
+                    tno,
+                    r.get("target_angle"),
+                    r.get("actual_angle"),
+                    r.get("alarm"),
+                    r.get("mode")
+                ))
+
+            # Upsert into tracker_status
             conn.executemany("""
                 INSERT INTO tracker_status (
                     ncu_id, tcu_id, tracker_no, target_angle, actual_angle, alarm, mode, last_update
@@ -1306,20 +1369,145 @@ def save_tracker_data(records: list) -> None:
                     alarm = excluded.alarm,
                     mode = excluded.mode,
                     last_update = excluded.last_update
-            """, [
-                (
-                    r.get("ncu"),
-                    r.get("tcu"),
-                    str(re.search(r'(\d+)', str(r.get("tracker_no"))).group(1)) if r.get("tracker_no") and re.search(r'(\d+)', str(r.get("tracker_no"))) else str(resolve_tracker_id(r.get("ncu"), r.get("tcu"))),
-                    r.get("target_angle"),
-                    r.get("actual_angle"),
-                    r.get("alarm"),
-                    r.get("mode"),
-                    timestamp
-                ) for r in records
-            ])
+            """, [rec + (timestamp,) for rec in processed_records])
+
+            # Insert into tracker_history
+            conn.executemany("""
+                INSERT INTO tracker_history (
+                    timestamp, ncu_id, tcu_id, tracker_no, target_angle, actual_angle, alarm, mode
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, [(timestamp,) + rec for rec in processed_records])
+            
     except Exception as e:
         logger.error(f"Failed to save tracker data: {e}")
+
+def get_tracker_history_compact() -> dict:
+    """
+    Fetch all tracker history for the last 36 hours in a highly compact format for charting.
+    """
+    from datetime import datetime, timedelta
+    conn = get_data_conn()
+    limit_time = (datetime.now() - timedelta(hours=36)).isoformat()
+    try:
+        # Get all records from tracker_history order by timestamp
+        cursor = conn.execute("""
+            SELECT timestamp, ncu_id, tcu_id, tracker_no, target_angle, actual_angle, alarm, mode
+            FROM tracker_history
+            WHERE timestamp >= ?
+            ORDER BY timestamp ASC
+        """, (limit_time,))
+        
+        rows = cursor.fetchall()
+        
+        # Organize data
+        # Unique timestamps in ascending order
+        timestamps_set = sorted(list(set(row[0] for row in rows)))
+        ts_index = {ts: idx for idx, ts in enumerate(timestamps_set)}
+        
+        trackers_data = {}
+        
+        for timestamp, ncu_id, tcu_id, tracker_no, target_angle, actual_angle, alarm, mode in rows:
+            tid = None
+            if tracker_no and str(tracker_no).isdigit():
+                tid = int(tracker_no)
+            else:
+                tid = resolve_tracker_id(ncu_id, tcu_id)
+                
+            if not tid or tid == 0:
+                continue
+                
+            tid_str = str(tid)
+            if tid_str not in trackers_data:
+                trackers_data[tid_str] = {
+                    "actual": [None] * len(timestamps_set),
+                    "target": [None] * len(timestamps_set),
+                    "mode": [None] * len(timestamps_set),
+                    "ncu": ncu_id or "Unknown"
+                }
+                
+            idx = ts_index[timestamp]
+            trackers_data[tid_str]["actual"][idx] = actual_angle
+            trackers_data[tid_str]["target"][idx] = target_angle
+            trackers_data[tid_str]["mode"][idx] = mode
+            
+        return {
+            "timestamps": timestamps_set,
+            "trackers": trackers_data
+        }
+    except Exception as e:
+        logger.error(f"Failed to get tracker history: {e}")
+        return {"timestamps": [], "trackers": {}}
+
+def _migrate_tracker_history_from_json() -> None:
+    """Populate tracker_history table from existing sync JSON files if it's empty."""
+    conn = get_data_conn()
+    try:
+        # Check if table has rows
+        cursor = conn.execute("SELECT COUNT(*) FROM tracker_history")
+        count = cursor.fetchone()[0]
+        if count > 0:
+            return
+            
+        # Find sync files in tracker_testing directory
+        import re
+        tracker_testing_dir = ROOT / "tracker_testing"
+        if not tracker_testing_dir.exists():
+            return
+            
+        sync_files = sorted(tracker_testing_dir.glob("sync_VPN_GATEWAY_SITE_01_*.json"))
+        if not sync_files:
+            return
+            
+        logger.info(f"Pre-populating tracker_history from {len(sync_files)} sync files...")
+        
+        all_records = []
+        for file_path in sync_files:
+            # Extract timestamp from filename: sync_VPN_GATEWAY_SITE_01_YYYYMMDD_HHMMSS.json
+            match = re.search(r'(\d{8})_(\d{6})', file_path.name)
+            if not match:
+                continue
+                
+            date_part, time_part = match.groups()
+            # Construct ISO timestamp: YYYY-MM-DDTHH:MM:SS
+            ts = f"{date_part[:4]}-{date_part[4:6]}-{date_part[6:]}T{time_part[:2]}:{time_part[2:4]}:{time_part[4:]}"
+            
+            try:
+                with open(file_path, "r") as f:
+                    data = json.load(f)
+                
+                if not isinstance(data, list):
+                    continue
+                    
+                for r in data:
+                    tracker_no_val = r.get("tracker_no")
+                    if tracker_no_val and re.search(r'(\d+)', str(tracker_no_val)):
+                        tracker_no_clean = str(re.search(r'(\d+)', str(tracker_no_val)).group(1))
+                    else:
+                        tracker_no_clean = str(resolve_tracker_id(r.get("ncu"), r.get("tcu")))
+                        
+                    all_records.append((
+                        ts,
+                        r.get("ncu"),
+                        r.get("tcu"),
+                        tracker_no_clean,
+                        r.get("target_angle"),
+                        r.get("actual_angle"),
+                        r.get("alarm"),
+                        r.get("mode")
+                    ))
+            except Exception as fe:
+                logger.error(f"Error parsing file {file_path.name}: {fe}")
+                
+        if all_records:
+            with conn:
+                conn.executemany("""
+                    INSERT INTO tracker_history (
+                        timestamp, ncu_id, tcu_id, tracker_no, target_angle, actual_angle, alarm, mode
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, all_records)
+            logger.info(f"Successfully migrated {len(all_records)} historical tracker records to DB.")
+    except Exception as e:
+        logger.error(f"Failed to migrate tracker history from JSON: {e}")
 
 def get_all_tracker_status() -> list:
     """Retrieve current status for all trackers, filtering out stale records older than 24 hours."""
