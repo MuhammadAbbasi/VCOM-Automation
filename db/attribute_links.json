@@ -1,0 +1,72 @@
+{
+    "PR inverter": [
+        {
+            "timestamp": "2026-07-22T15:22:55",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=C6DI3&type=wr"
+        },
+        {
+            "timestamp": "2026-07-22T15:42:48",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=C6DI3&type=wr"
+        }
+    ],
+    "Potenza AC": [
+        {
+            "timestamp": "2026-07-22T15:23:10",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=5EJH8&type=wr"
+        },
+        {
+            "timestamp": "2026-07-22T15:43:02",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=5EJH8&type=wr"
+        }
+    ],
+    "Corrente DC": [
+        {
+            "timestamp": "2026-07-22T15:26:36",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=WSISS&type=wr"
+        },
+        {
+            "timestamp": "2026-07-22T15:45:12",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=WSISS&type=wr"
+        }
+    ],
+    "Resistenza di isolamento": [
+        {
+            "timestamp": "2026-07-22T15:26:55",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=TWPGS&type=wr"
+        },
+        {
+            "timestamp": "2026-07-22T15:45:31",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=TWPGS&type=wr"
+        }
+    ],
+    "Temperatura": [
+        {
+            "timestamp": "2026-07-22T15:27:08",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GRRT2&type=wr"
+        },
+        {
+            "timestamp": "2026-07-22T15:45:43",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GRRT2&type=wr"
+        }
+    ],
+    "Irraggiamento": [
+        {
+            "timestamp": "2026-07-22T15:27:17",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GHMSR&type=meteo"
+        },
+        {
+            "timestamp": "2026-07-22T15:45:52",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GHMSR&type=meteo"
+        }
+    ],
+    "Potenza attiva": [
+        {
+            "timestamp": "2026-07-22T15:27:25",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=PPCAI&type=ppc"
+        },
+        {
+            "timestamp": "2026-07-22T15:46:00",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=PPCAI&type=ppc"
+        }
+    ]
+}

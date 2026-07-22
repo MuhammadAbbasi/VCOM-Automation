@@ -145,6 +145,39 @@ def ensure_session(page) -> bool:
         return False
 
 
+def save_attribute_link(name: str, url: str) -> None:
+    """Save the browser URL for the given attribute along with a timestamp."""
+    try:
+        links_file = ROOT / "db" / "attribute_links.json"
+        links_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Load existing data
+        data = {}
+        if links_file.exists():
+            try:
+                with open(links_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except Exception:
+                pass
+                
+        if name not in data:
+            data[name] = []
+            
+        data[name].append({
+            "timestamp": datetime.now().replace(microsecond=0).isoformat(),
+            "url": url
+        })
+        
+        # Keep only the last 50 entries to prevent infinite growth
+        data[name] = data[name][-50:]
+        
+        with open(links_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4)
+        logger.info(f"  [LINK] Saved VCOM URL for '{name}': {url[:80]}...")
+    except Exception as e:
+        logger.error(f"  [LINK] Failed to save attribute link for '{name}': {e}")
+
+
 def run_extraction_cycle(page, cycle_count: int):
     cycle_start = time.time()
     logger.info(f"=== Starting Extraction Cycle #{cycle_count} ===")
@@ -169,6 +202,10 @@ def run_extraction_cycle(page, cycle_count: int):
                 if df is not None and not df.empty:
                     export_metric(df, name)
                     success = True
+                    try:
+                        save_attribute_link(name, page.url)
+                    except Exception as le:
+                        logger.error(f"  Error calling save_attribute_link: {le}")
                     break
                 else:
                     logger.warning(f"  Attempt {attempt} for {name} returned empty data.")
@@ -373,7 +410,6 @@ def main() -> None:
                         login(page)
 
                     run_extraction_cycle(page, cycle_count)
-                    _write_last_cycle_time()  # ← persist completion timestamp
 
                 except Exception as e:
                     logger.critical(
@@ -387,6 +423,7 @@ def main() -> None:
                         pass
 
                 finally:
+                    _write_last_cycle_time()  # ← persist completion/attempt timestamp
                     # Cancel the watchdog timer as the cycle has finished
                     watchdog.cancel()
                     if busy_path.exists():
