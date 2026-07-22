@@ -340,6 +340,12 @@ def _init_data_db() -> None:
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_dc_date ON corrente_dc(date)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_dc_date_inv ON corrente_dc(date, inverter_id)")
+    # Covers "latest reading for this inverter/MPPT" lookups (plant map string health)
+    # without a temp B-tree sort — table has tens of millions of rows.
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_dc_date_inv_mppt_ora ON corrente_dc(date, inverter_id, mppt_number, ora)")
+    # Covers the analytics chart query's GROUP BY date, ora, inverter_id
+    # (avoids a second temp B-tree on top of the one above).
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_dc_date_ora_inv ON corrente_dc(date, ora, inverter_id, value)")
 
     # Tracker Status — real-time snapshot of the tracker field
     conn.execute("""
