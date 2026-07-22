@@ -93,16 +93,27 @@ When an Odoo ticket is created via the bot, post a clickable Odoo URL back into 
 
 ---
 
-## 6. Docker / Deployment
+## 6. Deployment
 
-### 6.1 Health Check Endpoints
-Add `HEALTHCHECK` instructions to each Dockerfile and `/healthz` endpoints to the dashboard FastAPI app. Docker Compose restart policy already exists but no actual health probing is done.
+Docker Compose has been removed — `run_monitor.py` orchestrates all services
+natively. Remote access is a native Cloudflare Tunnel (`tunnel_manager.py` +
+the `Cloudflared` Windows service).
+
+### 6.1 `/healthz` Endpoint + Process Watchdog
+Add a `/healthz` endpoint to the dashboard FastAPI app that checks DB
+connectivity and last-extraction freshness, so `dashboard_doctor.py` (or an
+external uptime monitor) has a single cheap thing to poll instead of
+inferring health from log parsing.
 
 ### 6.2 Automated DB Backup to Google Drive
 Schedule the nightly DB backup to also upload to a Google Drive folder (already integrated in the project via MCP) so off-site recovery is always current.
 
-### 6.3 Cloudflare Access Policy
-The public dashboard at `getdashboard.dpdns.org` has no authentication gate. Add a Cloudflare Access policy (One-Time PIN to allowed emails) to restrict it to authorized users.
+### 6.3 Stronger Login Protection
+The dashboard now requires login (session cookie or Basic Auth) for
+`mazara.<domain>` and every protected route/asset. Remaining hardening:
+rate-limit `/api/auth/login` attempts, and consider a Cloudflare Access
+policy (One-Time PIN to allowed emails) as a second layer in front of the
+app-level login.
 
 ### 6.4 Grafana + InfluxDB Side-Car (Optional)
 For advanced time-series visualization, a Grafana + InfluxDB container could receive the same JSON data that goes to the dashboard. This would provide historical trending, multi-day plots, and alerting rules without code changes to the analyzer.

@@ -4,7 +4,8 @@
 [![Local AI: Qwen 2.5](https://img.shields.io/badge/Local%20AI-Qwen%202.5%207B-blueviolet)](https://ollama.com)
 [![DB: SQLite WAL](https://img.shields.io/badge/DB-SQLite%20WAL-orange)](#)
 [![Status: Production](https://img.shields.io/badge/Status-Production--Ready-success)](#)
-[![Docker](https://img.shields.io/badge/Docker-Compose%20Stack-2496ED?logo=docker&logoColor=white)](#)
+
+![AI-Powered SCADA Solar Monitoring Pipeline](./assets/project_thumbnail.png)
 
 A complete, production-hardened automated monitoring pipeline for a **12.625 MWp** utility-scale solar plant (Mazara del Vallo, Sicily). The system integrates a **local LLM (Qwen 2.5 via Ollama)** for forensic diagnostics, scrapes real-time telemetry from VCOM (meteocontrol.com) every ~10 minutes via Playwright browser automation, stores everything in a SQLite WAL database, and serves a reactive WebSocket-driven dark-mode dashboard with 11 data tabs — plus a full Telegram bot with AI chat capability.
 
@@ -16,6 +17,26 @@ A complete, production-hardened automated monitoring pipeline for a **12.625 MWp
 ---
 
 ## 🚀 Key Improvements (July 2026 Update)
+
+### Client Portal, Native Cloudflare Tunnel, and Docker Removal
+- Public landing page (`monitoraggioget.it`) + login flow, separate from the authenticated SCADA dashboard (`mazara.<domain>`) — same FastAPI app, routed by host header. New `/plants` multi-plant portfolio view.
+- Session-cookie + Basic Auth gating extended to every protected route, the WebSocket endpoint, and `/static/` assets (previously the dashboard's static files were served unauthenticated).
+- Remote access moved from ngrok/Docker's `cloudflared` container to a native `tunnel_manager.py` driving the `Cloudflared` Windows service directly — no Docker dependency for the app itself.
+- The Docker Compose deployment (`VCOM Automation Docker/`) has been removed entirely. `run_monitor.py` already orchestrates every service (dashboard, extraction, watchdog, telegram, tickets, tracker broker/receiver) as native Python processes; the Docker stack was redundant and had been silently running in parallel, causing duplicate Telegram pollers, duplicate VCOM scraping sessions, and duplicate Cloudflare tunnel connectors. Odoo is unaffected — it runs in its own separate Docker container, unrelated to this stack.
+
+### Dashboard Performance
+- Fixed a recurring full-server freeze: the plant map's 30-second auto-refresh was reloading the same day's metric data from the database up to 216 times per request instead of once, all synchronously on the FastAPI event loop — confirmed live with a stack trace catching the freeze in progress. Now loads each metric once per request and runs off the event loop; the plant overview endpoint went from 1.3s (blocking everyone) to ~20ms.
+- Added covering indexes on `corrente_dc` (~35M rows) for the plant map's per-string lookups (100x faster) and the analytics chart's date-range query (3x faster).
+- Every other dashboard route that touched the database synchronously (trackers, analytics, snapshot deletion) now runs via `asyncio.to_thread` so a slow query can no longer stall the whole server.
+
+### DC Current Tab Fix
+- Fixed "NaN A" showing for the average/max/min stat tiles whenever any inverter had zero valid DC readings (e.g. fully tripped) — the backend was omitting that inverter's value key entirely instead of setting it to `null`, and the frontend's null-check didn't catch the resulting `undefined`. Fixed on both ends, plus added sortable columns to the table.
+
+### AI Agent Consolidation
+- Merged the two parallel AI agent implementations (`llm_agent.py`'s code-execution engine and `llm_agent_v2.py`'s ReAct tool-calling engine) into one file with both entry points, and fixed a bug where the ReAct agent's `search_logs` tool queried a column that doesn't exist in the logs table — it had been silently failing on every call.
+
+### Solar Tracker History
+- New `tracker_history` table records tracker angle/mode over time (previously only the latest reading per tracker was kept), with a compact API endpoint sized for charting.
 
 ### Data Quality Tab ("Qualità Dati")
 - New dashboard tab showing a **36-inverter × 7-metric coverage matrix** with per-cell colour coding: green (data present), red (missing), grey (night/no history).
@@ -117,184 +138,10 @@ cp user_settings.json.example user_settings.json
 
 ---
 
-## 🐳 Docker Deployment (Recommended for Production)
-
-The recommended way to run the full stack is Docker Compose. All services (dashboard, extraction, watchdog, telegram, tickets, broker, tracker, Cloudflare tunnel) are containerized and managed together.
-
-### Prerequisites
-
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
-- Git
-
-### First-Time Setup on a New PC
-
-**1. Clone the repository**
-```bash
-git clone https://github.com/MuhammadAbbasi/VCOM-Automation.git
-cd "VCOM Automation"
-```
-
-**2. Create the `.env` file**
-
-Copy the template and fill in your credentials:
-```
-VCOM Automation Docker/.env
-```
-
-Required variables:
-```env
-VCOM_USERNAME=your_vcom_username
-VCOM_PASSWORD=your_vcom_password
-VCOM_SYSTEM_URL=https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/YOUR_SYSTEM_ID
-INVERTER_IDS_JSON=[...]
-DASHBOARD_USER=your_dashboard_user
-DASHBOARD_PASS=your_dashboard_password
-TELEGRAM_BOT_TOKEN=...
-TELEGRAM_CHAT_ID=...
-TELEGRAM_PERSONAL_ID=...
-ODOO_URL=http://host.docker.internal:8069
-ODOO_DB=odoo
-ODOO_USER=...
-ODOO_PASS=...
-CLOUDFLARE_TUNNEL_TOKEN=...
-TZ=Europe/Rome
-```
-
-**3. Migrate the database (preserves all historical data)**
-
-Run the migration script **before** the first `docker compose up`:
+## ▶️ Run the System
 
 ```bash
-# Migrate databases only (recommended first time)
-python db_migrate_to_docker.py
-
-# Or with full backup history (~11 GB extra)
-python db_migrate_to_docker.py --with-backups
-```
-
-What the script does:
-- Checkpoints WAL journals to prevent data loss
-- Runs `VACUUM INTO` on each database (compresses + defragments)
-- Verifies integrity of each database
-- Creates the `scada_db_data` Docker volume
-- Copies all databases and JSON state files into the volume
-- Prints a before/after size summary
-
-**4. Build and start the stack**
-
-```bash
-cd "VCOM Automation Docker"
-docker compose up --build -d
-```
-
-**5. Verify everything is running**
-
-```bash
-docker compose ps
-docker compose logs -f dashboard
-```
-
-Dashboard will be live at:
-- **Local:** `http://localhost:8080`
-- **Remote:** `https://getdashboard.dpdns.org` (via Cloudflare Tunnel)
-
----
-
-### Transferring to a New PC (Full Data Migration)
-
-Follow these steps to move the entire system with all historical data:
-
-**On the old PC:**
-
-```bash
-# 1. Stop the running stack
-cd "VCOM Automation Docker"
-docker compose down
-
-# 2. Export the database volume to a tar archive
-docker run --rm \
-  -v scada_db_data:/data \
-  -v "$(pwd)":/backup \
-  python:3.12-slim-bookworm \
-  tar czf /backup/scada_db_data_backup.tar.gz -C /data .
-
-# 3. Copy these files/folders to the new PC:
-#    - scada_db_data_backup.tar.gz  (database volume export)
-#    - VCOM Automation Docker/.env  (credentials — keep secure)
-#    - db/backups/                  (optional: 11 GB backup history)
-```
-
-**On the new PC:**
-
-```bash
-# 1. Install Docker Desktop, then clone the repo
-git clone https://github.com/MuhammadAbbasi/VCOM-Automation.git
-cd "VCOM Automation"
-
-# 2. Restore .env
-#    Copy your .env to: VCOM Automation Docker/.env
-
-# 3. Create volume and restore data
-docker volume create scada_db_data
-docker run --rm \
-  -v scada_db_data:/data \
-  -v "$(pwd)":/backup \
-  python:3.12-slim-bookworm \
-  tar xzf /backup/scada_db_data_backup.tar.gz -C /data
-
-# 4. Build and start
-cd "VCOM Automation Docker"
-docker compose up --build -d
-```
-
-> **Windows PowerShell note:** Replace `$(pwd)` with `${PWD}` in the commands above.
-
----
-
-### Managing the Running Stack
-
-```bash
-# View all container statuses
-docker compose ps
-
-# Follow logs for all services
-docker compose logs -f
-
-# Follow logs for a specific service
-docker compose logs -f dashboard
-docker compose logs -f extraction
-docker compose logs -f cloudflared
-
-# Restart a single service without rebuilding
-docker compose restart watchdog
-
-# Stop everything
-docker compose down
-
-# Rebuild and restart after code changes
-docker compose up --build -d
-```
-
-### Updating the Application
-
-```bash
-git pull
-cd "VCOM Automation Docker"
-docker compose up --build -d
-```
-
----
-
-### 📦 Legacy Migration Guide (Local Python, no Docker)
-1. **Copy Files**: Transfer the entire project folder to the new system.
-2. **Environment**: Re-run the installation steps above.
-3. **Data Preservation**: Copy the `db/` folder and `extracted_data/` folder to the new system.
-4. **Hardware**: Ensure the new system has at least 8GB RAM and stable network access for the browser automation.
-
-### Run the System
-
-```bash
-# Start all three services (extraction, analysis, dashboard)
+# Start all services (extraction, watchdog, dashboard, telegram bot, ticket engine, tracker broker/receiver)
 python run_monitor.py
 ```
 
@@ -302,6 +149,15 @@ Then open your browser:
 ```
 http://localhost:8080
 ```
+
+Odoo ticket integration (`odoo_ticket_engine.py`, `telegram_bot.py`) connects to a local Odoo instance at `http://localhost:8069` — Odoo itself runs via its own Docker container (Odoo has no practical native Windows install), everything else in this repo runs as plain Python processes.
+
+### Migrating to a New PC
+
+1. **Copy Files**: Transfer the entire project folder to the new system.
+2. **Environment**: Re-run the installation steps above.
+3. **Data Preservation**: Copy the `db/` folder and `extracted_data/` folder to the new system.
+4. **Hardware**: Ensure the new system has at least 8GB RAM and stable network access for the browser automation.
 
 ---
 
@@ -658,16 +514,17 @@ tail -f watchdog.log
 
 ## 🔐 Security
 
-- **Credentials:** Stored in `.env` (git-ignored)
+- **Credentials:** Stored in `config.json`/`user_settings.json` (git-ignored)
 - **Sensitive Data:** Excel/CSV files stored in `extracted_data/` (git-ignored)
-- **Dashboard:** Local-only (port 8080, no auth required — use firewall rules for production)
+- **Dashboard auth:** Session-cookie login (`/login`, httponly, `samesite=lax`, `secure` when served over HTTPS) or HTTP Basic Auth, gating every protected route (`/dashboard`, `/plants`, all `/api/*` except the public landing/login assets), the WebSocket endpoint, and static assets under `/static/` other than the login/landing pages themselves
+- **Public landing page:** `monitoraggioget.it` serves an unauthenticated marketing page; `mazara.<domain>` requires login and serves the actual SCADA dashboard — same FastAPI app, host-header-based routing
+- **Remote access:** Cloudflare Tunnel (`tunnel_manager.py` + the `Cloudflared` Windows service) — no inbound firewall ports opened, traffic is HTTPS end-to-end via Cloudflare's edge
+- **Response headers:** `Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy` set on every response
 - **Browser Automation:** Headless Chromium, screenshots saved to `errors/` on failure
 
-**For production deployment:**
-1. Use HTTPS reverse proxy (nginx, Apache)
-2. Add authentication (e.g., Basic Auth, OAuth)
-3. Restrict network access to internal subnets
-4. Implement log rotation and archival
+**Still local/manual, not yet automated:**
+1. Log rotation and archival
+2. Rotating the dashboard password / session secret on a schedule
 
 ---
 
@@ -731,4 +588,4 @@ This project is provided as-is. Adapt and use freely, but ensure compliance with
 ---
 
 **Last Updated:** 2026-07-09
-**System Status:** ✅ Production-hardened — SQLite WAL pipeline, grid curtailment intelligence, Docker stack, Telegram bot with AI chat (Qwen 2.5 7B), Odoo ticket integration, solar tracker monitoring, 11-tab dashboard with data-quality matrix.
+**System Status:** ✅ Production-hardened — SQLite WAL pipeline, grid curtailment intelligence, Telegram bot with AI chat (Qwen 2.5 7B), Odoo ticket integration, solar tracker monitoring, 11-tab dashboard with data-quality matrix.

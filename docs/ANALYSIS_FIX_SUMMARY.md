@@ -278,7 +278,7 @@ After deployment:
 
 5. ✅ **Odoo Ticket Integration** — automatic anomaly → Odoo ticket creation for alarm tracking.
 
-6. ✅ **Docker Containerization** — full Docker Compose stack (branch `feature/docker-containerized`).
+6. ⤷ **Docker Containerization** — built as a full Docker Compose stack, later removed (July 2026): it duplicated what `run_monitor.py` already orchestrates natively and was found running in parallel with the native processes, causing duplicate Telegram bots, duplicate VCOM scraping sessions, and duplicate Cloudflare tunnels. See README's "Client Portal, Native Cloudflare Tunnel, and Docker Removal" section.
 
 ## Next Steps: Future Enhancements
 
