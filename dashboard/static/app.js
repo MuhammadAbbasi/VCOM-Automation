@@ -675,38 +675,70 @@ function updateTempDetail(data) {
 // ─── DC Current Detail ────────────────────────────────────────────────────
 
 function updateDCDetail(data) {
-  const container = document.getElementById("dc-tbody");
-  if (!container || !data || !data.inverter_health) return;
+  const tbody = document.getElementById("dc-tbody");
+  if (!tbody || !data || !data.inverter_health) return;
 
-  const invIds = Object.keys(data.inverter_health).sort();
+  const health = data.inverter_health;
+  const invIds = Object.keys(health).sort();
+  
   const rows = invIds.map(id => {
-    const h = data.inverter_health[id];
+    const h = health[id] || {};
+    const rawVal = h.dc_v;
+    const value = (rawVal !== null && rawVal !== undefined && !isNaN(rawVal)) ? Number(rawVal) : null;
+    const status = h.dc_current || "grey";
+    const domain = h.domain || id.split("-")[0].replace("INV ", "");
+    const shortName = id.replace("INV ", "");
+
     return {
-      id: id,
-      shortName: id,
-      domain: h.domain || id.split("-")[0].replace("INV ", ""),
-      value: h.dc_v,
-      status: h.dc_current || "grey",
+      id,
+      name: id,
+      shortName,
+      domain,
+      value,
+      status,
       mppt_data: h.mppt_data || []
     };
   });
 
-  // Stats
+  // Stats - only consider valid numeric values
   const validValues = rows.filter(r => r.value !== null).map(r => r.value);
-  const avg = validValues.length > 0 ? validValues.reduce((a, b) => a + b, 0) / validValues.length : 0;
-  const maxVal = validValues.length > 0 ? Math.max(...validValues) : 0;
-  const minVal = validValues.length > 0 ? Math.min(...validValues) : 0;
+  const avg = validValues.length > 0 ? validValues.reduce((a, b) => a + b, 0) / validValues.length : null;
+  const maxVal = validValues.length > 0 ? Math.max(...validValues) : null;
+  const minVal = validValues.length > 0 ? Math.min(...validValues) : null;
   
-  document.getElementById("dc-avg").textContent = `${avg.toFixed(2)} A`;
-  document.getElementById("dc-max").textContent = `${maxVal.toFixed(2)} A`;
-  document.getElementById("dc-min").textContent = `${minVal.toFixed(2)} A`;
-  document.getElementById("dc-ok-count").textContent = `${rows.filter(r => r.status === "green").length} / ${rows.length}`;
+  if (el("dc-avg")) el("dc-avg").textContent = avg !== null ? `${avg.toFixed(2)} A` : "—";
+  if (el("dc-max")) el("dc-max").textContent = maxVal !== null ? `${maxVal.toFixed(2)} A` : "—";
+  if (el("dc-min")) el("dc-min").textContent = minVal !== null ? `${minVal.toFixed(2)} A` : "—";
+  if (el("dc-ok-count")) {
+    const okCount = rows.filter(r => r.status === "green").length;
+    el("dc-ok-count").textContent = `${okCount} / ${rows.length}`;
+  }
 
-  // Sorting (Reuse state from renderDetailTable if exists)
-  // For now just sort by ID
-  const sorted = rows;
+  // Sorting
+  const state = (typeof sortState !== "undefined" && sortState.dc) ? sortState.dc : { column: "value", direction: "desc" };
+  const sorted = [...rows].sort((a, b) => {
+    let va, vb;
+    switch (state.column) {
+      case "name": va = a.shortName; vb = b.shortName; break;
+      case "domain": va = a.domain; vb = b.domain; break;
+      case "value":
+        va = a.value !== null ? a.value : -Infinity;
+        vb = b.value !== null ? b.value : -Infinity;
+        break;
+      default: va = a.value !== null ? a.value : -Infinity; vb = b.value !== null ? b.value : -Infinity;
+    }
+    let cmp = 0;
+    if (typeof va === "string") cmp = va.localeCompare(vb);
+    else cmp = (va > vb) ? 1 : (va < vb) ? -1 : 0;
+    return state.direction === "asc" ? cmp : -cmp;
+  });
 
-  container.innerHTML = sorted.map(r => {
+  if (sorted.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No DC Current data available</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = sorted.map(r => {
     const valStr = r.value !== null ? `${r.value.toFixed(2)} A` : "—";
     const statusLabel = getStatusLabel(r.status);
 
@@ -724,7 +756,7 @@ function updateDCDetail(data) {
     if (r.mppt_data && r.mppt_data.length > 0) {
         mpptGridHtml += r.mppt_data.map(m => {
             let mColor = "grey";
-            if (m.v !== null && m.exp !== null && m.exp > 0.5) {
+            if (m.v !== null && m.v !== undefined && m.exp !== null && m.exp !== undefined && m.exp > 0.5) {
                 const ratio = m.v / m.exp;
                 if (ratio < 0.2) mColor = "red";
                 else if (ratio < 0.7) mColor = "yellow";
@@ -732,7 +764,9 @@ function updateDCDetail(data) {
             } else if (m.strings === 0) {
                 mColor = "empty";
             }
-            const title = `MPPT ${m.mppt} (${m.strings} strings): ${m.v !== null ? m.v.toFixed(1) : '—'}A (Exp: ${m.exp !== null ? m.exp.toFixed(1) : '—'}A)`;
+            const valFormatted = (m.v !== null && m.v !== undefined && !isNaN(m.v)) ? Number(m.v).toFixed(1) : '—';
+            const expFormatted = (m.exp !== null && m.exp !== undefined && !isNaN(m.exp)) ? Number(m.exp).toFixed(1) : '—';
+            const title = `MPPT ${m.mppt} (${m.strings} strings): ${valFormatted}A (Exp: ${expFormatted}A)`;
             return `<div class="mppt-dot ${mColor} strings-${m.strings}" title="${title}"></div>`;
         }).join("");
     } else {
