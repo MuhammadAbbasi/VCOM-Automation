@@ -772,6 +772,7 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
             else:
                 health["dc_current"] = "grey"
         else:
+            health["dc_v"] = None
             health["dc_current"] = "grey"
 
         # AC Power LED
