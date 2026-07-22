@@ -163,12 +163,6 @@ tracker_testing/sync_*.json
 
 
 # ============================================================================
-# DOCKER & DEPLOYMENT (if used)
-# ============================================================================
-docker-compose.override.yml
-.container-env
-
-# ============================================================================
 # SENSITIVE PROJECT FILES
 # ============================================================================
 .claude/
@@ -204,11 +198,30 @@ cache/
 .gemini/
 .ollama/
 .agent/
+.agents/
 scratch/
 .graphify/
 temp_analysis_*.py
 llm_agent.log
 system_prompt_backups/
+process.md
+
+# ============================================================================
+# CLOUDFLARE TUNNEL (binaries + runtime state — installed/generated locally)
+# ============================================================================
+cloudflared.exe
+cloudflared-windows.msi
+public_url.txt
+.extraction_busy
+
+# ============================================================================
+# PERSONAL FILES (not project content)
+# ============================================================================
+Tailored_CV.docx
+Tailored_Cover_Letter.docx
+
+# Reference screenshots, not used by app code — too large for git history
+Tracker examples/
 
 # ============================================================================
 # EXPERIMENT & RESEARCH FILES
