@@ -7,11 +7,12 @@ Routes:
   GET /api/plant/inverter/{id}/strings  → Level 2: Strings in an inverter
 """
 
+import asyncio
 import json
 import sys
 from pathlib import Path
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends, Request
 
 # Add parent to path for imports
 DASHBOARD_DIR = Path(__file__).resolve().parent
@@ -27,8 +28,13 @@ from db.plant_map_helpers import (
 )
 from processor_watchdog_final import load_config
 
+async def check_auth(request: Request):
+    from dashboard.app import is_authenticated
+    if not is_authenticated(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
 # Router for plant map routes
-router = APIRouter(prefix="/api/plant", tags=["plant-map"])
+router = APIRouter(prefix="/api/plant", tags=["plant-map"], dependencies=[Depends(check_auth)])
 
 
 @router.get("/layout")
@@ -69,7 +75,7 @@ async def get_plant_health_overview(
     Used to render colored circles on the plant map.
     """
     try:
-        overview = get_plant_overview(date)
+        overview = await asyncio.to_thread(get_plant_overview, date)
         return overview
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating plant overview: {str(e)}")
@@ -84,7 +90,7 @@ async def get_inverter_quick_health(
     Quick health check for a single inverter (used for hover/tooltip).
     """
     try:
-        health = get_inverter_health_overview(inverter_id, date)
+        health = await asyncio.to_thread(get_inverter_health_overview, inverter_id, date)
         if "error" in health:
             raise HTTPException(status_code=404, detail=health["error"])
         return health
@@ -112,7 +118,7 @@ async def get_inverter_strings(
     Used to render a grid/table of strings with color coding.
     """
     try:
-        strings_detail = get_inverter_strings_detail(inverter_id, date)
+        strings_detail = await asyncio.to_thread(get_inverter_strings_detail, inverter_id, date)
         if "error" in strings_detail:
             raise HTTPException(status_code=404, detail=strings_detail["error"])
         return strings_detail

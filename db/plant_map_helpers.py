@@ -35,7 +35,10 @@ def load_plant_layout() -> dict:
 def calculate_string_health(
     inverter_id: str,
     mppt_number: int,
-    date: str = None
+    date: str = None,
+    temp_df: pd.DataFrame = None,
+    iso_df: pd.DataFrame = None,
+    pr_df: pd.DataFrame = None,
 ) -> dict:
     """
     Calculate composite health score for a string (0-100).
@@ -46,6 +49,11 @@ def calculate_string_health(
         'health_score': 0-100,
         'metrics': {...}
     }
+
+    temp_df/iso_df/pr_df may be passed in pre-loaded (one load_metric() call
+    shared across every string/inverter in the request) to avoid re-querying
+    and re-copying the same day's DataFrame hundreds of times per request.
+    Falls back to loading them itself if not provided.
     """
     date = date or datetime.now().strftime("%Y-%m-%d")
     conn = get_data_conn()
@@ -73,7 +81,7 @@ def calculate_string_health(
         # 2. Temperature (should be < 65°C)
         temp_score = 50
         try:
-            df = load_metric(date, "Temperatura")
+            df = temp_df if temp_df is not None else load_metric(date, "Temperatura")
             if df is not None and not df.empty and inverter_id in df.columns:
                 temp_val = pd.to_numeric(df[inverter_id].iloc[-1], errors='coerce')
                 if temp_val and temp_val < 65:
@@ -88,7 +96,7 @@ def calculate_string_health(
         # 3. Insulation Resistance (should be > 50kΩ)
         iso_score = 50
         try:
-            df = load_metric(date, "Resistenza di isolamento")
+            df = iso_df if iso_df is not None else load_metric(date, "Resistenza di isolamento")
             if df is not None and not df.empty and inverter_id in df.columns:
                 iso_val = pd.to_numeric(df[inverter_id].iloc[-1], errors='coerce')
                 if iso_val and iso_val > 50:
@@ -103,7 +111,7 @@ def calculate_string_health(
         # 4. PR (should be > 0.75)
         pr_score = 50
         try:
-            df = load_metric(date, "PR inverter")
+            df = pr_df if pr_df is not None else load_metric(date, "PR inverter")
             if df is not None and not df.empty and inverter_id in df.columns:
                 pr_val = pd.to_numeric(df[inverter_id].iloc[-1], errors='coerce')
                 if pr_val and pr_val > 0.75:
@@ -142,9 +150,18 @@ def calculate_string_health(
         return {'status': 'unknown', 'health_score': 0, 'metrics': {}}
 
 
-def get_inverter_health_overview(inverter_id: str, date: str = None) -> dict:
+def get_inverter_health_overview(
+    inverter_id: str,
+    date: str = None,
+    temp_df: pd.DataFrame = None,
+    iso_df: pd.DataFrame = None,
+    pr_df: pd.DataFrame = None,
+) -> dict:
     """
     Get quick health snapshot for an inverter (samples 2 strings per MPPT).
+
+    temp_df/iso_df/pr_df: see calculate_string_health() — pass pre-loaded
+    DataFrames when calling this for many inverters in one request.
     """
     date = date or datetime.now().strftime("%Y-%m-%d")
     layout = load_plant_layout()
@@ -157,8 +174,8 @@ def get_inverter_health_overview(inverter_id: str, date: str = None) -> dict:
 
     # Sample health from both MPPTs
     health_samples = [
-        calculate_string_health(inverter_id, 1, date),
-        calculate_string_health(inverter_id, 2, date)
+        calculate_string_health(inverter_id, 1, date, temp_df, iso_df, pr_df),
+        calculate_string_health(inverter_id, 2, date, temp_df, iso_df, pr_df)
     ]
 
     avg_health = sum(s['health_score'] for s in health_samples) / len(health_samples)
@@ -202,6 +219,11 @@ def get_inverter_strings_detail(inverter_id: str, date: str = None) -> dict:
     num_mppts = inv_detail.get('mppts', 2)
     total_strings_per_inv = inv_detail.get('strings', 30)
 
+    # Load each metric once for the whole inverter instead of once per string.
+    temp_df = load_metric(date, "Temperatura")
+    iso_df = load_metric(date, "Resistenza di isolamento")
+    pr_df = load_metric(date, "PR inverter")
+
     strings = []
     summary = {'green': 0, 'yellow': 0, 'red': 0, 'total': 0}
 
@@ -225,7 +247,7 @@ def get_inverter_strings_detail(inverter_id: str, date: str = None) -> dict:
                     break
 
                 string_id = f"S_{inverter_id}_{tracker_num:02d}_{mppt}_{s}"
-                health = calculate_string_health(inverter_id, mppt, date)
+                health = calculate_string_health(inverter_id, mppt, date, temp_df, iso_df, pr_df)
 
                 string_data = {
                     'string_id': string_id,
@@ -268,11 +290,16 @@ def get_plant_overview(date: str = None) -> dict:
     date = date or datetime.now().strftime("%Y-%m-%d")
     layout = load_plant_layout()
 
+    # Load each metric once for the whole plant instead of once per inverter.
+    temp_df = load_metric(date, "Temperatura")
+    iso_df = load_metric(date, "Resistenza di isolamento")
+    pr_df = load_metric(date, "PR inverter")
+
     inverters = []
     summary = {'online': 0, 'warning': 0, 'critical': 0}
 
     for inv_id in INVERTER_IDS:
-        overview = get_inverter_health_overview(inv_id, date)
+        overview = get_inverter_health_overview(inv_id, date, temp_df, iso_df, pr_df)
         if 'error' not in overview:
             inverters.append(overview)
 
