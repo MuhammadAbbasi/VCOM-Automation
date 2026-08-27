@@ -132,3 +132,35 @@ async def get_inverter_strings(
 # In dashboard/app.py, add:
 #   from dashboard.plant_map_routes import router as plant_map_router
 #   app.include_router(plant_map_router)
+
+
+# ---------------------------------------------------------------------------
+# Surveyed plant map: as-built topology (370 trackers, 808 strings, 432 MPPTs)
+# with severity taken from the watchdog's existing anomalies and health flags.
+# ---------------------------------------------------------------------------
+
+@router.get("/surveyed/layout")
+async def get_surveyed_layout_route():
+    """Static topology and geometry for the surveyed map."""
+    try:
+        from db.surveyed_map_helpers import load_surveyed_layout
+        layout = load_surveyed_layout()
+        if not layout:
+            raise HTTPException(status_code=404, detail="Surveyed layout not found")
+        return layout
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error loading surveyed layout: {e}")
+
+
+@router.get("/surveyed/state")
+async def get_surveyed_state_route(
+    date: str = Query(None, description="YYYY-MM-DD, defaults to today")
+):
+    """Per-element severity plus the active problem list behind it."""
+    try:
+        from db.surveyed_map_helpers import get_surveyed_state
+        return await asyncio.to_thread(get_surveyed_state, date)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error building surveyed state: {e}")

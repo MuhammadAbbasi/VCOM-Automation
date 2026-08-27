@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/static/style.css" />
   <script src="/static/apexcharts.min.js"></script>
   <script src="/static/lucide.min.js"></script>
+  <link rel="stylesheet" href="/static/plant_map_surveyed.css">
 </head>
 
 <body>
@@ -18,7 +19,7 @@
     <div class="logo-box">
       <h1>MAZARA <span>SCADA</span></h1>
       <div class="meta-row" style="justify-content: flex-start; opacity: 0.6; font-size: 0.6rem;">
-        ID: <span class="meta-val">XXXXXXX</span> &bull; UNITÀ: <span class="meta-val">36 Inverter</span>
+        ID: <span class="meta-val" id="val-plant-id">XXXXXXX</span> &bull; UNITÀ: <span class="meta-val">36 Inverter</span>
       </div>
     </div>
 
@@ -182,79 +183,16 @@
     </section>
   </main>
 
-  <main id="tab-plant-map" class="tab-content">
+    <main id="tab-plant-map" class="tab-content">
     <section>
-      <div class="section-row" style="margin-bottom:1.5rem;">
-        <h2><i data-lucide="map" class="icon"></i> Mappa Interattiva Impianto</h2>
-        <div style="font-size: 0.85rem; color: #aaa;">
-          <span style="display: inline-block; margin-right: 1.5rem;">
-            <span style="display: inline-block; width: 12px; height: 12px; background: #00ff00; border-radius: 50%; margin-right: 6px;"></span>
-            <b>Verde:</b> Efficiente (&gt;80%)
-          </span>
-          <span style="display: inline-block; margin-right: 1.5rem;">
-            <span style="display: inline-block; width: 12px; height: 12px; background: #ffff00; border-radius: 50%; margin-right: 6px;"></span>
-            <b>Giallo:</b> Avviso (60-80%)
-          </span>
-          <span style="display: inline-block;">
-            <span style="display: inline-block; width: 12px; height: 12px; background: #ff0000; border-radius: 50%; margin-right: 6px;"></span>
-            <b>Rosso:</b> Critico (&lt;60%)
-          </span>
+      <div class="section-row" style="margin-bottom:1rem;">
+        <h2><i data-lucide="map" class="icon"></i> Mappa Impianto</h2>
+        <div style="font-size:0.8rem;color:var(--muted);">
+          Layout rilevato &mdash; 370 tracker, 808 stringhe, 432 MPPT, 36 inverter.
+          Stato e anomalie dal watchdog.
         </div>
       </div>
-
-      <div class="plant-map-svg-wrap">
-        <svg id="plant-map-svg" style="width: 100%; min-height: 600px; background: rgba(10,10,20,0.8); border-radius: 4px;"></svg>
-      </div>
-
-      <div class="plant-map-cards">
-        <div class="card plant-map-card">
-          <div style="padding: 15px;">
-            <h3 style="margin: 0 0 12px 0; font-size: 0.95rem;"><i data-lucide="map-pin" class="icon"></i> Come Usare</h3>
-            <div style="font-size: 0.85rem; color: #ccc; line-height: 1.6;">
-              <div style="margin-bottom: 10px;">
-                <b style="color: #00ff00;">Livello 1:</b> Visualizza tutti gli inverter sulla mappa. Ogni cerchio mostra lo stato di salute dell'inverter.
-              </div>
-              <div style="margin-bottom: 10px;">
-                <b style="color: #ffff00;">Livello 2:</b> Clicca su un cerchio inverter per vedere tutte le stringhe all'interno.
-              </div>
-              <div>
-                <b style="color: #ff0000;">Livello 3:</b> Le metriche di salute dettagliate per ogni stringa sono mostrate nella griglia.
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="card plant-map-card">
-          <div style="padding: 15px;">
-            <h3 style="margin: 0 0 12px 0; font-size: 0.95rem;"><i data-lucide="settings" class="icon"></i> Calcolo Salute</h3>
-            <div style="font-size: 0.85rem; color: #ccc; line-height: 1.6;">
-              <div>Il punteggio combina:</div>
-              <div style="margin-top: 8px; font-family: monospace; font-size: 0.80rem; background: rgba(0,0,0,0.5); padding: 8px; border-radius: 3px;">
-                &bull; Corrente DC (10-150A)<br>
-                &bull; Temperatura (&lt;65°C)<br>
-                &bull; Isolamento (&gt;50k&Omega;)<br>
-                &bull; PR (&gt;0.75)
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="card plant-map-card">
-          <div style="padding: 15px;">
-            <h3 style="margin: 0 0 12px 0; font-size: 0.95rem;"><i data-lucide="bar-chart-2" class="icon"></i> Panoramica Impianto</h3>
-            <div style="font-size: 0.85rem; color: #ccc; line-height: 1.8;">
-              <div><b>Inverter Totali:</b> <span style="color: #00ff00;">36</span></div>
-              <div><b>Tracker Totali:</b> <span style="color: #ffff00;">370</span></div>
-              <div><b>Stringhe Totali:</b> <span style="color: #ff0000;">1.110</span></div>
-              <div style="margin-top: 8px; font-size: 0.75rem; color: #888;">Organizzato in 6 sezioni su 3 campi</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="plant-map-tip">
-        <b><i data-lucide="lightbulb" class="icon"></i> Suggerimento:</b> Passa il cursore sui cerchi inverter per vedere info rapide sulla salute. Clicca per vedere il layout dettagliato delle stringhe. La mappa si aggiorna automaticamente ogni 30 secondi.
-      </div>
+      <div id="surveyed-map-root"></div>
     </section>
   </main>
 
@@ -871,7 +809,7 @@
           <h3>Riferimento Tecnico</h3>
         </div>
         <div class="spec-list">
-          <div class="spec-row"><span>ID Sistema</span> <b>XXXXXXX</b></div>
+          <div class="spec-row"><span>ID Sistema</span> <b id="val-footer-plant-id">XXXXXXX</b></div>
           <div class="spec-row"><span>Potenza Nominale</span> <b>12.625 MWp</b></div>
           <div class="spec-row"><span>Gruppi</span> <b>3 Stazioni TX</b></div>
           <div class="spec-row"><span>Mappa TX1</span> <b>INV 01-12</b></div>
@@ -956,6 +894,6 @@
   </footer>
 
   <script src="/static/app.js"></script>
-  <script src="/static/plant_map.js"></script>
+  <script src="/static/plant_map_surveyed.js"></script>
 </body>
 </html>
