@@ -164,3 +164,16 @@ async def get_surveyed_state_route(
         return await asyncio.to_thread(get_surveyed_state, date)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error building surveyed state: {e}")
+
+
+@router.get("/surveyed/serials")
+async def get_surveyed_serials_route(
+    string: str = Query(None, description="String id, e.g. TX1-INV07-STR22"),
+    tracker: str = Query(None, description="Tracker id, e.g. TRACKER 76"),
+):
+    """Panel serial numbers for one string or one tracker (20 200 in total)."""
+    try:
+        from db.surveyed_map_helpers import get_panel_serials
+        return await asyncio.to_thread(get_panel_serials, string, tracker)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error loading panel serials: {e}")

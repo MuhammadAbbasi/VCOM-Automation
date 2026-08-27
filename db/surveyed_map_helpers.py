@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parent.parent
 LAYOUT_PATH = Path(__file__).resolve().parent / "plant_layout_surveyed.json"
+SERIALS_PATH = Path(__file__).resolve().parent / "panel_serials.json"
 SETTINGS_PATH = ROOT / "user_settings.json"
 
 RANK = {"green": 0, "grey": 1, "yellow": 2, "red": 3}
@@ -232,3 +233,44 @@ def get_surveyed_state(target_date: str = None) -> dict:
             "problems": sorted(problems, key=lambda p: -RANK.get(p["severity"], 0)),
             "legend": sorted(legend.values(), key=lambda e: -RANK.get(e["severity"], 0)),
             "counts": counts}
+
+
+_SERIALS_CACHE = None
+
+
+def _serials() -> dict:
+    global _SERIALS_CACHE
+    if _SERIALS_CACHE is None:
+        try:
+            with open(SERIALS_PATH, encoding="utf-8") as f:
+                _SERIALS_CACHE = json.load(f)
+        except Exception as e:
+            logger.warning(f"[SURVEYED-MAP] panel serials unavailable: {e}")
+            _SERIALS_CACHE = {"by_string": {}, "by_tracker": {}}
+    return _SERIALS_CACHE
+
+
+def get_panel_serials(string_id: str = None, tracker_id: str = None) -> dict:
+    """Panel serial numbers for one string, or for a whole tracker.
+
+    20 200 panels in total, so they are served on request rather than shipped
+    with the layout. Module order runs north to south.
+    """
+    data = _serials()
+    if string_id:
+        serials = data.get("by_string", {}).get(string_id, [])
+        return {"scope": "string", "id": string_id, "count": len(serials),
+                "modules_per_string": data.get("modules_per_string", 25),
+                "serials": [{"n": i + 1, "serial": s} for i, s in enumerate(serials)]}
+    if tracker_id:
+        meta = data.get("by_tracker", {}).get(tracker_id, {})
+        out = []
+        for sid in meta.get("strings", []):
+            for i, s in enumerate(data.get("by_string", {}).get(sid, [])):
+                out.append({"n": i + 1, "serial": s, "string": sid})
+        return {"scope": "tracker", "id": tracker_id, "count": len(out),
+                "tcu": meta.get("tcu"), "strings": meta.get("strings", []),
+                "unassigned": meta.get("unassigned", []), "serials": out}
+    d = data
+    return {"scope": "plant", "panels": d.get("panels"), "strings": d.get("strings"),
+            "trackers": d.get("trackers")}

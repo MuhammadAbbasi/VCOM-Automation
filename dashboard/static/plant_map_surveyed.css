@@ -23,7 +23,7 @@
   background: var(--surface); color: var(--text); cursor: pointer; font-size: 0.8rem; }
 .svm-btn:hover { border-color: var(--accent); }
 
-.svm-grid { display: grid; grid-template-columns: minmax(0, 1fr) 22rem; gap: 1rem; }
+.svm-grid { display: grid; grid-template-columns: 23rem minmax(0, 1fr); gap: 1rem; }
 @media (max-width: 1100px) { .svm-grid { grid-template-columns: 1fr; } }
 
 .svm-mapwrap { position: relative; border: 1px solid var(--border); border-radius: 12px;
@@ -56,8 +56,9 @@
 .svm-inv.s-grey   { fill: var(--grey); }
 .svm-txlab { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; fill: var(--text);
   pointer-events: none; }
-.svm-ring { fill: none; stroke: var(--accent); stroke-width: 2.5;
-  vector-effect: non-scaling-stroke; pointer-events: none; }
+.svm-ring { fill: rgba(59,130,246,0.07); stroke: var(--accent); stroke-width: 2;
+  stroke-linejoin: round; vector-effect: non-scaling-stroke; pointer-events: none; }
+.svm-hull { fill: none; stroke: none; pointer-events: none; }
 
 .svm-legend { position: absolute; left: 0.75rem; bottom: 0.75rem; padding: 0.6rem 0.7rem;
   background: rgba(10,12,17,0.92); border: 1px solid var(--border); border-radius: 10px;
@@ -130,3 +131,32 @@
   font-size: 0.76rem; color: var(--text); }
 .svm-tip.on { opacity: 1; }
 .svm-err { padding: 2rem; color: var(--red); }
+
+
+/* view / colour switches */
+.svm-modes { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
+.svm-seg { display: flex; align-items: center; gap: 0.3rem; }
+.svm-seg-label { font-size: 0.66rem; letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--muted); margin-right: 0.15rem; }
+.svm-segbtn { padding: 0.28rem 0.6rem; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--muted); cursor: pointer; font-size: 0.78rem; }
+.svm-segbtn:hover { color: var(--text); }
+.svm-segbtn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.svm-serialbtn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* panel serial numbers */
+.svm-serials { margin-top: 0.9rem; }
+.svm-serial-head { font-size: 0.72rem; color: var(--muted); margin-bottom: 0.4rem; }
+.svm-serial-list { max-height: 22rem; overflow-y: auto; display: flex;
+  flex-direction: column; gap: 0.1rem; }
+.svm-serial-group { font-size: 0.66rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--muted); margin: 0.45rem 0 0.2rem; }
+.svm-serial { display: flex; align-items: baseline; gap: 0.5rem; }
+.svm-serial-n { width: 1.6rem; text-align: right; color: var(--muted);
+  font-size: 0.7rem; font-variant-numeric: tabular-nums; flex: none; }
+.svm-serial-code { font-family: ui-monospace, Consolas, monospace; font-size: 0.72rem;
+  letter-spacing: 0.01em; cursor: pointer; padding: 0.05rem 0.2rem; border-radius: 3px;
+  word-break: break-all; }
+.svm-serial-code:hover { background: rgba(255,255,255,0.08); }
+.svm-serial-code.copied { background: var(--green); color: #0d0f14; }
+.svm-warn { margin-top: 0.5rem; font-size: 0.72rem; color: var(--yellow); }
