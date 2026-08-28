@@ -33,6 +33,92 @@
   var TYPE_COL = { 25: "#6da7ec", 50: "#2a78d6", 75: "#104281" };
   var NSTR_COL = { 1: "#6da7ec", 2: "#2a78d6", 3: "#104281" };
 
+  /* Minimum-area rectangle over a set of points (rotating calipers on the
+     hull). Used for the substations, whose surveyed corners are not quite
+     square. Returns the four corners in order. */
+  function minAreaRect(pts) {
+    if (!pts || pts.length < 3) return pts || [];
+    var p = pts.slice().sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; });
+    var cross = function (o, a, b) {
+      return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+    };
+    var half = function (seq) {
+      var out = [];
+      for (var i = 0; i < seq.length; i++) {
+        while (out.length >= 2 &&
+               cross(out[out.length - 2], out[out.length - 1], seq[i]) <= 0) out.pop();
+        out.push(seq[i]);
+      }
+      out.pop();
+      return out;
+    };
+    var h = half(p).concat(half(p.slice().reverse()));
+    if (h.length < 3) return pts;
+    var best = null;
+    for (var i = 0; i < h.length; i++) {
+      var a = h[i], b = h[(i + 1) % h.length];
+      var dx = b[0] - a[0], dy = b[1] - a[1];
+      var len = Math.hypot(dx, dy) || 1;
+      var ux = dx / len, uy = dy / len;          // along the edge
+      var vx = -uy, vy = ux;                     // across it
+      var lo1 = Infinity, hi1 = -Infinity, lo2 = Infinity, hi2 = -Infinity;
+      for (var j = 0; j < h.length; j++) {
+        var e1 = h[j][0] * ux + h[j][1] * uy;
+        var e2 = h[j][0] * vx + h[j][1] * vy;
+        if (e1 < lo1) lo1 = e1; if (e1 > hi1) hi1 = e1;
+        if (e2 < lo2) lo2 = e2; if (e2 > hi2) hi2 = e2;
+      }
+      var area = (hi1 - lo1) * (hi2 - lo2);
+      if (!best || area < best.area) {
+        best = { area: area, ux: ux, uy: uy, vx: vx, vy: vy,
+                 lo1: lo1, hi1: hi1, lo2: lo2, hi2: hi2 };
+      }
+    }
+    var mk = function (e1, e2) {
+      return [e1 * best.ux + e2 * best.vx, e1 * best.uy + e2 * best.vy];
+    };
+    var rect = [mk(best.lo1, best.lo2), mk(best.hi1, best.lo2),
+                mk(best.hi1, best.hi2), mk(best.lo1, best.hi2)];
+    // the enclosing rectangle is larger than the trapezoid it wraps, so pull it
+    // back to the surveyed footprint about its own centre
+    var poly = Math.abs(shoelace(pts)), box = Math.abs(shoelace(rect));
+    if (poly > 0 && box > poly) {
+      var k = Math.sqrt(poly / box);
+      var rx = (rect[0][0] + rect[2][0]) / 2, ry = (rect[0][1] + rect[2][1]) / 2;
+      rect = rect.map(function (q) {
+        return [rx + (q[0] - rx) * k, ry + (q[1] - ry) * k];
+      });
+    }
+    // sit it on the building's own centre of area, not the wrapper's
+    var c = centroid(pts);
+    var mx = (rect[0][0] + rect[2][0]) / 2, my = (rect[0][1] + rect[2][1]) / 2;
+    return rect.map(function (q) { return [q[0] + c[0] - mx, q[1] + c[1] - my]; });
+  }
+
+  function centroid(p) {
+    var a = 0, x = 0, y = 0;
+    for (var i = 0; i < p.length; i++) {
+      var q = p[(i + 1) % p.length];
+      var f = p[i][0] * q[1] - q[0] * p[i][1];
+      a += f; x += (p[i][0] + q[0]) * f; y += (p[i][1] + q[1]) * f;
+    }
+    if (!a) {
+      var sx = 0, sy = 0;
+      p.forEach(function (q2) { sx += q2[0]; sy += q2[1]; });
+      return [sx / p.length, sy / p.length];
+    }
+    return [x / (3 * a), y / (3 * a)];
+  }
+
+  function shoelace(p) {
+    var a = 0;
+    for (var i = 0; i < p.length; i++) {
+      var q = p[(i + 1) % p.length];
+      a += p[i][0] * q[1] - q[0] * p[i][1];
+    }
+    return a / 2;
+  }
+
   var NS = "http://www.w3.org/2000/svg";
   function sv(t, a) { var n = document.createElementNS(NS, t); for (var k in a) n.setAttribute(k, a[k]); return n; }
   function el(t, c, x) { var n = document.createElement(t); if (c) n.className = c;
@@ -242,8 +328,9 @@
 
     this.txLabels = [];
     (L.transformers || []).forEach(function (o) {
-      gDev.appendChild(sv("path", { class: "svm-tx", d: d(o.p, true) }));
-      var hit = sv("path", { class: "svm-hit", d: d(o.p, true) });
+      var rect = minAreaRect(o.p);
+      gDev.appendChild(sv("path", { class: "svm-tx", d: d(rect, true) }));
+      var hit = sv("path", { class: "svm-hit", d: d(rect, true) });
       hit.dataset.tx = o.id; gDev.appendChild(hit);
       var lab = sv("text", { class: "svm-txlab", "text-anchor": "middle" });
       lab.textContent = o.id;
