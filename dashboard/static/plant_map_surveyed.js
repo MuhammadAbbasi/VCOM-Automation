@@ -24,6 +24,15 @@
   var AREA_COL = { 1: "#3b82f6", 2: "#60a5fa", 3: "#8b5cf6",
                    4: "#a78bfa", 5: "#6366f1", 6: "#818cf8" };
 
+  var LAYOUT_MODES = [
+    ["status", "Stato"], ["tx", "TX"], ["area", "Area"],
+    ["alt", "Quota"], ["type", "Tipologia"], ["nstr", "Stringhe"], ["serial", "Seriali"]
+  ];
+  // one hue, light to dark, for the continuous ones
+  var RAMP = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"];
+  var TYPE_COL = { 25: "#6da7ec", 50: "#2a78d6", 75: "#104281" };
+  var NSTR_COL = { 1: "#6da7ec", 2: "#2a78d6", 3: "#104281" };
+
   var NS = "http://www.w3.org/2000/svg";
   function sv(t, a) { var n = document.createElementNS(NS, t); for (var k in a) n.setAttribute(k, a[k]); return n; }
   function el(t, c, x) { var n = document.createElement(t); if (c) n.className = c;
@@ -69,10 +78,23 @@
     this.segView = group("Vista", [["string", "Stringhe"], ["tracker", "Tracker"]],
       function () { return self.view; },
       function (v) { self.view = v; self.sel = null; self.draw(); self.paint(); });
-    this.segCol = group("Colore", [["status", "Stato"], ["tx", "TX"], ["area", "Area"]],
+    this.segCol = group("Colore", LAYOUT_MODES,
       function () { return self.colour; },
-      function (v) { self.colour = v; self.paint(); });
+      function (v) {
+        self.colour = v;
+        if (v === "serial") self.ensureCoverage();
+        self.paint();
+      });
     modes.appendChild(this.segView); modes.appendChild(this.segCol);
+
+    // one click to the physical picture of the site
+    this.layoutBtn = el("button", "svm-btn", "Layout generale");
+    this.layoutBtn.title = "Vista d'insieme: quota, tipologia, stringhe, seriali";
+    this.layoutBtn.onclick = function () {
+      self.colour = "alt"; self.view = "tracker"; self.sel = null;
+      self.draw(); self.paint();
+    };
+    modes.appendChild(this.layoutBtn);
 
     this.serialBtn = el("button", "svm-btn svm-serialbtn", "Vedi seriali");
     this.serialBtn.onclick = function () {
@@ -261,9 +283,43 @@
     return worst;
   };
   P.fillFor = function (t, sid) {
-    if (this.colour === "tx") return TX_COL[t.tx] || "#6b7280";
-    if (this.colour === "area") return AREA_COL[t.area] || "#6b7280";
+    var c = this.colour;
+    if (c === "tx") return TX_COL[t.tx] || "#6b7280";
+    if (c === "area") return AREA_COL[t.area] || "#6b7280";
+    if (c === "type") return TYPE_COL[t.modules] || "#6b7280";
+    if (c === "nstr") return NSTR_COL[t.strings.length] || "#6b7280";
+    if (c === "alt") {
+      var r = this.altRange();
+      if (!r) return "#6b7280";
+      var f = (t.alt - r[0]) / (r[1] - r[0] || 1);
+      return RAMP[Math.max(0, Math.min(RAMP.length - 1, Math.round(f * (RAMP.length - 1))))];
+    }
+    if (c === "serial") {
+      var cov = (this.coverage || {})[t.id];
+      if (!cov) return "#6b7280";
+      if (cov.unassigned) return "#f59e0b";
+      return cov.panels === t.modules ? "#10b981" : "#ef4444";
+    }
     return null;   // severity handled by class
+  };
+
+  P.altRange = function () {
+    if (!this.layout) return null;
+    if (!this._alt) {
+      var a = this.layout.trackers.map(function (t) { return t.alt; });
+      this._alt = [Math.min.apply(null, a), Math.max.apply(null, a)];
+    }
+    return this._alt;
+  };
+
+  P.ensureCoverage = function () {
+    if (this.coverage || this._covPending) return;
+    this._covPending = 1;
+    var self = this;
+    fetch(API + "/serials", { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { if (j && j.coverage) { self.coverage = j.coverage; self.paint(); } })
+      .catch(function () {});
   };
 
   P.paint = function () {
@@ -356,9 +412,10 @@
       if (fn) b.onclick = fn; else b.disabled = true;
       return b;
     };
-    var head = el("div", "svm-legend-head",
-      this.colour === "status" ? "Legenda — clicca per filtrare"
-        : this.colour === "tx" ? "Sotto-campo (TX)" : "Area");
+    var TITLES = { status: "Legenda — clicca per filtrare", tx: "Sotto-campo (TX)",
+      area: "Area", alt: "Quota telaio (m s.l.m.)", type: "Tipologia struttura",
+      nstr: "Stringhe per tracker", serial: "Copertura seriali" };
+    var head = el("div", "svm-legend-head", TITLES[this.colour] || "Legenda");
     this.legend.appendChild(head);
     var ul = el("div", "svm-legend-list");
 
@@ -372,6 +429,39 @@
         var n = self.layout.trackers.filter(function (t) { return String(t.area) === k; }).length;
         ul.appendChild(mk(AREA_COL[k], null, "Area " + k, n, false, null));
       });
+    } else if (this.colour === "alt") {
+      var r = this.altRange() || [0, 1];
+      var ramp = el("div", "svm-ramp");
+      RAMP.forEach(function (c2) { var i = el("i"); i.style.background = c2; ramp.appendChild(i); });
+      this.legend.appendChild(ramp);
+      var ends = el("div", "svm-ramp-ends");
+      ends.appendChild(el("span", null, r[0].toFixed(1) + " m"));
+      ends.appendChild(el("span", null, r[1].toFixed(1) + " m"));
+      this.legend.appendChild(ends);
+      ul.appendChild(el("div", "svm-legend-none",
+        "Dislivello " + (r[1] - r[0]).toFixed(1) + " m sull'impianto"));
+    } else if (this.colour === "type") {
+      [25, 50, 75].forEach(function (m2) {
+        var n = self.layout.trackers.filter(function (t) { return t.modules === m2; }).length;
+        ul.appendChild(mk(TYPE_COL[m2], null, m2 + " moduli", n, false, null));
+      });
+    } else if (this.colour === "nstr") {
+      [1, 2, 3].forEach(function (m2) {
+        var n = self.layout.trackers.filter(function (t) { return t.strings.length === m2; }).length;
+        ul.appendChild(mk(NSTR_COL[m2], null, m2 + (m2 === 1 ? " stringa" : " stringhe"), n, false, null));
+      });
+    } else if (this.colour === "serial") {
+      var cov = this.coverage || {};
+      var ok = 0, bad = 0, warn = 0, none = 0;
+      self.layout.trackers.forEach(function (t) {
+        var c2 = cov[t.id];
+        if (!c2) { none++; } else if (c2.unassigned) { warn++; }
+        else if (c2.panels === t.modules) { ok++; } else { bad++; }
+      });
+      ul.appendChild(mk("#10b981", null, "Seriali completi", ok, false, null));
+      if (warn) ul.appendChild(mk("#f59e0b", null, "Seriali in eccesso", warn, false, null));
+      if (bad) ul.appendChild(mk("#ef4444", null, "Seriali mancanti", bad, false, null));
+      if (none) ul.appendChild(mk("#6b7280", null, "Non rilevato", none, false, null));
     } else {
       SEV.forEach(function (s) {
         var n = ((st.counts || {}).strings || {})[s] || 0;

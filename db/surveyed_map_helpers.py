@@ -343,8 +343,15 @@ def get_panel_serials(string_id: str = None, tracker_id: str = None) -> dict:
                 "tcu": meta.get("tcu"), "strings": meta.get("strings", []),
                 "unassigned": meta.get("unassigned", []), "serials": out}
     d = data
+    # per-tracker coverage, so the map can colour by whether every module on a
+    # tracker actually has a serial recorded against it
+    cov = {}
+    for tid, meta in (d.get("by_tracker") or {}).items():
+        cov[tid] = {"panels": meta.get("panels", 0),
+                    "strings": len(meta.get("strings") or []),
+                    "unassigned": len(meta.get("unassigned") or [])}
     return {"scope": "plant", "panels": d.get("panels"), "strings": d.get("strings"),
-            "trackers": d.get("trackers")}
+            "trackers": d.get("trackers"), "coverage": cov}
 
 
 def get_inverter_detail(inverter_id: str, target_date: str = None) -> dict:

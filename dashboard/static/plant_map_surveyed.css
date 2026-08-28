@@ -197,3 +197,11 @@
 .svm-panelsel { display: flex; align-items: baseline; justify-content: space-between;
   gap: 0.6rem; margin-top: 0.7rem; padding: 0.4rem 0.55rem; border-radius: 7px;
   background: rgba(59,130,246,0.12); }
+
+
+/* continuous legend for the elevation view */
+.svm-ramp { display: flex; height: 9px; border-radius: 3px; overflow: hidden;
+  margin: 0.15rem 0 0.25rem; }
+.svm-ramp i { flex: 1; }
+.svm-ramp-ends { display: flex; justify-content: space-between; font-size: 0.66rem;
+  color: var(--muted); font-variant-numeric: tabular-nums; margin-bottom: 0.3rem; }
