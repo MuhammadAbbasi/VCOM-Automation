@@ -29,26 +29,6 @@
   function el(t, c, x) { var n = document.createElement(t); if (c) n.className = c;
     if (x !== undefined && x !== null) n.textContent = x; return n; }
 
-  /* smallest enclosing polygon of a set of points, so a group outline follows
-     the shape of the field instead of boxing in everything between its corners */
-  function hull(pts) {
-    if (pts.length < 3) return pts;
-    var p = pts.slice().sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; });
-    var cross = function (o, a, b) {
-      return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
-    };
-    var half = function (seq) {
-      var out = [];
-      for (var i = 0; i < seq.length; i++) {
-        while (out.length >= 2 && cross(out[out.length - 2], out[out.length - 1], seq[i]) <= 0) out.pop();
-        out.push(seq[i]);
-      }
-      out.pop();
-      return out;
-    };
-    return half(p).concat(half(p.reverse()));
-  }
-
   function PlantMapSurveyed(root) {
     this.root = root;
     this.layout = null; this.state = null;
@@ -198,9 +178,12 @@
     };
 
     this.scene = sv("g", {});
-    var gSite = sv("g", {}), gHull = sv("g", {}), gTrk = sv("g", {}),
-        gDiv = sv("g", {}), gDev = sv("g", {}), gSel = sv("g", {}), gLab = sv("g", {});
-    [gSite, gHull, gTrk, gDiv, gDev, gSel, gLab].forEach(function (g) { self.scene.appendChild(g); });
+    var gSite = sv("g", {}), gTrk = sv("g", {}), gPan = sv("g", {}),
+        gDiv = sv("g", {}), gMark = sv("g", {}), gDev = sv("g", {}),
+        gSel = sv("g", {}), gLab = sv("g", {});
+    [gSite, gTrk, gPan, gDiv, gMark, gDev, gSel, gLab]
+      .forEach(function (g) { self.scene.appendChild(g); });
+    this.gPan = gPan; this.gMark = gMark;
     this.svg.appendChild(this.scene);
 
     (L.pond || []).forEach(function (o) { gSite.appendChild(sv("path", { class: "svm-pond", d: d(o.p, true) })); });
@@ -235,9 +218,6 @@
       }
     });
 
-    this.hull = sv("path", { class: "svm-hull", style: "display:none" });
-    gHull.appendChild(this.hull);
-
     this.txLabels = [];
     (L.transformers || []).forEach(function (o) {
       gDev.appendChild(sv("path", { class: "svm-tx", d: d(o.p, true) }));
@@ -259,8 +239,7 @@
         cy: py(o.y) - o.d / 2, w: o.w, d: o.d, id: o.id });
     });
 
-    this.ring = sv("path", { class: "svm-ring", style: "display:none" });
-    gSel.appendChild(this.ring);
+    this.gSel = gSel;
     this.measure(); this.fitAll();
     this.syncSegs();
   };
@@ -300,8 +279,7 @@
         var c = self.fillFor(t);
         r.setAttribute("class", "svm-str" + (c ? "" : " s-" + s));
         if (c) r.style.fill = c; else r.style.fill = "";
-        var inSet = !keep || t.strings.some(function (x) { return keep.has(x); });
-        r.classList.toggle("dim", !inSet);
+        r.classList.toggle("dim", !(!keep || t.strings.some(function (x) { return keep.has(x); })));
       } else {
         t.strings.forEach(function (sid) {
           var r = self.rects[sid];
@@ -318,6 +296,7 @@
       o.shape.setAttribute("class", "svm-inv s-" + s);
     });
 
+    this.paintDim();
     this.drawCounts(); this.drawLegend(); this.drawProblems();
     this.renderDetail(); this.syncSegs(); this.apply();
   };
@@ -460,27 +439,60 @@
     if (sel && zoom !== false) this.zoomToSel(sel);
   };
 
-  /* a hull around the members, not their bounding box: TX and area groups are
-     long diagonal bands, and a rectangle round one swallows half the plant */
+  /* Precise marking. A hull around an inverter's trackers swallows every
+     string that happens to lie between them, which is exactly what it must not
+     do: an inverter's strings are interleaved with its neighbours'. So each
+     member segment is outlined individually and everything else is dimmed. */
   P.outline = function (sel) {
-    var ss = this.stringsFor(sel), self = this;
-    if (!ss.length || !sel || sel.kind === "string") { this.ring.style.display = "none"; }
-    var pts = [];
-    var seen = {};
-    ss.forEach(function (s) {
-      var t = self.byTracker[s.tracker];
-      if (!t || seen[t.id]) return;
-      seen[t.id] = 1;
-      var x0 = self.px(t.x) - t.w / 2 - 1.2, x1 = self.px(t.x) + t.w / 2 + 1.2;
-      var y0 = self.py(t.y0) - 1.2, y1 = self.py(t.y1) + 1.2;
-      pts.push([x0, y0], [x1, y0], [x1, y1], [x0, y1]);
+    var self = this;
+    while (this.gSel.firstChild) this.gSel.removeChild(this.gSel.firstChild);
+    this.marked = null;
+    if (!sel) { this.paintDim(); return; }
+    var ss = this.stringsFor(sel);
+    if (!ss.length) { this.paintDim(); return; }
+    var ids = new Set();
+    ss.forEach(function (s) { ids.add(s.id); });
+    this.marked = ids;
+
+    if (this.view === "tracker") {
+      var seen = {};
+      ss.forEach(function (s) {
+        if (seen[s.tracker]) return;
+        seen[s.tracker] = 1;
+        var r = self.trkRects[s.tracker];
+        if (r) self.gSel.appendChild(sv("rect", { class: "svm-mark",
+          x: +r.getAttribute("x") - 0.5, y: +r.getAttribute("y") - 0.5,
+          width: +r.getAttribute("width") + 1, height: +r.getAttribute("height") + 1 }));
+      });
+    } else {
+      ss.forEach(function (s) {
+        var r = self.rects[s.id];
+        if (r) self.gSel.appendChild(sv("rect", { class: "svm-mark",
+          x: +r.getAttribute("x") - 0.5, y: +r.getAttribute("y") - 0.5,
+          width: +r.getAttribute("width") + 1, height: +r.getAttribute("height") + 1 }));
+      });
+    }
+    this.paintDim();
+  };
+
+  /* members stay lit, everything else drops back */
+  P.paintDim = function () {
+    var self = this, L = this.layout;
+    if (!L) return;
+    L.trackers.forEach(function (t) {
+      if (self.view === "tracker") {
+        var r = self.trkRects[t.id];
+        if (!r) return;
+        var on = !self.marked || t.strings.some(function (x) { return self.marked.has(x); });
+        r.classList.toggle("faded", !on);
+      } else {
+        t.strings.forEach(function (sid) {
+          var r = self.rects[sid];
+          if (!r) return;
+          r.classList.toggle("faded", !!self.marked && !self.marked.has(sid));
+        });
+      }
     });
-    if (pts.length < 3) { this.ring.style.display = "none"; return; }
-    var h = hull(pts);
-    this.ring.setAttribute("d", h.map(function (p, i) {
-      return (i ? "L" : "M") + p[0] + " " + p[1];
-    }).join(" ") + " Z");
-    this.ring.style.display = "";
   };
 
   /* ---------------------------------------------------------------- detail */
@@ -538,16 +550,7 @@
       add("Scarto", tt.deviation != null ? tt.deviation + " deg" : null);
       add("Modo", tt.mode); add("Allarme", tt.alarm); add("Nota", tt.reason);
     }
-    if (sel.kind === "inverter" && st.inverters && st.inverters[sel.id]) {
-      var ii = st.inverters[sel.id];
-      add("Stato", SEV_LABEL[ii.status] || ii.status);
-      add("PR", ii.pr_v != null ? ii.pr_v + " %" : null);
-      add("Temperatura", ii.temp_v != null ? ii.temp_v + " °C" : null);
-      add("Corrente DC", ii.dc_v != null ? Math.round(ii.dc_v * 100) / 100 + " A" : null);
-      add("Potenza AC", ii.ac_v != null ? ii.ac_v + " W" : null);
-      add("Comunicazione", ii.comms_lost ? "persa" : "ok");
-      add("Dato", ii.data_time);
-    }
+    if (sel.kind === "inverter") { this.detail.appendChild(kv); this.renderInverter(sel.id); return; }
     var trk = s0 && this.byTracker[s0.tracker];
     if (trk && (sel.kind === "string" || sel.kind === "tracker")) {
       add("Moduli", trk.modules); add("Pali", trk.piles);
@@ -556,6 +559,14 @@
     }
     this.detail.appendChild(kv);
 
+    if (this.panelSel && sel.kind === "string" && this.panelSel.string === sel.id) {
+      var ps = this.panelSel;
+      var cached = (this.panelCache || {})[ps.tracker + "#" + ps.n];
+      var pb = el("div", "svm-panelsel");
+      pb.appendChild(el("span", "svm-k", "Pannello " + ps.n + " del tracker"));
+      pb.appendChild(el("span", "svm-serial-code", cached || "seriale non caricato"));
+      this.detail.appendChild(pb);
+    }
     if (this.serialMode && (sel.kind === "string" || sel.kind === "tracker")) {
       this.renderSerials(sel);
     }
@@ -572,6 +583,85 @@
       });
       this.detail.appendChild(lst);
     }
+  };
+
+  /* Everything under one inverter: what it is producing now, then every
+     tracker, TCU, MPPT and string beneath it with the status each holds. */
+  P.renderInverter = function (invId) {
+    var self = this;
+    var box = el("div", "svm-sub");
+    box.appendChild(el("div", "svm-sub-head", "Produzione e catena"));
+    var body = el("div", null, "Caricamento…");
+    box.appendChild(body);
+    this.detail.appendChild(box);
+    fetch(API + "/inverter?id=" + encodeURIComponent(invId), { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        body.innerHTML = "";
+        if (!j || j.error) { body.appendChild(el("div", "svm-none", "Dati non disponibili.")); return; }
+        var p = j.production || {};
+        var prod = el("div", "svm-prod");
+        [["Potenza AC", p.ac_w != null ? Math.round(p.ac_w / 1000 * 10) / 10 + " kW" : "-"],
+         ["Corrente DC", p.dc_a != null ? Math.round(p.dc_a * 100) / 100 + " A" : "-"],
+         ["PR", p.pr_pct != null ? p.pr_pct + " %" : "-"],
+         ["Temperatura", p.temp_c != null ? p.temp_c + " °C" : "-"]].forEach(function (r2) {
+          var c = el("div", "svm-prod-cell");
+          c.appendChild(el("span", "svm-prod-label", r2[0]));
+          c.appendChild(el("span", "svm-prod-val", r2[1]));
+          prod.appendChild(c);
+        });
+        body.appendChild(prod);
+        if (p.comms_lost) body.appendChild(el("div", "svm-warn", "Comunicazione persa."));
+        if (p.data_time) body.appendChild(el("div", "svm-serial-head", "Dato delle " + p.data_time));
+
+        var c = j.counts || {};
+        var row = el("div", "svm-count-row");
+        ["red", "yellow", "green", "grey"].forEach(function (k) {
+          if (!c[k]) return;
+          var chip = el("span", "svm-chip s-" + k, c[k]);
+          chip.title = k;
+          row.appendChild(chip);
+        });
+        var ch = el("div", "svm-sub");
+        ch.appendChild(el("div", "svm-sub-head", "Stringhe per stato"));
+        ch.appendChild(row);
+        body.appendChild(ch);
+
+        var th = j.thresholds || {};
+        var noon = (j.hour != null && j.hour <= 12);
+        body.appendChild(el("div", "svm-serial-head",
+          "Corrente per stringa = corrente MPPT / numero stringhe. Lo stato usa la "
+          + "corrente MPPT normalizzata su base 2 stringhe, come le soglie del watchdog. "
+          + "Soglie "
+          + (noon ? "mattino" : "pomeriggio") + ": verde ≥ "
+          + (noon ? th.morning_green : th.afternoon_green) + " A, giallo ≥ "
+          + (noon ? th.morning_yellow : th.afternoon_yellow) + " A."));
+
+        var list = el("div", "svm-chain");
+        (j.trackers || []).forEach(function (t) {
+          var tb = el("div", "svm-chain-trk");
+          var hd = el("button", "svm-chain-head");
+          hd.appendChild(el("span", "svm-sw s-" + t.status));
+          hd.appendChild(el("span", "svm-chain-name", t.tracker));
+          hd.appendChild(el("span", "svm-chain-tcu", t.tcu));
+          hd.onclick = function () { self.select({ kind: "tracker", id: t.tracker }); };
+          tb.appendChild(hd);
+          (t.strings || []).forEach(function (s2) {
+            var b = el("button", "svm-chain-str");
+            b.appendChild(el("span", "svm-sw s-" + s2.status));
+            b.appendChild(el("span", "svm-chain-sid", s2.string.slice(-5)));
+            b.appendChild(el("span", "svm-chain-mppt", s2.mppt.slice(-6)));
+            b.appendChild(el("span", "svm-chain-a",
+              s2.per_string_a != null ? s2.per_string_a + " A" : "-"));
+            if (s2.note) b.title = s2.note;
+            b.onclick = function () { self.select({ kind: "string", id: s2.string }); };
+            tb.appendChild(b);
+          });
+          list.appendChild(tb);
+        });
+        body.appendChild(list);
+      })
+      .catch(function () { body.textContent = "Dati non disponibili."; });
   };
 
   P.renderSerials = function (sel) {
@@ -648,6 +738,47 @@
     var r = this.svg.getBoundingClientRect();
     this.fit = Math.min(r.width / this.VW, r.height / this.VH) || 1;
   };
+  /* One rect per module once they are large enough to see, for the trackers
+     actually on screen. 20 200 panels cannot all be in the DOM at once. */
+  P.PANEL_PX = 5.0;
+  P.updatePanels = function () {
+    var self = this, L = this.layout;
+    if (!L || !this.gPan) return;
+    cancelAnimationFrame(this._panFrame);
+    this._panFrame = requestAnimationFrame(function () {
+      while (self.gPan.firstChild) self.gPan.removeChild(self.gPan.firstChild);
+      var pxPerM = self.fit * self.k;
+      self.panelZoom = false;
+      if (pxPerM * 1.08 < self.PANEL_PX) return;
+      var r = self.svg.getBoundingClientRect();
+      var x0 = (-self.ox * self.fit - (r.width - self.VW * self.fit) / 2) / pxPerM;
+      var y0 = (-self.oy * self.fit - (r.height - self.VH * self.fit) / 2) / pxPerM;
+      var x1 = x0 + r.width / pxPerM, y1 = y0 + r.height / pxPerM;
+      var frag = document.createDocumentFragment(), n = 0;
+      L.trackers.forEach(function (t) {
+        if (n > 4000) return;
+        var cx = self.px(t.x), ty0 = self.py(t.y0), ty1 = self.py(t.y1);
+        if (cx < x0 - 3 || cx > x1 + 3 || ty1 < y0 || ty0 > y1) return;
+        var pitch = (t.y0 - t.y1) / t.mod;
+        if (pitch * pxPerM < self.PANEL_PX) return;
+        var perString = t.mod / (t.strings.length || 1);
+        for (var i = 0; i < t.mod; i++) {
+          var y = ty0 + i * pitch;
+          if (y + pitch < y0 || y > y1) continue;
+          var cell = sv("rect", { class: "svm-panel", x: cx - t.w / 2 + 0.06,
+            y: y + 0.06, width: t.w - 0.12, height: Math.max(pitch - 0.12, 0.05) });
+          cell.dataset.panel = i + 1;
+          cell.dataset.trk = t.id;
+          cell.dataset.str = t.strings[Math.floor(i / perString)] || "";
+          frag.appendChild(cell);
+          n++;
+        }
+      });
+      self.gPan.appendChild(frag);
+      self.panelZoom = true;
+    });
+  };
+
   P.apply = function () {
     if (!this.scene) return;
     this.scene.setAttribute("transform", "translate(" + this.ox + " " + this.oy + ") scale(" + this.k + ")");
@@ -657,12 +788,15 @@
     });
     var pxPerM = this.fit * this.k;
     (this.invShapes || []).forEach(function (o) {
-      var w = Math.max(o.w, 7 / pxPerM), d = Math.max(o.d, 3.5 / pxPerM), pad = 3 / pxPerM;
+      // 20% larger than the surveyed footprint so it is comfortable to hit
+      var w = Math.max(o.w * 1.2, 8.4 / pxPerM), d = Math.max(o.d * 1.2, 4.2 / pxPerM);
+      var pad = 3 / pxPerM;
       o.shape.setAttribute("x", o.cx - w / 2); o.shape.setAttribute("y", o.cy - d / 2);
       o.shape.setAttribute("width", w); o.shape.setAttribute("height", d);
       o.hit.setAttribute("x", o.cx - w / 2 - pad); o.hit.setAttribute("y", o.cy - d / 2 - pad);
       o.hit.setAttribute("width", w + pad * 2); o.hit.setAttribute("height", d + pad * 2);
     });
+    this.updatePanels();
   };
   P.clampPan = function () {
     var lx = this.VW * (this.k - 1), ly = this.VH * (this.k - 1);
@@ -705,6 +839,18 @@
   };
   P.onMove = function (e) {
     var d = e.target.dataset || {};
+    if (d.panel) {
+      var key = d.trk + "#" + d.panel;
+      var cached = (this.panelCache || {})[key];
+      this.tip.textContent = "Pannello " + d.panel + " · " + d.trk
+        + (d.str ? " · " + d.str : "") + (cached ? " · " + cached : "");
+      this.tip.classList.add("on");
+      this.tip.style.left = Math.min(e.clientX + 14, window.innerWidth - 300) + "px";
+      this.tip.style.top = (e.clientY + 14) + "px";
+      this.wantSerial(d.trk);
+      if (this.drag) { this.panDrag(e); }
+      return;
+    }
     if (d.str || d.trk || d.inv || d.tx) {
       var txt;
       if (d.str) {
@@ -719,15 +865,41 @@
       this.tip.style.top = (e.clientY + 14) + "px";
     } else this.tip.classList.remove("on");
     if (!this.drag) return;
+    this.panDrag(e);
+  };
+
+  P.panDrag = function (e) {
     var dx = e.clientX - this.drag.x, dy = e.clientY - this.drag.y;
     if (Math.abs(dx) + Math.abs(dy) > 3) this.drag.moved = true;
     this.ox = this.drag.ox + dx / this.fit; this.oy = this.drag.oy + dy / this.fit;
     this.clampPan(); this.apply();
   };
+
+  /* serials for a tracker, fetched once and reused for every panel on it */
+  P.wantSerial = function (trk) {
+    if (!trk) return;
+    this.panelCache = this.panelCache || {};
+    this.panelPending = this.panelPending || {};
+    if (this.panelPending[trk]) return;
+    this.panelPending[trk] = 1;
+    var self = this;
+    fetch(API + "/serials?tracker=" + encodeURIComponent(trk), { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (!j || !j.serials) return;
+        j.serials.forEach(function (s2, i) { self.panelCache[trk + "#" + (i + 1)] = s2.serial; });
+      })
+      .catch(function () {});
+  };
   P.onUp = function () {
     var d = this.drag; this.drag = null;
     if (!d || d.moved) return;
     var ds = (d.hit && d.hit.dataset) || {};
+    if (ds.panel) {
+      this.panelSel = { tracker: ds.trk, n: +ds.panel, string: ds.str };
+      if (ds.str) this.select({ kind: "string", id: ds.str }, false);
+      return;
+    }
     if (ds.str) this.select({ kind: "string", id: ds.str }, false);
     else if (ds.trk) this.select({ kind: "tracker", id: ds.trk }, false);
     else if (ds.inv) this.select({ kind: "inverter", id: ds.inv });

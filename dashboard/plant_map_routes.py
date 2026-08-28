@@ -177,3 +177,17 @@ async def get_surveyed_serials_route(
         return await asyncio.to_thread(get_panel_serials, string, tracker)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error loading panel serials: {e}")
+
+
+@router.get("/surveyed/inverter")
+async def get_surveyed_inverter_route(
+    id: str = Query(..., description="Inverter id, e.g. TX2-INV08"),
+    date: str = Query(None, description="YYYY-MM-DD, defaults to today"),
+):
+    """Production for one inverter, then every tracker, TCU, MPPT and string
+    beneath it with the status each currently holds."""
+    try:
+        from db.surveyed_map_helpers import get_inverter_detail
+        return await asyncio.to_thread(get_inverter_detail, id, date)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error building inverter detail: {e}")

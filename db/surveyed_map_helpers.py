@@ -32,6 +32,16 @@ SERIALS_PATH = Path(__file__).resolve().parent / "panel_serials.json"
 SETTINGS_PATH = ROOT / "user_settings.json"
 
 RANK = {"green": 0, "grey": 1, "yellow": 2, "red": 3}
+
+# the watchdog splits the day at noon and compares per-string current against
+# these; mppt_dc_analyzer flags a 2-string MPPT sitting at 40-60% of expected
+# as having lost one of its two strings
+NOON = 12
+SS_LOSS_LO, SS_LOSS_HI = 0.4, 0.6
+OPEN_CIRCUIT = 0.1
+# the thresholds are calibrated on a 2-string MPPT (analyzer divides the fleet
+# 2-string median by 18.0 A), so currents are normalised to that basis
+THRESHOLD_BASIS_STRINGS = 2
 _LAYOUT_CACHE = None
 
 
@@ -66,6 +76,35 @@ def _inv_id(raw: str):
 
 def _worse(a: str, b: str) -> str:
     return a if RANK.get(a, 0) >= RANK.get(b, 0) else b
+
+
+def _hour(snapshot: dict) -> int:
+    """Hour the snapshot describes, so the right DC threshold pair is used."""
+    from datetime import datetime
+    for key in ("timestamp", "data_time"):
+        v = snapshot.get(key)
+        if v:
+            m = re.search(r"(\d{1,2}):(\d{2})", str(v))
+            if m:
+                return int(m.group(1))
+    return datetime.now().hour
+
+
+def _dc_status(basis_amps, hour, th):
+    """The watchdog's own DC rule. Feed it a current normalised to the 2-string
+    basis the thresholds were set for, not a single string's share."""
+    if basis_amps is None:
+        return "grey"
+    dc = th.get("dc", {})
+    if hour <= NOON:
+        g, y = dc.get("morning_green", 10.0), dc.get("morning_yellow", 2.0)
+    else:
+        g, y = dc.get("afternoon_green", 5.0), dc.get("afternoon_yellow", 0.5)
+    if basis_amps >= g:
+        return "green"
+    if basis_amps >= y:
+        return "yellow"
+    return "red"
 
 
 def _anomaly_targets(anom: dict, layout: dict) -> dict:
@@ -130,9 +169,23 @@ def get_surveyed_state(target_date: str = None) -> dict:
                 mid = "%s-MPPT%02d" % (iid, int(m.get("mppt")))
             except (TypeError, ValueError):
                 continue
+            v, exp = m.get("v"), m.get("exp")
+            n = m.get("strings") or 1
+            per = round(v / n, 2) if isinstance(v, (int, float)) and n else None
+            ratio = (v / exp) if isinstance(v, (int, float)) and exp else None
+            # a 2-string MPPT at 40-60% of expected has lost one of its two
+            # strings; the meter cannot say which, so both are marked suspect
+            ss_loss = bool(n == 2 and ratio is not None
+                           and SS_LOSS_LO <= ratio <= SS_LOSS_HI)
+            open_c = bool(ratio is not None and ratio < OPEN_CIRCUIT and exp > 1.0)
+            basis = (v * THRESHOLD_BASIS_STRINGS / n) if isinstance(v, (int, float)) and n \
+                else None
             mppts[mid] = {"status": "green" if status == "green" else "grey",
-                          "v": m.get("v"), "exp": m.get("exp"),
-                          "strings": m.get("strings")}
+                          "v": v, "exp": exp, "strings": n,
+                          "per_string_a": per,
+                          "basis_a": round(basis, 2) if basis is not None else None,
+                          "ratio": round(ratio, 3) if ratio else None,
+                          "single_string_loss": ss_loss, "open_circuit": open_c}
 
     # ---- trackers: their own alarm flag, and the deviation threshold in settings
     dev_limit = th.get("tracker_deviation", 6.0)
@@ -203,11 +256,28 @@ def get_surveyed_state(target_date: str = None) -> dict:
                                    .get("status", "grey")})
 
     # ---- strings inherit their MPPT; that is the finest the meters go
+    hour = _hour(snapshot)
     strings = {}
     for s in layout.get("strings", []):
-        st = mppts.get(s["mppt"], {}).get("status", "grey")
+        m = mppts.get(s["mppt"], {})
+        if m.get("basis_a") is not None:
+            dc = _dc_status(m["basis_a"], hour, th)
+        else:
+            dc = m.get("status", "grey")
+        note = None
+        if m.get("open_circuit"):
+            dc, note = "red", "MPPT a circuito aperto"
+        elif m.get("single_string_loss"):
+            dc = _worse(dc, "yellow")
+            note = "una delle due stringhe di questo MPPT risulta persa"
+        if m.get("status") == "red":
+            dc = _worse(dc, "red")
         tr = trackers.get(s["tracker"], {}).get("status", "grey")
-        strings[s["id"]] = {"status": _worse(st, tr) if tr == "red" else st}
+        strings[s["id"]] = {"status": _worse(dc, tr) if tr == "red" else dc,
+                            "per_string_a": m.get("per_string_a"),
+                            "basis_a": m.get("basis_a"),
+                            "mppt_a": m.get("v"), "mppt_exp_a": m.get("exp"),
+                            "mppt_strings": m.get("strings"), "note": note}
 
     legend = {}
     for p in problems:
@@ -230,6 +300,7 @@ def get_surveyed_state(target_date: str = None) -> dict:
             "thresholds": th,
             "inverters": inverters, "mppts": mppts,
             "trackers": trackers, "strings": strings,
+            "hour": hour,
             "problems": sorted(problems, key=lambda p: -RANK.get(p["severity"], 0)),
             "legend": sorted(legend.values(), key=lambda e: -RANK.get(e["severity"], 0)),
             "counts": counts}
@@ -274,3 +345,55 @@ def get_panel_serials(string_id: str = None, tracker_id: str = None) -> dict:
     d = data
     return {"scope": "plant", "panels": d.get("panels"), "strings": d.get("strings"),
             "trackers": d.get("trackers")}
+
+
+def get_inverter_detail(inverter_id: str, target_date: str = None) -> dict:
+    """Everything behind one inverter: production now, then every tracker, TCU,
+    MPPT and string under it with the status each currently holds."""
+    layout = load_surveyed_layout()
+    state = get_surveyed_state(target_date)
+    if not layout or state.get("error"):
+        return {"error": "state unavailable"}
+    inv = state["inverters"].get(inverter_id, {})
+    mine = [s for s in layout.get("strings", []) if s["inverter"] == inverter_id]
+    if not mine:
+        return {"error": "unknown inverter %s" % inverter_id}
+
+    by_tracker = {}
+    for s in mine:
+        t = by_tracker.setdefault(s["tracker"], {
+            "tracker": s["tracker"], "tcu": s["tcu"], "ncu": s["ncu"], "area": s["area"],
+            "status": state["trackers"].get(s["tracker"], {}).get("status", "grey"),
+            "strings": []})
+        st = state["strings"].get(s["id"], {})
+        t["strings"].append({
+            "string": s["id"], "mppt": s["mppt"], "status": st.get("status", "grey"),
+            "per_string_a": st.get("per_string_a"), "basis_a": st.get("basis_a"),
+            "mppt_a": st.get("mppt_a"), "mppt_exp_a": st.get("mppt_exp_a"),
+            "mppt_strings": st.get("mppt_strings"), "note": st.get("note")})
+    trackers = sorted(by_tracker.values(), key=lambda t: int(t["tracker"].split()[1]))
+
+    counts = {"green": 0, "yellow": 0, "red": 0, "grey": 0}
+    for t in trackers:
+        for s in t["strings"]:
+            counts[s["status"]] = counts.get(s["status"], 0) + 1
+
+    mppt_rows = []
+    for m in sorted({s["mppt"] for s in mine}):
+        d = state["mppts"].get(m, {})
+        mppt_rows.append({"mppt": m, "status": d.get("status"), "v": d.get("v"),
+                          "exp": d.get("exp"), "strings": d.get("strings"),
+                          "per_string_a": d.get("per_string_a"),
+                          "basis_a": d.get("basis_a"),
+                          "single_string_loss": d.get("single_string_loss"),
+                          "open_circuit": d.get("open_circuit")})
+    total = sum(r["v"] for r in mppt_rows if isinstance(r.get("v"), (int, float)))
+    return {"inverter": inverter_id, "date": state["date"], "hour": state.get("hour"),
+            "status": inv.get("status", "grey"),
+            "production": {"ac_w": inv.get("ac_v"), "dc_a": inv.get("dc_v"),
+                           "dc_a_sum_mppt": round(total, 2) if total else None,
+                           "pr_pct": inv.get("pr_v"), "temp_c": inv.get("temp_v"),
+                           "iso": inv.get("iso_v"), "comms_lost": inv.get("comms_lost"),
+                           "data_time": inv.get("data_time")},
+            "counts": counts, "trackers": trackers, "mppts": mppt_rows,
+            "thresholds": state.get("thresholds", {}).get("dc", {})}

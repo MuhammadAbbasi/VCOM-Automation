@@ -56,9 +56,9 @@
 .svm-inv.s-grey   { fill: var(--grey); }
 .svm-txlab { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; fill: var(--text);
   pointer-events: none; }
-.svm-ring { fill: rgba(59,130,246,0.07); stroke: var(--accent); stroke-width: 2;
-  stroke-linejoin: round; vector-effect: non-scaling-stroke; pointer-events: none; }
-.svm-hull { fill: none; stroke: none; pointer-events: none; }
+.svm-mark { fill: none; stroke: var(--accent); stroke-width: 1.6;
+  vector-effect: non-scaling-stroke; pointer-events: none; }
+.svm-str.faded { opacity: 0.16; }
 
 .svm-legend { position: absolute; left: 0.75rem; bottom: 0.75rem; padding: 0.6rem 0.7rem;
   background: rgba(10,12,17,0.92); border: 1px solid var(--border); border-radius: 10px;
@@ -160,3 +160,40 @@
 .svm-serial-code:hover { background: rgba(255,255,255,0.08); }
 .svm-serial-code.copied { background: var(--green); color: #0d0f14; }
 .svm-warn { margin-top: 0.5rem; font-size: 0.72rem; color: var(--yellow); }
+
+
+/* individual panels, drawn only when they are large enough to read */
+.svm-panel { fill: rgba(255,255,255,0.05); stroke: rgba(10,12,17,0.85);
+  stroke-width: 0.5; vector-effect: non-scaling-stroke; cursor: crosshair; }
+.svm-panel:hover { fill: rgba(255,255,255,0.28); }
+
+/* inverter drill-down */
+.svm-prod { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem 0.7rem;
+  margin-bottom: 0.6rem; }
+.svm-prod-cell { display: flex; flex-direction: column; background: rgba(255,255,255,0.04);
+  border-radius: 7px; padding: 0.35rem 0.5rem; }
+.svm-prod-label { font-size: 0.64rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--muted); }
+.svm-prod-val { font-size: 1rem; font-variant-numeric: tabular-nums; }
+
+.svm-chain { margin-top: 0.6rem; max-height: 24rem; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 0.45rem; }
+.svm-chain-trk { border-left: 2px solid var(--border); padding-left: 0.45rem; }
+.svm-chain-head { display: flex; align-items: center; gap: 0.45rem; width: 100%;
+  border: 0; background: transparent; color: var(--text); cursor: pointer;
+  padding: 0.2rem 0.25rem; border-radius: 5px; font-size: 0.76rem; text-align: left; }
+.svm-chain-head:hover { background: rgba(255,255,255,0.07); }
+.svm-chain-name { font-weight: 600; }
+.svm-chain-tcu { margin-left: auto; color: var(--muted); font-size: 0.7rem; }
+.svm-chain-str { display: flex; align-items: center; gap: 0.45rem; width: 100%;
+  border: 0; background: transparent; color: var(--muted); cursor: pointer;
+  padding: 0.15rem 0.25rem 0.15rem 0.9rem; border-radius: 5px;
+  font-size: 0.72rem; text-align: left; }
+.svm-chain-str:hover { background: rgba(255,255,255,0.07); color: var(--text); }
+.svm-chain-sid { font-family: ui-monospace, Consolas, monospace; }
+.svm-chain-mppt { color: var(--muted); font-size: 0.68rem; }
+.svm-chain-a { margin-left: auto; font-variant-numeric: tabular-nums; }
+
+.svm-panelsel { display: flex; align-items: baseline; justify-content: space-between;
+  gap: 0.6rem; margin-top: 0.7rem; padding: 0.4rem 0.55rem; border-radius: 7px;
+  background: rgba(59,130,246,0.12); }
