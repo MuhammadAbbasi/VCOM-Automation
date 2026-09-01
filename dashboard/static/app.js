@@ -83,6 +83,12 @@ function updateMacro(data) {
   el("val-comms").textContent   = safeNum(m.comms_lost, "—");
   if (el("val-nostate")) el("val-nostate").textContent = safeNum(m.no_state, 0);
   
+  // Update Plant ID
+  if (data.system_id) {
+      if (el("val-plant-id")) el("val-plant-id").textContent = data.system_id;
+      if (el("val-footer-plant-id")) el("val-footer-plant-id").textContent = data.system_id;
+  }
+  
   // Update New Macro Metrics
   if (el("val-total-power")) {
       const pMw = m.total_ac_power_mw || 0;
@@ -1299,6 +1305,9 @@ function connectWebSocket() {
         applyConfig(msg.data);
       } else if (msg.type === "extraction_status") {
         updateExtractionUI(msg.is_extracting);
+        if (msg.vcom_status) {
+          updateVcomStatusUI(msg.vcom_status);
+        }
       } else if (msg.type === "page_reload") {
         window.location.reload();
       }
@@ -1997,6 +2006,26 @@ function updateExtractionUI(isExtracting) {
     if (text) text.textContent = "Get Data Now";
     statusLabel.textContent = "Idle";
     statusLabel.style.color = "var(--text)";
+  }
+}
+
+/**
+ * Update the UI top banner when VCOM portal is down
+ */
+function updateVcomStatusUI(vcomStatus) {
+  const banner = el("vcom-down-banner");
+  const bannerText = el("vcom-down-text");
+  if (!banner) return;
+
+  if (vcomStatus && vcomStatus.status === "down") {
+    banner.style.display = "block";
+    const msg = vcomStatus.error_message || "Impossibile raggiungere vcom.meteocontrol.com";
+    const code = vcomStatus.http_code ? ` (HTTP ${vcomStatus.http_code})` : "";
+    if (bannerText) {
+      bannerText.textContent = `🚨 ALLARME PORTALE VCOM DOWN — ${msg}${code}`;
+    }
+  } else {
+    banner.style.display = "none";
   }
 }
 

@@ -34,6 +34,32 @@ TRACKER_CORRECTIONS = {
     ("NCU_03", "TCU 92"): "Tracker 325",
 }
 
+
+def find_deviating_trackers(records: list, threshold: float) -> list:
+    """Rule: a tracker only counts as faulted if BOTH actual_angle and
+    target_angle are real (non-zero) readings that disagree by more than
+    `threshold` degrees. A zero on either side is a legitimate resting/
+    not-yet-initialized state, not a fault - don't alert on it.
+
+    Evaluated per-record with its own try/except so one malformed OCR
+    reading (non-numeric, missing) can't silently kill the deviation
+    check - and therefore the Telegram alert - for the entire batch.
+    """
+    faulted = []
+    for t in records:
+        try:
+            actual = float(t.get("actual_angle"))
+            target = float(t.get("target_angle"))
+        except (TypeError, ValueError):
+            continue
+        if actual == 0 or target == 0:
+            continue
+        deviation = abs(actual - target)
+        if deviation > threshold:
+            faulted.append({**t, "_deviation": deviation})
+    return faulted
+
+
 def on_connect(client, userdata, flags, reason_code, properties):
     if reason_code == 0:
         logging.info("Connected to MQTT Broker successfully.")
@@ -124,31 +150,41 @@ def handle_sync_request(client, payload):
             
             # Use dynamic deviation threshold from config (default to 5.0)
             dev_threshold = config.get("thresholds", {}).get("tracker_deviation", 5.0)
-            critical_dev = sum(1 for t in unique_data if abs(t.get("actual_angle", 0) - t.get("target_angle", 0)) > dev_threshold)
-            
+            deviating = find_deviating_trackers(unique_data, dev_threshold)
+            critical_dev = len(deviating)
+
             # Check Telegram preference for tracker deviation (default to True)
             alert_pref_tg = config.get("alert_preferences", {}).get("tracker_deviation", {}).get("telegram", True)
-            
+
             ncu_counts = {}
             for t in unique_data:
                 ncu = t.get("ncu", "Unknown")
                 ncu_counts[ncu] = ncu_counts.get(ncu, 0) + 1
-                
+
             ncu_str = ", ".join([f"{str(k).replace('&', '&amp;').replace('<', '&lt;')}: {v}" for k, v in ncu_counts.items()])
-            
+
             if critical_dev > 0 and alert_pref_tg:
-                msg = f"📡 <b>New Tracker Data Received</b>\n\n" \
+                msg = f"🚨 <b>Tracker Deviation Alert</b>\n\n" \
                       f"• <b>Total Units:</b> {total_trackers}\n" \
                       f"• <b>NCUs:</b> {ncu_str}\n" \
-                      f"• <b>Critical Deviations (>{dev_threshold}°):</b> {critical_dev}\n"
-                      
+                      f"• <b>Deviating (&gt;{dev_threshold}°):</b> {critical_dev}\n"
+
+                for t in deviating[:10]:
+                    ncu = str(t.get("ncu", "?")).replace("&", "&amp;").replace("<", "&lt;")
+                    tcu = str(t.get("tcu", "?")).replace("&", "&amp;").replace("<", "&lt;")
+                    tno = t.get("tracker_no")
+                    label = f"{ncu}-{tcu}" + (f" ({tno})" if tno else "")
+                    msg += f"  ⚠️ <code>{label}</code>: actual {t['actual_angle']}° vs target {t['target_angle']}° (Δ{t['_deviation']:.1f}°)\n"
+                if critical_dev > 10:
+                    msg += f"  … and {critical_dev - 10} more\n"
+
                 if duplicates:
                     msg += f"\n⚠️ <b>Duplicates filtered:</b> {len(duplicates)}"
-                    
-                resp = requests.post(f"https://api.telegram.org/bot{token}/sendMessage", 
+
+                resp = requests.post(f"https://api.telegram.org/bot{token}/sendMessage",
                              json={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"}, timeout=15)
                 resp.raise_for_status()
-                logging.info("Telegram summary alert sent due to critical deviations.")
+                logging.info(f"Telegram deviation alert sent: {[t.get('tracker_no') or t.get('tcu') for t in deviating]}")
             else:
                 logging.info(f"No critical deviations ({critical_dev}) or Telegram alert disabled ({alert_pref_tg}). Skipping Telegram alert.")
     except Exception as te:

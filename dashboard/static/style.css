@@ -3465,3 +3465,33 @@ section>h2 {
   }
 }
 
+/* =========================================================
+   VCOM Outage Alert Banner
+   ========================================================= */
+.vcom-down-banner {
+  background: linear-gradient(90deg, #dc2626 0%, #ef4444 50%, #b91c1c 100%);
+  color: #ffffff;
+  padding: 12px 24px;
+  text-align: center;
+  font-weight: 600;
+  font-size: 0.95rem;
+  letter-spacing: 0.03em;
+  box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
+  border-bottom: 2px solid #f87171;
+  position: relative;
+  z-index: 1000;
+  animation: pulse-banner 2s infinite alternate;
+}
+
+.vcom-banner-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+@keyframes pulse-banner {
+  0% { box-shadow: 0 0 10px rgba(239, 68, 68, 0.4); }
+  100% { box-shadow: 0 0 25px rgba(239, 68, 68, 0.8); }
+}
+

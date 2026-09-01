@@ -111,37 +111,110 @@ def _is_on_login_page(page) -> bool:
         return False
 
 
+from db.vcom_status_helpers import save_vcom_status, get_vcom_status
+
+def check_and_update_vcom_health(page) -> bool:
+    """
+    Check if the current page displays a VCOM outage (HTTP 404, 502, 503, 504, or Nginx error page).
+    Updates vcom_status.json and returns True if healthy, False if down.
+    """
+    try:
+        if page.is_closed():
+            save_vcom_status("down", 0, "Browser page is closed")
+            return False
+
+        url = page.url.lower()
+        title = ""
+        try:
+            title = page.title().lower()
+        except Exception:
+            pass
+
+        content_snippet = ""
+        try:
+            content_snippet = page.content()[:3000].lower()
+        except Exception:
+            pass
+
+        # Error signatures for Nginx / HTTP 404 / 502 / 503 / 504
+        is_404 = "404 not found" in title or "404 not found" in content_snippet
+        is_502 = "502 bad gateway" in title or "502 bad gateway" in content_snippet
+        is_503 = "503 service" in title or "503 service" in content_snippet
+        is_504 = "504 gateway" in title or "504 gateway" in content_snippet
+        is_nginx_err = "nginx" in content_snippet and ("404" in content_snippet or "error" in content_snippet or "502" in content_snippet or "503" in content_snippet or "not found" in content_snippet)
+
+        if is_404 or is_502 or is_503 or is_504 or is_nginx_err:
+            code = 404 if is_404 else (502 if is_502 else (503 if is_503 else (504 if is_504 else 404)))
+            error_desc = f"HTTP {code} Not Found / Error (nginx)" if is_nginx_err or is_404 else f"HTTP {code} Error"
+            msg = f"Portale VCOM non raggiungibile ({error_desc})"
+            save_vcom_status("down", code, msg)
+            logger.error(f"[VCOM OUTAGE DETECTED] {msg} — URL: {page.url}")
+            return False
+
+        # If we successfully reached VCOM or evaluation section
+        if "meteocontrol" in url or "valutazione" in url or "evaluation" in url or _is_on_evaluation_page(page):
+            save_vcom_status("online", 200, "")
+            return True
+
+    except Exception as e:
+        logger.warning(f"Error during VCOM health check: {e}")
+
+    return True
+
+
 def ensure_session(page) -> bool:
     """
     Check the current page state and act accordingly:
+    - Detect 404/50x/Nginx outage screens → update status to 'down' and return False
     - Already on evaluation page → do nothing, return True
     - On login page → do full login, return True
     - Anywhere else → navigate to evaluation, return True/False
     Does NOT re-submit credentials if the session is still valid.
     """
     try:
+        if not check_and_update_vcom_health(page):
+            return False
+
         if _is_on_evaluation_page(page):
             logger.info("Session OK — already on evaluation page.")
+            save_vcom_status("online", 200, "")
             return True
 
         if _is_on_login_page(page):
             logger.warning("Login page detected — re-authenticating...")
             login(page)
-            return True
+            return check_and_update_vcom_health(page)
 
         # Unknown state: navigate to the evaluation URL
         logger.warning(f"Unexpected page ({page.url[:60]}) — navigating back...")
         cfg = load_config()
-        page.goto(cfg["SYSTEM_URL"], timeout=60_000)
+        response = page.goto(cfg["SYSTEM_URL"], timeout=60_000)
         page.wait_for_load_state("networkidle", timeout=30_000)
+
+        if response and response.status >= 400:
+            msg = f"HTTP {response.status} Error on navigation"
+            save_vcom_status("down", response.status, msg)
+            logger.error(f"[VCOM OUTAGE] HTTP {response.status} returned from {cfg['SYSTEM_URL']}")
+            return False
+
+        if not check_and_update_vcom_health(page):
+            return False
 
         if _is_on_login_page(page):
             login(page)
 
-        return _is_on_evaluation_page(page)
+        healthy = _is_on_evaluation_page(page) and check_and_update_vcom_health(page)
+        if healthy:
+            save_vcom_status("online", 200, "")
+        return healthy
 
     except Exception as e:
         logger.error(f"Session check error: {e}")
+        err_str = str(e).lower()
+        if "err_connection" in err_str or "err_name_not_resolved" in err_str or "timeout" in err_str:
+            save_vcom_status("down", 503, f"Impossibile connettersi a VCOM ({e})")
+        else:
+            check_and_update_vcom_health(page)
         return False
 
 
@@ -366,13 +439,6 @@ def main() -> None:
             is_headless = os.environ.get("VCOM_HEADLESS", "false").lower() == "true"
             # Use a persistent context to save login cookies/session
             user_data_dir = ROOT / "playwright_profile"
-            context = p.chromium.launch_persistent_context(
-                user_data_dir=str(user_data_dir),
-                headless=is_headless,
-                viewport={"width": 1450, "height": 900}
-            )
-            # Use existing page if context already has one, otherwise create new
-            page = context.pages[0] if context.pages else context.new_page()
 
             # Track the calendar date this process was launched on.
             # Used to detect when a new day has started for the 2 AM restart.
@@ -387,13 +453,6 @@ def main() -> None:
             elif wake_reason != "trigger":
                 logger.info("Starting initial extraction cycle...")
 
-            print("[EXTRACTION] Verifying VCOM Session...", flush=True)
-            try:
-                ensure_session(page)
-            except Exception as e:
-                logger.error(f"Initial session check failed: {e}. Will retry in main loop.")
-                # Don't raise, let the while loop handle it
-
             cycle_count = 1
             while True:
                 busy_path.touch()
@@ -403,12 +462,19 @@ def main() -> None:
                 watchdog.daemon = True
                 watchdog.start()
 
+                context = None
                 try:
-                    if page.is_closed():
-                        logger.warning("Browser page was closed. Reopening...")
-                        page = context.new_page()
-                        login(page)
+                    logger.info(f"Launching fresh browser context for cycle #{cycle_count}...")
+                    context = p.chromium.launch_persistent_context(
+                        user_data_dir=str(user_data_dir),
+                        headless=is_headless,
+                        viewport={"width": 1450, "height": 900},
+                        args=["--disable-dev-shm-usage"]
+                    )
+                    page = context.pages[0] if context.pages else context.new_page()
 
+                    print("[EXTRACTION] Verifying VCOM Session...", flush=True)
+                    ensure_session(page)
                     run_extraction_cycle(page, cycle_count)
 
                 except Exception as e:
@@ -416,13 +482,14 @@ def main() -> None:
                         f"FATAL Exception in cycle #{cycle_count}: {e}\n{traceback.format_exc()}"
                     )
                     print(f"[EXTRACTION] Fatal Error in cycle: {e}", flush=True)
-                    try:
-                        if not page.is_closed():
-                            login(page)
-                    except Exception:
-                        pass
 
                 finally:
+                    if context:
+                        try:
+                            context.close()
+                            logger.info("Browser context closed after cycle to release RAM.")
+                        except Exception:
+                            pass
                     _write_last_cycle_time()  # ← persist completion/attempt timestamp
                     # Cancel the watchdog timer as the cycle has finished
                     watchdog.cancel()
@@ -444,13 +511,11 @@ def main() -> None:
 
                 # Sleep for the configured interval (crash-resistant)
                 interval = _get_interval_minutes()
-                logger.info(f"Cycle #{cycle_count} done. Sleeping {interval} min...")
+                logger.info(f"Cycle #{cycle_count} done. Sleeping {interval} min (Chrome RAM released)...")
                 if _sleep_remaining(interval, trigger_path, start_date) == "restart":
                     _do_daily_restart()
 
                 cycle_count += 1
-
-            context.close()
 
     finally:
         if busy_path.exists():

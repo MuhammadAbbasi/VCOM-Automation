@@ -29,6 +29,10 @@ extracted_data/
 db/*.db
 db/*.db-wal
 db/*.db-shm
+db/vcom_status.json
+db/backups/
+backup_plantmap_*/
+graphify-out/
 *.xlsx
 *.xls
 *.csv

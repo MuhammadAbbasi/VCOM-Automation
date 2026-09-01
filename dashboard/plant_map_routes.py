@@ -12,7 +12,7 @@ import json
 import sys
 from pathlib import Path
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, Query, Depends, Request
+from fastapi import APIRouter, HTTPException, Query, Depends, Request, Body
 
 # Add parent to path for imports
 DASHBOARD_DIR = Path(__file__).resolve().parent
@@ -191,3 +191,74 @@ async def get_surveyed_inverter_route(
         return await asyncio.to_thread(get_inverter_detail, id, date)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error building inverter detail: {e}")
+
+
+@router.get("/surveyed/serials/issues")
+async def get_serial_issues_route():
+    """Duplicate, malformed or annotated serials in the source mapping."""
+    try:
+        from db.surveyed_map_helpers import get_serial_issues
+        return await asyncio.to_thread(get_serial_issues)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error checking serials: {e}")
+
+
+@router.post("/surveyed/serials/update")
+async def update_serial_route(payload: dict = Body(...)):
+    """Record a panel replacement.
+
+    Appends to an override log; the workbook is never rewritten, and the
+    previous serial is kept on the entry.
+    """
+    try:
+        from db.surveyed_map_helpers import record_serial_change
+        res = await asyncio.to_thread(
+            record_serial_change,
+            payload.get("string"), payload.get("module"), payload.get("serial"),
+            payload.get("by"), payload.get("note"))
+        if res.get("error"):
+            raise HTTPException(status_code=400, detail=res["error"])
+        return res
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error recording change: {e}")
+
+
+
+@router.get("/surveyed/serials/find")
+async def find_serial_route(q: str = Query(..., description="serial or fragment")):
+    """Locate a panel by serial, including serials since replaced."""
+    try:
+        from db.surveyed_map_helpers import find_serial
+        return await asyncio.to_thread(find_serial, q)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error searching serials: {e}")
+
+
+@router.get("/surveyed/serials/problems")
+async def serial_problems_route():
+    """Where the defective serials sit, for the map to flag."""
+    try:
+        from db.surveyed_map_helpers import serial_problem_locations
+        return await asyncio.to_thread(serial_problem_locations)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error locating serials: {e}")
+
+
+@router.get("/surveyed/serials/export")
+async def export_serials_route():
+    """Every panel as CSV: the serial in place now, the one it replaced, and a
+    note carrying that history. UTF-8 BOM so Excel opens it directly."""
+    try:
+        from fastapi.responses import Response
+        from db.surveyed_map_helpers import serials_export_csv
+        from datetime import date
+        body = await asyncio.to_thread(serials_export_csv)
+        name = "seriali_pannelli_%s.csv" % date.today().isoformat()
+        return Response(
+            content=body,
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": 'attachment; filename="%s"' % name})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error exporting serials: {e}")

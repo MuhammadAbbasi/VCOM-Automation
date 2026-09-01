@@ -102,6 +102,22 @@
 .svm-k { color: var(--muted); }
 .svm-v { text-align: right; font-variant-numeric: tabular-nums; word-break: break-all; }
 .svm-hint { margin-top: 0.7rem; font-size: 0.78rem; color: var(--muted); }
+.svm-fold > summary, .svm-pgroup > summary { cursor: pointer; list-style: none; }
+.svm-fold > summary::-webkit-details-marker,
+.svm-pgroup > summary::-webkit-details-marker { display: none; }
+.svm-fold > summary::after, .svm-pgroup > summary::after {
+  content: "\25be"; color: var(--text); font-size: 0.95rem; line-height: 1; opacity: .75; margin-left: 0.4rem;
+  transition: transform .15s; }
+.svm-fold[open] > summary::after,
+.svm-pgroup[open] > summary::after { transform: rotate(180deg); display: inline-block; }
+.svm-pgroup { border-left: 3px solid var(--border); border-radius: 6px;
+  background: rgba(255,255,255,0.04); }
+.svm-pgroup + .svm-pgroup { margin-top: 0.3rem; }
+.svm-pgroup-head { display: flex; align-items: center; gap: 0.45rem;
+  padding: 0.4rem 0.55rem; font-size: 0.78rem; }
+.svm-pgroup-head .svm-prob-el { margin-left: auto; font-variant-numeric: tabular-nums; }
+.svm-pgroup > .svm-prob { border-left: 0; border-radius: 0; background: none; }
+.svm-pgroup > .svm-prob:last-child { border-bottom-right-radius: 6px; }
 .svm-none { font-size: 0.8rem; color: var(--muted); }
 
 .svm-sub { margin-top: 0.8rem; }
@@ -163,9 +179,9 @@
 
 
 /* individual panels, drawn only when they are large enough to read */
-.svm-panel { fill: rgba(255,255,255,0.05); stroke: rgba(10,12,17,0.85);
-  stroke-width: 0.5; vector-effect: non-scaling-stroke; cursor: crosshair; }
-.svm-panel:hover { fill: rgba(255,255,255,0.28); }
+.svm-panel { fill: rgba(255,255,255,0.06); stroke: #0a0c11;
+  stroke-width: 1; vector-effect: non-scaling-stroke; cursor: crosshair; }
+.svm-panel:hover { fill: rgba(255,255,255,0.32); }
 
 /* inverter drill-down */
 .svm-prod { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem 0.7rem;
@@ -205,3 +221,53 @@
 .svm-ramp i { flex: 1; }
 .svm-ramp-ends { display: flex; justify-content: space-between; font-size: 0.66rem;
   color: var(--muted); font-variant-numeric: tabular-nums; margin-bottom: 0.3rem; }
+
+
+/* recording a panel replacement */
+.svm-serial-edit { border: 0; background: transparent; color: var(--muted);
+  cursor: pointer; font-size: 0.8rem; padding: 0 0.2rem; border-radius: 4px; }
+.svm-serial-edit:hover { color: var(--accent); background: rgba(255,255,255,0.08); }
+.svm-serial-badge { font-size: 0.6rem; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--yellow); border: 1px solid var(--yellow); border-radius: 999px;
+  padding: 0 0.3rem; }
+.svm-serial-form { display: flex; flex-direction: column; gap: 0.3rem;
+  margin: 0.35rem 0 0.5rem 1.6rem; padding: 0.5rem; border-radius: 8px;
+  background: rgba(59,130,246,0.10); }
+.svm-serial-input, .svm-serial-who, .svm-serial-note {
+  width: 100%; padding: 0.3rem 0.45rem; border-radius: 6px; color: var(--text);
+  border: 1px solid var(--border); background: var(--surface); font-size: 0.76rem; }
+.svm-serial-input { font-family: ui-monospace, Consolas, monospace; }
+.svm-serial-actions { display: flex; gap: 0.35rem; }
+.svm-serial-msg { font-size: 0.72rem; color: var(--muted); }
+.svm-serial-msg.bad { color: var(--red); }
+
+.svm-issue { display: block; width: 100%; text-align: left; border: 0;
+  border-left: 3px solid var(--yellow); background: rgba(255,255,255,0.04);
+  color: var(--text); cursor: pointer; padding: 0.4rem 0.55rem;
+  border-radius: 0 7px 7px 0; margin-bottom: 0.3rem; }
+.svm-issue:hover { background: rgba(255,255,255,0.09); }
+.svm-issue-t { font-size: 0.74rem; font-weight: 600; }
+.svm-issue-m { font-size: 0.7rem; color: var(--muted); word-break: break-all; }
+
+.svm-export { text-decoration: none; display: inline-flex; align-items: center; }
+
+
+/* defective serials, flagged on the plan */
+.svm-flag { fill: var(--yellow); stroke: #0a0c11; stroke-width: 1;
+  vector-effect: non-scaling-stroke; pointer-events: all; cursor: help; }
+.svm-panel.bad { fill: var(--yellow); stroke: #0a0c11; }
+.svm-panel.hit { fill: var(--accent); stroke: #fff; stroke-width: 1.2; }
+.svm-res-old { color: var(--muted); text-decoration: line-through; }
+
+
+/* scale bar and north arrow */
+.svm-foot { position: absolute; right: 0.75rem; bottom: 0.75rem; display: flex;
+  align-items: flex-end; gap: 0.6rem; }
+.svm-north, .svm-scale { background: rgba(10,12,17,0.92); border: 1px solid var(--border);
+  border-radius: 8px; padding: 0.35rem 0.5rem; color: var(--muted); }
+.svm-north { display: grid; place-items: center; gap: 0; line-height: 1; }
+.svm-north span { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.08em; }
+.svm-scale { display: flex; flex-direction: column; gap: 0.2rem; align-items: flex-start; }
+.svm-scale span { font-size: 0.66rem; font-variant-numeric: tabular-nums; }
+.svm-scale-rule { height: 5px; min-width: 12px; border: 1px solid var(--muted);
+  border-top: 0; border-radius: 0 0 2px 2px; }

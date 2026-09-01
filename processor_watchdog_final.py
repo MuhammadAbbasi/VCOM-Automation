@@ -1534,6 +1534,43 @@ def _evaluate_alarms(date_str, settings, macro_health, inverter_health, plant_dr
             if should_alert("recovery", "telegram"):
                 add_tg_msg("RIPRISTINO", f"✅ LINK MQTT ripristinato")
 
+    # --- VCOM Outage Alert ---
+    vcom_alarm_id = "VCOM_PORTAL_DOWN"
+    checked_ids.add(vcom_alarm_id)
+    try:
+        from db.vcom_status_helpers import get_vcom_status
+        vcom_info = get_vcom_status()
+    except Exception:
+        vcom_info = {"status": "online"}
+
+    if vcom_info.get("status") == "down":
+        err_msg = vcom_info.get("error_message") or "Portale VCOM non raggiungibile (Nginx / Errore HTTP)"
+        http_code = vcom_info.get("http_code", 404)
+        msg = f"PORTALE VCOM DOWN ({err_msg})"
+        
+        if vcom_alarm_id in prev_alarm_map:
+            alarm = prev_alarm_map[vcom_alarm_id]
+            alarm["message"] = msg
+        else:
+            alarm = {
+                "id": vcom_alarm_id,
+                "inverter": "VCOM",
+                "type": "PORTALE VCOM DOWN",
+                "severity": "red",
+                "trip_time": timestamp,
+                "message": msg
+            }
+        current_active.append(alarm)
+        if should_send_tg(alarm):
+            fire_tg(alarm, "VCOM", f"🚨 *ALLARME PORTALE VCOM DOWN*\nImpossibile raggiungere vcom.meteocontrol.com\n_Dettaglio_: `{err_msg}` (Codice HTTP: {http_code})")
+    else:
+        if vcom_alarm_id in prev_alarm_map:
+            past_alarm = prev_alarm_map[vcom_alarm_id]
+            past_alarm["recovery_time"] = timestamp
+            historical_trail.append(past_alarm)
+            checked_ids.add(vcom_alarm_id)
+            add_tg_msg("RIPRISTINO", "✅ *PORTALE VCOM RIPRISTINATO*\nIl portale Meteocontrol VCOM è di nuovo raggiungibile.")
+
     # --- Tracker Comms Alert ---
     try:
         from db.db_manager import get_all_tracker_status

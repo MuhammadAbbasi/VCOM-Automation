@@ -20,6 +20,15 @@
   var SEV = ["red", "yellow", "grey", "green"];
   var SEV_LABEL = { red: "Critico", yellow: "Attenzione", grey: "Dati assenti", green: "Regolare" };
   var RANK = { green: 0, grey: 1, yellow: 2, red: 3 };
+  function worseOf(a, b) { return RANK[a] >= RANK[b] ? a : b; }
+  function tally(map) {
+    var c = { green: 0, yellow: 0, red: 0, grey: 0 };
+    Object.keys(map || {}).forEach(function (k) {
+      var s = (map[k] || {}).status || "grey";
+      c[s] = (c[s] || 0) + 1;
+    });
+    return c;
+  }
   var TX_COL = { TX1: "#3b82f6", TX2: "#8b5cf6", TX3: "#6366f1" };
   var AREA_COL = { 1: "#3b82f6", 2: "#60a5fa", 3: "#8b5cf6",
                    4: "#a78bfa", 5: "#6366f1", 6: "#818cf8" };
@@ -129,6 +138,7 @@
     this.layout = null; this.state = null;
     this.filter = null; this.sel = null;
     this.view = "string";      // string | tracker
+    this.scope = "plant";      // plant | tracker - which health is on show
     this.colour = "status";    // status | tx | area
     this.serialMode = false;
     this.k = 1; this.ox = 0; this.oy = 0; this.fit = 1;
@@ -171,6 +181,10 @@
         if (v === "serial") self.ensureCoverage();
         self.paint();
       });
+    this.segScope = group("Monitoraggio", [["plant", "Impianto"], ["tracker", "Tracker"]],
+      function () { return self.scope; },
+      function (v) { self.scope = v; self.sel = null; self.applyScope(); self.paint(); });
+    modes.appendChild(this.segScope);
     modes.appendChild(this.segView); modes.appendChild(this.segCol);
 
     // one click to the physical picture of the site
@@ -189,9 +203,16 @@
       if (self.serialMode && self.view !== "string") {
         self.view = "string"; self.draw(); self.paint();
       }
+      if (self.serialMode) self.loadSerialProblems();
+      self.drawSerialProblems();
       self.renderDetail();
     };
     modes.appendChild(this.serialBtn);
+
+    this.exportBtn = el("a", "svm-btn svm-export", "Scarica CSV seriali");
+    this.exportBtn.href = API + "/serials/export";
+    this.exportBtn.title = "Seriale attuale, quello sostituito e la nota, per ogni pannello";
+    modes.appendChild(this.exportBtn);
 
     var tools = el("div", "svm-tools");
     this.search = el("input", "svm-search");
@@ -216,7 +237,18 @@
     mapwrap.appendChild(this.svg);
     this.results = el("div", "svm-results");
     this.legend = el("div", "svm-legend");
+    var foot = el("div", "svm-foot");
+    var north = el("div", "svm-north");
+    north.innerHTML = '<svg width="15" height="15" viewBox="0 0 17 17" aria-hidden="true">'
+      + '<path d="M8.5 1 L12 15 L8.5 11.6 L5 15 Z" fill="currentColor"/></svg>';
+    north.appendChild(el("span", null, "N"));
+    this.scale = el("div", "svm-scale");
+    this.scaleText = el("span", null, "100 m");
+    this.scaleRule = el("div", "svm-scale-rule");
+    this.scale.appendChild(this.scaleText); this.scale.appendChild(this.scaleRule);
+    foot.appendChild(north); foot.appendChild(this.scale);
     mapwrap.appendChild(this.results); mapwrap.appendChild(this.legend);
+    mapwrap.appendChild(foot);
 
     grid.appendChild(side); grid.appendChild(mapwrap);   // panel on the left
     this.tip = el("div", "svm-tip");
@@ -232,12 +264,77 @@
       self.zoomTo(self.k * Math.pow(1.0016, -e.deltaY), e.clientX - r.left, e.clientY - r.top);
     }, { passive: false });
     window.addEventListener("resize", function () { self.measure(); self.apply(); });
+    window.addEventListener("keydown", function (e) {
+      if (e.key !== "Escape" || !self.root.isConnected) return;
+      if (document.activeElement === self.search) return;
+      self.results.classList.remove("on");
+      self.clearSelection();
+    });
 
     this.load();
     setInterval(function () { self.refresh(); }, REFRESH_MS);
   };
 
-  P.syncSegs = function () { this.segView.sync(); this.segCol.sync(); };
+  P.syncSegs = function () {
+    this.segScope.sync(); this.segView.sync(); this.segCol.sync();
+  };
+
+  /* The server sends both healths in one payload. This projects it onto the one
+     being looked at, so every reader downstream stays unchanged. */
+  P.applyScope = function () {
+    var raw = this.raw, L = this.layout || {};
+    if (!raw) { this.state = null; return; }
+    var st = {}, k;
+    for (k in raw) if (Object.prototype.hasOwnProperty.call(raw, k)) st[k] = raw[k];
+
+    if (this.scope !== "tracker") {
+      // plant: the tracker feed contributes nothing and is not listed
+      var neutral = {};
+      Object.keys(raw.trackers || {}).forEach(function (id) {
+        neutral[id] = { status: "green" };
+      });
+      st.trackers = neutral;
+      st.problems = (raw.problems || []).filter(function (p) { return p.scope !== "tracker"; });
+      st.counts = {};
+      ["strings", "mppts", "inverters"].forEach(function (c) {
+        if (raw.counts && raw.counts[c]) st.counts[c] = raw.counts[c];
+      });
+    } else {
+      // tracker: everything takes the state of the tracker it sits on, and the
+      // DC figures are carried through so the panels still have them
+      var strings = {}, worst = {};
+      (L.strings || []).forEach(function (s) {
+        var t = (raw.trackers || {})[s.tracker] || {};
+        var v = t.status || "grey";
+        var row = {}, f;
+        var src = (raw.strings || {})[s.id] || {};
+        for (f in src) if (Object.prototype.hasOwnProperty.call(src, f)) row[f] = src[f];
+        row.status = v;
+        row.note = t.reason || (v === "grey" ? "nessun dato dal TCU" : null);
+        strings[s.id] = row;
+        worst[s.mppt] = worseOf(worst[s.mppt], v);
+        worst[s.inverter] = worseOf(worst[s.inverter], v);
+      });
+      st.strings = strings;
+      var mppts = {}, invs = {};
+      (L.mppts || []).forEach(function (m) { mppts[m.id] = { status: worst[m.id] || "grey" }; });
+      (L.inverters || []).forEach(function (i) { invs[i.id] = { status: worst[i.id] || "grey" }; });
+      st.mppts = mppts; st.inverters = invs;
+      st.problems = (raw.problems || []).filter(function (p) { return p.scope === "tracker"; });
+      st.counts = { trackers: tally(raw.trackers), strings: tally(strings) };
+    }
+
+    var leg = {}, order = [];
+    st.problems.forEach(function (p) {
+      var e = leg[p.key];
+      if (!e) { e = leg[p.key] = { key: p.key, label: p.key, severity: p.severity, count: 0 };
+                order.push(e); }
+      e.count += 1;
+      e.severity = worseOf(e.severity, p.severity);
+    });
+    st.legend = order.sort(function (a, b) { return RANK[b.severity] - RANK[a.severity]; });
+    this.state = st;
+  };
 
   P.load = function () {
     var self = this;
@@ -258,7 +355,9 @@
     var self = this;
     return fetch(API + "/state", { credentials: "same-origin" })
       .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (j) { if (j && !j.error) { self.state = j; self.paint(); } });
+      .then(function (j) {
+        if (j && !j.error) { self.raw = j; self.applyScope(); self.paint(); }
+      });
   };
 
   /* ---------------------------------------------------------------- draw */
@@ -268,8 +367,12 @@
     L.trackers.forEach(function (t) {
       xs.push(t.x - t.w / 2); xs.push(t.x + t.w / 2); ys.push(t.y0); ys.push(t.y1);
     });
-    (L.transformers || []).concat(L.pond || []).forEach(function (o) {
-      o.p.forEach(function (p) { xs.push(p[0]); ys.push(p[1]); });
+    // substations are a point, not an outline, since the DXF has no footprint
+    (L.transformers || []).forEach(function (o) {
+      if (o.lx != null) { xs.push(o.lx); ys.push(o.ly); }
+    });
+    (L.pond || []).forEach(function (o) {
+      (o.p || []).forEach(function (p) { xs.push(p[0]); ys.push(p[1]); });
     });
     this.b = { x0: Math.min.apply(null, xs) - PAD, x1: Math.max.apply(null, xs) + PAD,
                y0: Math.min.apply(null, ys) - PAD, y1: Math.max.apply(null, ys) + PAD };
@@ -288,10 +391,10 @@
     this.scene = sv("g", {});
     var gSite = sv("g", {}), gTrk = sv("g", {}), gPan = sv("g", {}),
         gDiv = sv("g", {}), gMark = sv("g", {}), gDev = sv("g", {}),
-        gSel = sv("g", {}), gLab = sv("g", {});
-    [gSite, gTrk, gPan, gDiv, gMark, gDev, gSel, gLab]
+        gFlag = sv("g", {}), gSel = sv("g", {}), gLab = sv("g", {});
+    [gSite, gTrk, gPan, gDiv, gMark, gDev, gFlag, gSel, gLab]
       .forEach(function (g) { self.scene.appendChild(g); });
-    this.gPan = gPan; this.gMark = gMark;
+    this.gPan = gPan; this.gMark = gMark; this.gFlag = gFlag;
     this.svg.appendChild(this.scene);
 
     (L.pond || []).forEach(function (o) { gSite.appendChild(sv("path", { class: "svm-pond", d: d(o.p, true) })); });
@@ -326,15 +429,21 @@
       }
     });
 
+    // The DXF has no substation footprint, so a marker sits at the surveyed
+    // label position rather than an invented outline. Sized on screen, like the
+    // inverter stations.
     this.txLabels = [];
+    this.txShapes = [];
     (L.transformers || []).forEach(function (o) {
-      var rect = minAreaRect(o.p);
-      gDev.appendChild(sv("path", { class: "svm-tx", d: d(rect, true) }));
-      var hit = sv("path", { class: "svm-hit", d: d(rect, true) });
-      hit.dataset.tx = o.id; gDev.appendChild(hit);
+      var cx = px(o.lx != null ? o.lx : o.cx), cy = py(o.ly != null ? o.ly : o.cy);
+      var shape = sv("rect", { class: "svm-tx", rx: 0.4 });
+      var hit = sv("rect", { class: "svm-hit" });
+      hit.dataset.tx = o.id;
+      gDev.appendChild(shape); gDev.appendChild(hit);
+      self.txShapes.push({ shape: shape, hit: hit, cx: cx, cy: cy });
       var lab = sv("text", { class: "svm-txlab", "text-anchor": "middle" });
       lab.textContent = o.id;
-      lab.dataset.x = px(o.cx); lab.dataset.y = py(o.cy) - 9;
+      lab.dataset.x = cx; lab.dataset.y = cy - 9;
       gLab.appendChild(lab); self.txLabels.push(lab);
     });
 
@@ -439,7 +548,7 @@
       o.shape.setAttribute("class", "svm-inv s-" + s);
     });
 
-    this.paintDim();
+    this.paintDim(); this.drawSerialProblems();
     this.drawCounts(); this.drawLegend(); this.drawProblems();
     this.renderDetail(); this.syncSegs(); this.apply();
   };
@@ -450,7 +559,8 @@
     if (!st) return;
     [["strings", "Stringhe"], ["mppts", "MPPT"], ["trackers", "Tracker"], ["inverters", "Inverter"]]
       .forEach(function (pair) {
-        var g = (st.counts || {})[pair[0]] || {};
+        var g = (st.counts || {})[pair[0]];
+        if (!g) return;
         var box = el("div", "svm-count");
         box.appendChild(el("span", "svm-count-label", pair[1]));
         var row = el("div", "svm-count-row");
@@ -465,6 +575,13 @@
       });
     if (!st.has_snapshot) this.counts.appendChild(el("div", "svm-count svm-nodata",
       "Nessuno snapshot per " + st.date));
+    // the tracker feed is incomplete, so say so rather than let 319 grey
+    // trackers read as a plant fault
+    var tf = st.tracker_feed;
+    if (this.scope === "tracker" && tf && tf.reporting < tf.total) {
+      this.counts.appendChild(el("div", "svm-count svm-nodata",
+        "Dati tracker da " + tf.reporting + " di " + tf.total + " unità"));
+    }
   };
 
   P.filterSet = function () {
@@ -577,17 +694,43 @@
       this.problems.appendChild(el("div", "svm-none", "Nessun problema attivo."));
       return;
     }
-    var list = el("div", "svm-plist");
+    // 49 rows of one fault must not bury the single row that is different, so
+    // they are grouped by type. Small groups stay open; a flood folds behind
+    // its count and opens on click.
+    var groups = [], byKey = {};
     st.problems.forEach(function (p) {
-      var b = el("button", "svm-prob");
-      var top = el("div", "svm-prob-top");
-      top.appendChild(el("span", "svm-sw s-" + p.severity));
-      top.appendChild(el("span", "svm-prob-type", p.type || p.key));
-      top.appendChild(el("span", "svm-prob-el", p.element || ""));
-      b.appendChild(top);
-      if (p.message) b.appendChild(el("div", "svm-prob-msg", p.message));
-      b.onclick = function () { self.gotoProblem(p); };
-      list.appendChild(b);
+      var k = p.type || p.key || "ANOMALIA";
+      var g = byKey[k];
+      if (!g) { g = byKey[k] = { key: k, severity: p.severity, items: [] }; groups.push(g); }
+      g.items.push(p);
+      if (RANK[p.severity] > RANK[g.severity]) g.severity = p.severity;
+    });
+    groups.sort(function (a, b) {
+      return (RANK[b.severity] - RANK[a.severity]) || (b.items.length - a.items.length);
+    });
+
+    var list = el("div", "svm-plist");
+    groups.forEach(function (g) {
+      var box = document.createElement("details");
+      box.className = "svm-pgroup";
+      box.open = groups.length === 1 || g.items.length <= 8;
+      var sum = document.createElement("summary");
+      sum.className = "svm-pgroup-head";
+      sum.appendChild(el("span", "svm-sw s-" + g.severity));
+      sum.appendChild(el("span", "svm-prob-type", g.key));
+      sum.appendChild(el("span", "svm-prob-el", String(g.items.length)));
+      box.appendChild(sum);
+      g.items.forEach(function (p) {
+        var b = el("button", "svm-prob");
+        var top = el("div", "svm-prob-top");
+        top.appendChild(el("span", "svm-sw s-" + p.severity));
+        top.appendChild(el("span", "svm-prob-type", p.element || p.type || p.key));
+        b.appendChild(top);
+        if (p.message) b.appendChild(el("div", "svm-prob-msg", p.message));
+        b.onclick = function () { self.gotoProblem(p); };
+        box.appendChild(b);
+      });
+      list.appendChild(box);
     });
     this.problems.appendChild(list);
   };
@@ -678,9 +821,15 @@
     this.detail.innerHTML = "";
     if (!this.sel) {
       var m = (L && L.metadata) || {};
-      var h0 = el("div", "svm-side-head");
-      h0.appendChild(el("span", null, "Impianto"));
-      this.detail.appendChild(h0);
+      // the topology never changes, so it is reference material, not something
+      // to lead a monitoring view with. Folded away until asked for.
+      var d0 = document.createElement("details");
+      d0.className = "svm-fold";
+      var s0 = document.createElement("summary");
+      s0.className = "svm-side-head";
+      s0.appendChild(el("span", null, "Impianto"));
+      s0.appendChild(el("span", "svm-side-n", (m.strings || "-") + " stringhe"));
+      d0.appendChild(s0);
       var g0 = el("div", "svm-kv");
       [["Tracker", m.trackers], ["Stringhe", m.strings], ["MPPT", m.mppts],
        ["Inverter", m.inverters], ["Moduli", m.modules], ["Cabine", m.transformers]]
@@ -688,10 +837,13 @@
           g0.appendChild(el("span", "svm-k", p[0]));
           g0.appendChild(el("span", "svm-v", p[1] != null ? p[1] : "-"));
         });
-      this.detail.appendChild(g0);
+      d0.appendChild(g0);
+      this.detail.appendChild(d0);
       this.detail.appendChild(el("div", "svm-hint", this.serialMode
-        ? "Modalità seriali attiva. Clicca una stringa per vederne i 25 seriali."
+        ? "Modalità seriali attiva. Clicca una stringa per vederne i 25 seriali, "
+          + "e la matita per registrare una sostituzione."
         : "Clicca un elemento sulla mappa o un problema qui sotto."));
+      if (this.serialMode) this.renderSerialIssues();
       return;
     }
     var sel = this.sel;
@@ -713,12 +865,22 @@
       add("Tracker", s0.tracker); add("TCU", s0.tcu); add("NCU", s0.ncu);
       if (sel.kind !== "string") add("Stringhe", ss.length);
     }
-    if (sel.kind === "string") add("MPPT", s0 && s0.mppt);
+    if (sel.kind === "string" && st.strings && st.strings[sel.id]) {
+      var sd = st.strings[sel.id];
+      add("MPPT", s0 && s0.mppt);
+      add("Stato", SEV_LABEL[sd.status] || sd.status);
+      add("Corrente stringa", sd.per_string_a != null ? sd.per_string_a + " A" : null);
+      add("Corrente MPPT", sd.mppt_a != null
+        ? sd.mppt_a + " A su " + sd.mppt_exp_a + " A attesi" : null);
+      add("Nota", sd.note);
+    }
     if (sel.kind === "mppt" && st.mppts && st.mppts[sel.id]) {
       var mm = st.mppts[sel.id];
       add("Stato", SEV_LABEL[mm.status] || mm.status);
       add("Corrente", mm.v != null ? mm.v + " A" : null);
       add("Attesa", mm.exp != null ? mm.exp + " A" : null);
+      add("Rapporto", mm.ratio != null ? Math.round(mm.ratio * 100) + "%" : null);
+      add("Nota", mm.note);
     }
     if (sel.kind === "tracker" && st.trackers && st.trackers[sel.id]) {
       var tt = st.trackers[sel.id];
@@ -804,15 +966,31 @@
         ch.appendChild(row);
         body.appendChild(ch);
 
-        var th = j.thresholds || {};
-        var noon = (j.hour != null && j.hour <= 12);
+        var lowM = (j.mppts || []).filter(function (m) {
+          return m.status === "red" || m.status === "yellow";
+        });
+        if (lowM.length) {
+          var mb = el("div", "svm-sub");
+          mb.appendChild(el("div", "svm-sub-head",
+            "MPPT fuori soglia (" + lowM.length + ")"));
+          lowM.forEach(function (m) {
+            var r = el("button", "svm-chain-str");
+            r.appendChild(el("span", "svm-sw s-" + m.status));
+            r.appendChild(el("span", "svm-chain-sid", m.mppt.slice(-6)));
+            r.appendChild(el("span", "svm-chain-mppt", m.note || ""));
+            r.appendChild(el("span", "svm-chain-a",
+              (m.v != null ? m.v : "-") + " / "
+              + (m.exp != null ? m.exp.toFixed(1) : "-") + " A"));
+            r.onclick = function () { self.select({ kind: "mppt", id: m.mppt }); };
+            mb.appendChild(r);
+          });
+          body.appendChild(mb);
+        }
         body.appendChild(el("div", "svm-serial-head",
-          "Corrente per stringa = corrente MPPT / numero stringhe. Lo stato usa la "
-          + "corrente MPPT normalizzata su base 2 stringhe, come le soglie del watchdog. "
-          + "Soglie "
-          + (noon ? "mattino" : "pomeriggio") + ": verde ≥ "
-          + (noon ? th.morning_green : th.afternoon_green) + " A, giallo ≥ "
-          + (noon ? th.morning_yellow : th.afternoon_yellow) + " A."));
+          "Corrente per stringa = corrente MPPT / numero stringhe. Lo stato confronta "
+          + "la corrente misurata di ogni MPPT con quella attesa (mediana di impianto "
+          + "scalata, stessa lettura): rosso sotto il 10% (circuito aperto) o fra 40% e "
+          + "60% su MPPT a 2 stringhe (stringa persa), giallo sotto il 75%."));
 
         var list = el("div", "svm-chain");
         (j.trackers || []).forEach(function (t) {
@@ -842,6 +1020,7 @@
   };
 
   P.renderSerials = function (sel) {
+    var self = this;
     var box = el("div", "svm-sub svm-serials");
     box.appendChild(el("div", "svm-sub-head", "Seriali pannelli"));
     var body = el("div", "svm-serial-body", "Caricamento…");
@@ -866,17 +1045,7 @@
             list.appendChild(el("div", "svm-serial-group", s.string));
             last = s.string;
           }
-          var row = el("div", "svm-serial");
-          row.appendChild(el("span", "svm-serial-n", s.n));
-          var code = el("span", "svm-serial-code", s.serial);
-          code.title = "Clicca per copiare";
-          code.onclick = function () {
-            if (navigator.clipboard) navigator.clipboard.writeText(s.serial);
-            code.classList.add("copied");
-            setTimeout(function () { code.classList.remove("copied"); }, 900);
-          };
-          row.appendChild(code);
-          list.appendChild(row);
+          list.appendChild(self.serialRow(s, s.string || sel.id));
         });
         body.appendChild(list);
         if (j.unassigned && j.unassigned.length) {
@@ -888,11 +1057,149 @@
       .catch(function () { body.textContent = "Seriali non disponibili."; });
   };
 
+  /* One serial row: click the code to copy, the pencil to record a swap.
+     Changes are appended, never overwritten, so the previous value stays. */
+  P.serialRow = function (s, stringId) {
+    var self = this;
+    var row = el("div", "svm-serial");
+    row.appendChild(el("span", "svm-serial-n", s.n));
+    var code = el("span", "svm-serial-code", s.serial);
+    code.title = s.original_serial
+      ? "Originale " + s.original_serial + " - sostituito il "
+        + (s.changed_at || "").slice(0, 10) + (s.changed_by ? " da " + s.changed_by : "")
+      : "Clicca per copiare";
+    code.onclick = function () {
+      if (navigator.clipboard) navigator.clipboard.writeText(s.serial);
+      code.classList.add("copied");
+      setTimeout(function () { code.classList.remove("copied"); }, 900);
+    };
+    row.appendChild(code);
+    if (s.original_serial) row.appendChild(el("span", "svm-serial-badge", "sost."));
+    var edit = el("button", "svm-serial-edit", "\u270e");
+    edit.title = "Registra la sostituzione di questo pannello";
+    edit.onclick = function () { self.editSerial(row, s, stringId); };
+    row.appendChild(edit);
+    return row;
+  };
+
+  P.editSerial = function (row, s, stringId) {
+    var self = this;
+    if (row.nextSibling && row.nextSibling.classList &&
+        row.nextSibling.classList.contains("svm-serial-form")) {
+      row.parentNode.removeChild(row.nextSibling);
+      return;
+    }
+    var form = el("div", "svm-serial-form");
+    var input = el("input", "svm-serial-input");
+    input.value = s.serial;
+    input.spellcheck = false;
+    input.setAttribute("aria-label", "Nuovo seriale");
+    var who = el("input", "svm-serial-who");
+    who.placeholder = "operatore";
+    var note = el("input", "svm-serial-note");
+    note.placeholder = "nota (facoltativa)";
+    var save = el("button", "svm-btn", "Salva");
+    var cancel = el("button", "svm-btn", "Annulla");
+    var msg = el("div", "svm-serial-msg");
+    form.appendChild(input); form.appendChild(who); form.appendChild(note);
+    var actions = el("div", "svm-serial-actions");
+    actions.appendChild(save); actions.appendChild(cancel);
+    form.appendChild(actions); form.appendChild(msg);
+    row.parentNode.insertBefore(form, row.nextSibling);
+    input.focus(); input.select();
+
+    cancel.onclick = function () { form.parentNode.removeChild(form); };
+    save.onclick = function () {
+      msg.textContent = "Salvataggio…";
+      msg.className = "svm-serial-msg";
+      fetch(API + "/serials/update", {
+        method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ string: stringId, module: s.n,
+          serial: input.value, by: who.value, note: note.value })
+      }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (res) {
+          var j = res.j || {};
+          if (!res.ok || j.error || (j.detail && !j.ok)) {
+            msg.textContent = j.error || j.detail || "Salvataggio non riuscito.";
+            msg.className = "svm-serial-msg bad";
+            return;
+          }
+          form.parentNode.removeChild(form);
+          if (self.panelCache) self.panelCache = {};
+          if (self.panelPending) self.panelPending = {};
+          self.renderDetail();
+        })
+        .catch(function () {
+          msg.textContent = "Salvataggio non riuscito.";
+          msg.className = "svm-serial-msg bad";
+        });
+    };
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") save.onclick();
+      if (e.key === "Escape") cancel.onclick();
+    });
+  };
+
+  /* Problems in the serial mapping, so they can be corrected from here. */
+  P.renderSerialIssues = function () {
+    var self = this;
+    var box = el("div", "svm-sub");
+    var head = el("div", "svm-sub-head", "Anomalie nei seriali");
+    box.appendChild(head);
+    var body = el("div", null, "Controllo…");
+    box.appendChild(body);
+    this.detail.appendChild(box);
+    fetch(API + "/serials/issues", { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        body.innerHTML = "";
+        if (!j) { body.appendChild(el("div", "svm-none", "Non disponibile.")); return; }
+        if (!j.total) {
+          body.appendChild(el("div", "svm-none", "Nessuna anomalia."));
+        }
+        (j.duplicates || []).forEach(function (d) {
+          var b = el("button", "svm-issue");
+          b.appendChild(el("div", "svm-issue-t", "Seriale duplicato"));
+          b.appendChild(el("div", "svm-issue-m", d.serial + " su "
+            + d.first.string + " mod " + d.first.module + " e "
+            + d.second.string + " mod " + d.second.module));
+          b.onclick = function () { self.select({ kind: "string", id: d.second.string }); };
+          body.appendChild(b);
+        });
+        (j.malformed || []).forEach(function (d) {
+          var b = el("button", "svm-issue");
+          b.appendChild(el("div", "svm-issue-t", "Formato anomalo"));
+          b.appendChild(el("div", "svm-issue-m", d.serial + " su " + d.string
+            + " mod " + d.module));
+          b.onclick = function () { self.select({ kind: "string", id: d.string }); };
+          body.appendChild(b);
+        });
+        (j.stray_notes || []).forEach(function (d) {
+          var b = el("button", "svm-issue");
+          b.appendChild(el("div", "svm-issue-t", "Annotazione in cella seriale"));
+          b.appendChild(el("div", "svm-issue-m", d.tracker + ": " + d.text));
+          b.onclick = function () { self.select({ kind: "tracker", id: d.tracker }); };
+          body.appendChild(b);
+        });
+        if (j.changes_recorded) {
+          body.appendChild(el("div", "svm-serial-head",
+            j.changes_recorded + " sostituzioni registrate"));
+        }
+      })
+      .catch(function () { body.textContent = "Non disponibile."; });
+  };
+
   /* ---------------------------------------------------------------- search */
   P.runSearch = function () {
     var q = this.search.value.trim().toUpperCase(), self = this, L = this.layout;
     this.results.innerHTML = "";
     if (q.length < 2 || !L) { this.results.classList.remove("on"); return; }
+    // a serial is long and alphanumeric; ask the server, which holds all 20 200
+    if (/^[A-Z0-9]{4,}$/.test(q) && !/^(TX|TRACKER|TCU|AREA|INV|STR|MPPT)/.test(q)) {
+      clearTimeout(this._serialTimer);
+      this._serialTimer = setTimeout(function () { self.searchSerial(q); }, 220);
+    }
     var hits = [];
     L.trackers.forEach(function (t) { if (t.id.indexOf(q) >= 0) hits.push({ kind: "tracker", id: t.id }); });
     L.strings.forEach(function (s) { if (s.id.indexOf(q) >= 0) hits.push({ kind: "string", id: s.id }); });
@@ -908,6 +1215,128 @@
       self.results.appendChild(b);
     });
     this.results.classList.add("on");
+  };
+
+  /* Panels are only in the DOM at high zoom, so a serial hit selects its string,
+     zooms in far enough to draw panels, then rings the one module. */
+  P.searchSerial = function (q) {
+    var self = this;
+    fetch(API + "/serials/find?q=" + encodeURIComponent(q), { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (!j || !j.matches || !j.matches.length) return;
+        if (self.search.value.trim().toUpperCase() !== q) return;   // moved on
+        j.matches.forEach(function (m) {
+          var b = el("button", "svm-res");
+          var left = el("span", null, m.serial);
+          if (m.state !== "attuale") left.className = "svm-res-old";
+          b.appendChild(left);
+          b.appendChild(el("span", "svm-res-kind",
+            (m.tracker || "") + " · mod " + m.module +
+            (m.state === "attuale" ? "" : " (sostituito)")));
+          b.onclick = function () {
+            self.results.classList.remove("on");
+            self.search.blur();
+            self.gotoPanel(m.string, m.module);
+          };
+          self.results.appendChild(b);
+        });
+        self.results.classList.add("on");
+      })
+      .catch(function () {});
+  };
+
+  P.gotoPanel = function (stringId, module) {
+    var self = this;
+    if (this.view !== "string") { this.view = "string"; this.draw(); this.paint(); }
+    this.panelSel = null;
+    this.select({ kind: "string", id: stringId }, false);
+    // zoom onto the module itself, which also brings the panel layer in
+    var s = (this.layout.strings || []).filter(function (x) { return x.id === stringId; })[0];
+    var t = s && this.byTracker[s.tracker];
+    if (!t) return;
+    var idx = t.strings.indexOf(stringId);
+    var per = t.modules / (t.strings.length || 1);
+    var n = idx * per + (module - 1);
+    var pitch = (t.y0 - t.y1) / t.modules;
+    var y0 = this.py(t.y0) + n * pitch;
+    var m = 6;
+    var w = t.w + m * 2, h = pitch + m * 2;
+    this.k = Math.max(1, Math.min(60, Math.min(this.VW / w, this.VH / h)));
+    this.ox = -(this.px(t.x) - t.w / 2 - m) * this.k;
+    this.oy = -(y0 - m) * this.k;
+    this.clampPan(); this.apply();
+    this.panelSel = { tracker: t.id, n: n + 1, string: stringId };
+    this.wantSerial(t.id);
+    setTimeout(function () { self.markPanel(t.id, n + 1); self.renderDetail(); }, 60);
+  };
+
+  P.markPanel = function (trk, n) {
+    var sel = this.gPan && this.gPan.querySelector(
+      '[data-trk="' + trk + '"][data-panel="' + n + '"]');
+    if (sel) sel.classList.add("hit");
+  };
+
+  /* Defective serials get a marker on the plan, not only a list entry. */
+  P.loadSerialProblems = function () {
+    var self = this;
+    if (this._probPending) return;
+    this._probPending = 1;
+    fetch(API + "/serials/problems", { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        self.serialProblems = (j && j.problems) || [];
+        self.drawSerialProblems();
+      })
+      .catch(function () {});
+  };
+
+  P.drawSerialProblems = function () {
+    var self = this;
+    if (!this.gFlag) return;
+    while (this.gFlag.firstChild) this.gFlag.removeChild(this.gFlag.firstChild);
+    this.flagShapes = [];
+    this.badPanels = {};
+    if (!this.serialMode || !this.serialProblems) return;
+    this.serialProblems.forEach(function (p) {
+      var t = self.byTracker[p.tracker];
+      if (!t) return;
+      // the module the defect is on, so the flag points at the panel itself
+      var cy;
+      var n = null;
+      if (p.string && p.module) {
+        var idx = t.strings.indexOf(p.string);
+        if (idx >= 0) {
+          var per = t.modules / (t.strings.length || 1);
+          n = idx * per + (p.module - 1);
+          var pitch = (t.y0 - t.y1) / t.modules;
+          cy = self.py(t.y0) + n * pitch + pitch / 2;
+          self.badPanels[t.id + "#" + (n + 1)] = p;
+        }
+      }
+      if (cy == null) cy = self.py(t.y0) - 2;
+      var g = sv("g", { class: "svm-flag" });
+      g.appendChild(sv("path", { d: "M 0 -7 L 5 3 L -5 3 Z" }));
+      var title = document.createElementNS(NS, "title");
+      title.textContent = p.kind + ": " + (p.detail || "");
+      g.appendChild(title);
+      g.dataset.trk = t.id;
+      self.gFlag.appendChild(g);
+      self.flagShapes.push({ g: g, cx: self.px(t.x), cy: cy });
+    });
+    this.sizeFlags();
+  };
+
+  /* Flags are drawn in metres like everything else, so without this they grow
+     to fill the screen as you zoom in. */
+  P.sizeFlags = function () {
+    var pxPerM = this.fit * this.k;
+    if (!pxPerM || !isFinite(pxPerM)) return;
+    var s = 1 / pxPerM;
+    (this.flagShapes || []).forEach(function (o) {
+      o.g.setAttribute("transform",
+        "translate(" + o.cx + " " + o.cy + ") scale(" + s + ")");
+    });
   };
 
   /* ---------------------------------------------------------------- view */
@@ -936,10 +1365,10 @@
         if (n > 4000) return;
         var cx = self.px(t.x), ty0 = self.py(t.y0), ty1 = self.py(t.y1);
         if (cx < x0 - 3 || cx > x1 + 3 || ty1 < y0 || ty0 > y1) return;
-        var pitch = (t.y0 - t.y1) / t.mod;
+        var pitch = (t.y0 - t.y1) / t.modules;
         if (pitch * pxPerM < self.PANEL_PX) return;
-        var perString = t.mod / (t.strings.length || 1);
-        for (var i = 0; i < t.mod; i++) {
+        var perString = t.modules / (t.strings.length || 1);
+        for (var i = 0; i < t.modules; i++) {
           var y = ty0 + i * pitch;
           if (y + pitch < y0 || y > y1) continue;
           var cell = sv("rect", { class: "svm-panel", x: cx - t.w / 2 + 0.06,
@@ -947,6 +1376,13 @@
           cell.dataset.panel = i + 1;
           cell.dataset.trk = t.id;
           cell.dataset.str = t.strings[Math.floor(i / perString)] || "";
+          var bad = self.badPanels && self.badPanels[t.id + "#" + (i + 1)];
+          if (bad) {
+            cell.setAttribute("class", "svm-panel bad");
+            var tt = document.createElementNS(NS, "title");
+            tt.textContent = bad.kind + ": " + (bad.detail || "");
+            cell.appendChild(tt);
+          }
           frag.appendChild(cell);
           n++;
         }
@@ -964,6 +1400,13 @@
       l.setAttribute("transform", "translate(" + l.dataset.x + " " + l.dataset.y + ") scale(" + s + ")");
     });
     var pxPerM = this.fit * this.k;
+    (this.txShapes || []).forEach(function (o) {
+      var w = Math.max(14 / pxPerM, 6), h = Math.max(10 / pxPerM, 4.5), pad = 3 / pxPerM;
+      o.shape.setAttribute("x", o.cx - w / 2); o.shape.setAttribute("y", o.cy - h / 2);
+      o.shape.setAttribute("width", w); o.shape.setAttribute("height", h);
+      o.hit.setAttribute("x", o.cx - w / 2 - pad); o.hit.setAttribute("y", o.cy - h / 2 - pad);
+      o.hit.setAttribute("width", w + pad * 2); o.hit.setAttribute("height", h + pad * 2);
+    });
     (this.invShapes || []).forEach(function (o) {
       // 20% larger than the surveyed footprint so it is comfortable to hit
       var w = Math.max(o.w * 1.2, 8.4 / pxPerM), d = Math.max(o.d * 1.2, 4.2 / pxPerM);
@@ -973,7 +1416,22 @@
       o.hit.setAttribute("x", o.cx - w / 2 - pad); o.hit.setAttribute("y", o.cy - d / 2 - pad);
       o.hit.setAttribute("width", w + pad * 2); o.hit.setAttribute("height", d + pad * 2);
     });
+    this.drawScale();
+    this.sizeFlags();
     this.updatePanels();
+  };
+
+  /* A round number of metres, sized to about 110 px at the current zoom. */
+  P.drawScale = function () {
+    if (!this.scaleRule) return;
+    var pxPerM = this.fit * this.k;
+    if (!pxPerM || !isFinite(pxPerM)) return;
+    var target = 110 / pxPerM;
+    var pow = Math.pow(10, Math.floor(Math.log10(target)));
+    var nice = [1, 2, 5, 10].map(function (m) { return m * pow; })
+      .filter(function (v) { return v >= target * 0.6; })[0] || pow * 10;
+    this.scaleRule.style.width = (nice * pxPerM).toFixed(1) + "px";
+    this.scaleText.textContent = nice >= 1000 ? (nice / 1000) + " km" : nice + " m";
   };
   P.clampPan = function () {
     var lx = this.VW * (this.k - 1), ly = this.VH * (this.k - 1);
@@ -1081,6 +1539,13 @@
     else if (ds.trk) this.select({ kind: "tracker", id: ds.trk }, false);
     else if (ds.inv) this.select({ kind: "inverter", id: ds.inv });
     else if (ds.tx) this.select({ kind: "tx", id: ds.tx });
+    else this.clearSelection();     // clicked open ground
+  };
+
+  P.clearSelection = function () {
+    if (!this.sel && !this.panelSel) return;
+    this.panelSel = null;
+    this.select(null);
   };
 
   window.PlantMapSurveyed = PlantMapSurveyed;

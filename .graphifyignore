@@ -1,0 +1,23 @@
+# graphify scope: source code + docs only.
+# Excludes the tool's own prior output (avoids the converted/*.md feedback loop),
+# raw telemetry dumps, archived/legacy code, and other tools' own files.
+
+graphify-out/
+extracted_data/
+legacy/
+errors/
+temp_llm_codes/
+antigravity-skills/
+.agents/
+Interfaccia SCADA/
+Tracker examples/
+assets/dwfx_extracted/
+assets/test.dwfx
+db/backups/
+db/*.db
+db/*.db-wal
+db/*.db-shm
+tracker_testing/sync_*.json
+VCOM_Screenshots/
+playwright_profile/
+playwright_profile_backfill/

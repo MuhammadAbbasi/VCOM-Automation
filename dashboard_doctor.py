@@ -9,6 +9,7 @@ import subprocess
 import sys
 import requests
 import sqlite3
+import zipfile
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -119,52 +120,152 @@ def _save_backup_state(state: dict) -> None:
     DB_BACKUP_STATE.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+def prune_old_backups(keep_count: int = 12) -> None:
+    """
+    Remove orphan journal files, zero-byte files, and keep only the latest keep_count daily backups.
+    """
+    try:
+        if not DB_BACKUP_DIR.exists():
+            return
+        
+        all_files = [f for f in DB_BACKUP_DIR.iterdir() if f.is_file()]
+        
+        # 1. Clean up journals, zero-byte files, and temporary test files
+        for f in all_files:
+            if f.name.endswith("-journal") or f.stat().st_size == 0 or f.name.startswith("test_"):
+                try:
+                    f.unlink()
+                    logger.info(f"[DOCTOR] Removed orphan/invalid backup file: {f.name}")
+                except Exception as e:
+                    logger.warning(f"[DOCTOR] Failed to remove {f.name}: {e}")
+
+        # 2. Group valid backups by date pattern (scada_data_backup_YYYYMMDD_HHMMSS)
+        pattern = re.compile(r"scada_data_backup_(\d{8})_\d{6}\.(db|zip)")
+        backups_by_date = {}
+        
+        for f in DB_BACKUP_DIR.iterdir():
+            if not f.is_file():
+                continue
+            match = pattern.match(f.name)
+            if match:
+                date_str = match.group(1)
+                if date_str not in backups_by_date:
+                    backups_by_date[date_str] = []
+                backups_by_date[date_str].append(f)
+
+        sorted_dates = sorted(backups_by_date.keys())
+        if len(sorted_dates) > keep_count:
+            dates_to_remove = set(sorted_dates[:-keep_count])
+            for d in dates_to_remove:
+                for f in backups_by_date[d]:
+                    try:
+                        f.unlink()
+                        logger.info(f"[DOCTOR] Pruned old backup ({d}): {f.name}")
+                    except Exception as e:
+                        logger.warning(f"[DOCTOR] Failed to prune {f.name}: {e}")
+
+        # Also remove extra intra-day duplicates for remaining kept dates
+        kept_dates = set(sorted_dates[-keep_count:]) if len(sorted_dates) > keep_count else set(sorted_dates)
+        for d in kept_dates:
+            day_files = sorted(backups_by_date[d], key=lambda f: f.stat().st_mtime)
+            valid_day_files = [f for f in day_files if f.stat().st_size > 100 * 1024]
+            if len(valid_day_files) > 1:
+                latest = valid_day_files[-1]
+                for extra in day_files:
+                    if extra != latest and extra.exists():
+                        try:
+                            extra.unlink()
+                            logger.info(f"[DOCTOR] Pruned extra intra-day backup ({d}): {extra.name}")
+                        except Exception as e:
+                            logger.warning(f"[DOCTOR] Failed to prune extra file {extra.name}: {e}")
+
+    except Exception as e:
+        logger.error(f"[DOCTOR] Error pruning backups: {e}")
+
+
 def backup_database() -> Path | None:
     DB_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    prune_old_backups(keep_count=12)
+
     now = datetime.now()
-    backup_name = f"scada_data_backup_{now.strftime('%Y%m%d_%H%M%S')}.db"
-    backup_path = DB_BACKUP_DIR / backup_name
+    base_name = f"scada_data_backup_{now.strftime('%Y%m%d_%H%M%S')}"
+    raw_db_path = DB_BACKUP_DIR / f"{base_name}.db"
+    zip_path = DB_BACKUP_DIR / f"{base_name}.zip"
 
     try:
-        with sqlite3.connect(str(DB_PATH), timeout=30) as src, sqlite3.connect(str(backup_path), timeout=30) as dst:
-            src.backup(dst)
+        logger.info(f"[DOCTOR] Creating database snapshot: {raw_db_path.name}...")
+        src_conn = sqlite3.connect(str(DB_PATH), timeout=60)
+        dst_conn = sqlite3.connect(str(raw_db_path), timeout=60)
+        try:
+            src_conn.backup(dst_conn)
+        finally:
+            dst_conn.close()
+            src_conn.close()
 
+        # Compress into zip archive — BZIP2 compresses SQLite files ~35% smaller
+        # than DEFLATE for ~6x the time (measured on scada_logs.db); LZMA compresses
+        # further (~60% smaller) but at ~28x the time, too slow for a multi-GB file
+        # on a machine also running live extraction/dashboard/watchdog processes.
+        logger.info(f"[DOCTOR] Compressing database backup into zip: {zip_path.name}...")
+        with zipfile.ZipFile(zip_path, 'w', compression=zipfile.ZIP_BZIP2, compresslevel=9) as z:
+            z.write(raw_db_path, arcname=raw_db_path.name)
+
+        # Remove uncompressed raw db file
+        if raw_db_path.exists():
+            raw_db_path.unlink()
+
+        size_mb = round(zip_path.stat().st_size / (1024 * 1024), 2)
         state = {
             "date": now.strftime("%Y-%m-%d"),
             "timestamp": now.isoformat(),
-            "backup_file": backup_name,
+            "backup_file": zip_path.name,
+            "size_mb": size_mb
         }
         _save_backup_state(state)
-        logger.info(f"[DOCTOR] Database backup created: {backup_path}")
-        return backup_path
+        prune_old_backups(keep_count=12)
+        logger.info(f"[DOCTOR] Database backup created & compressed: {zip_path.name} ({size_mb} MB)")
+        return zip_path
     except Exception as e:
         logger.error(f"[DOCTOR] Database backup failed: {e}")
-        try:
-            if backup_path.exists():
-                backup_path.unlink()
-        except Exception:
-            pass
+        for path_to_clean in [raw_db_path, zip_path]:
+            try:
+                if path_to_clean.exists():
+                    path_to_clean.unlink()
+            except Exception:
+                pass
         return None
+
+
+BACKUP_INTERVAL_DAYS = 7  # weekly — scada_data.db only grows, so daily full backups
+                          # duplicated nearly the same multi-GB file every single day.
+                          # The live database itself is never pruned; this only controls
+                          # how often the disaster-recovery safety-net copy is refreshed.
 
 
 def maybe_backup_database() -> None:
     now = datetime.now()
     today = now.strftime("%Y-%m-%d")
     state = _load_backup_state()
-    if state.get("date") == today:
-        return
+    last_timestamp = state.get("timestamp")
+    if last_timestamp:
+        try:
+            last_dt = datetime.fromisoformat(last_timestamp)
+            if (now - last_dt).days < BACKUP_INTERVAL_DAYS:
+                return
+        except Exception:
+            pass
 
     backup_path = backup_database()
     if backup_path is not None:
         send_telegram(
-            f"💾 <b>Daily Database Backup</b>\n"
+            f"💾 <b>Weekly Database Backup</b>\n"
             f"File: <code>{backup_path.name}</code>\n"
             f"Date: <code>{today}</code>\n"
             f"Status: <b>SUCCESS</b>"
         )
     else:
         send_telegram(
-            f"💾 <b>Daily Database Backup</b>\n"
+            f"💾 <b>Weekly Database Backup</b>\n"
             f"Date: <code>{today}</code>\n"
             f"Status: <b>FAILED</b>\n"
             f"Please check dashboard_doctor.log for details."

@@ -38,7 +38,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks, Request, Depends, HTTPException, status
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 # Import analysis logic
 from processor_watchdog_final import analyze_site
@@ -64,21 +63,52 @@ STATIC_DIR.mkdir(parents=True, exist_ok=True)
 # App
 # ---------------------------------------------------------------------------
 from processor_watchdog_final import load_config
-security = HTTPBasic()
 
-def verify_credentials(credentials: HTTPBasicCredentials = Depends(security)):
+# Load System ID from config
+SYSTEM_ID = "XXXXXXX"
+try:
     cfg = load_config()
-    expected_user = cfg.get("DASHBOARD_USER") or os.environ.get("DASHBOARD_USER", "admin")
-    expected_pass = cfg.get("DASHBOARD_PASS") or os.environ.get("DASHBOARD_PASS", "")
-    correct_user = secrets.compare_digest(credentials.username, expected_user)
-    correct_pass = secrets.compare_digest(credentials.password, expected_pass)
-    if not (correct_user and correct_pass):
+    system_url = cfg.get("SYSTEM_URL", "")
+    import re
+    m = re.search(r'systemId/(\d+)', system_url)
+    if m:
+        SYSTEM_ID = m.group(1)
+except Exception:
+    pass
+
+
+def is_authenticated(request: Request) -> bool:
+    """Check if request is authenticated via session cookie or Basic Auth."""
+    session = request.cookies.get("get_session")
+    if session == "authenticated":
+        return True
+
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Basic "):
+        try:
+            encoded_credentials = auth_header.split(" ", 1)[1]
+            decoded = base64.b64decode(encoded_credentials).decode("utf-8")
+            username, password = decoded.split(":", 1)
+            cfg = load_config()
+            expected_user = cfg.get("DASHBOARD_USER") or os.environ.get("DASHBOARD_USER", "admin")
+            expected_pass = cfg.get("DASHBOARD_PASS") or os.environ.get("DASHBOARD_PASS", "")
+            if secrets.compare_digest(username, expected_user) and secrets.compare_digest(password, expected_pass):
+                return True
+        except Exception:
+            pass
+    return False
+
+
+def require_auth(request: Request) -> None:
+    """FastAPI dependency: 401s unless is_authenticated() passes (session
+    cookie OR Basic Auth) — unlike the old Basic-Auth-only verify_credentials,
+    this matches what the /login cookie flow actually sets."""
+    if not is_authenticated(request):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
+            detail="Unauthorized",
             headers={"WWW-Authenticate": "Basic"},
         )
-    return credentials.username
 
 async def delayed_broadcaster_start():
     await asyncio.sleep(2)
@@ -200,15 +230,20 @@ async def data_broadcaster():
 
             prev_is_extracting = is_extracting
 
+            from db.vcom_status_helpers import get_vcom_status
+            v_status = get_vcom_status()
+
             await manager.broadcast({
                 "type": "extraction_status",
-                "is_extracting": is_extracting
+                "is_extracting": is_extracting,
+                "vcom_status": v_status
             })
 
             link_status_path = ROOT / "db" / "link_status.json"
             latest_data, trackers = await asyncio.to_thread(fetch_broadcaster_data, today, link_status_path)
 
             if latest_data:
+                latest_data["system_id"] = SYSTEM_ID
                 await manager.broadcast({
                     "type": "data_update",
                     "data": latest_data,
@@ -220,7 +255,7 @@ async def data_broadcaster():
         await asyncio.sleep(5)
 
 @app.post("/api/extraction/trigger")
-async def trigger_extraction(user: str = Depends(verify_credentials)):
+async def trigger_extraction(_: None = Depends(require_auth)):
     print("[DASHBOARD] Manual extraction trigger received!", flush=True)
     trigger_path = ROOT / ".trigger_extraction"
     busy_path = ROOT / ".extraction_busy"
@@ -232,9 +267,18 @@ async def trigger_extraction(user: str = Depends(verify_credentials)):
     return JSONResponse({"status": "success", "message": "Extraction triggered."})
 
 @app.get("/api/extraction/status")
-async def get_extraction_status(user: str = Depends(verify_credentials)):
+async def get_extraction_status(_: None = Depends(require_auth)):
     busy_path = ROOT / ".extraction_busy"
-    return JSONResponse({"is_extracting": busy_path.exists()})
+    from db.vcom_status_helpers import get_vcom_status
+    return JSONResponse({
+        "is_extracting": busy_path.exists(),
+        "vcom_status": get_vcom_status()
+    })
+
+@app.get("/api/vcom/status")
+async def api_vcom_status(_: None = Depends(require_auth)):
+    from db.vcom_status_helpers import get_vcom_status
+    return JSONResponse(get_vcom_status())
 
 @app.get("/api/trackers/history")
 async def api_tracker_history(request: Request):
@@ -246,27 +290,6 @@ async def api_tracker_history(request: Request):
         return JSONResponse(data)
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
-
-def is_authenticated(request: Request) -> bool:
-    """Check if request is authenticated via session cookie or Basic Auth."""
-    session = request.cookies.get("get_session")
-    if session == "authenticated":
-        return True
-    
-    auth_header = request.headers.get("Authorization")
-    if auth_header and auth_header.startswith("Basic "):
-        try:
-            encoded_credentials = auth_header.split(" ", 1)[1]
-            decoded = base64.b64decode(encoded_credentials).decode("utf-8")
-            username, password = decoded.split(":", 1)
-            cfg = load_config()
-            expected_user = cfg.get("DASHBOARD_USER") or os.environ.get("DASHBOARD_USER", "admin")
-            expected_pass = cfg.get("DASHBOARD_PASS") or os.environ.get("DASHBOARD_PASS", "")
-            if secrets.compare_digest(username, expected_user) and secrets.compare_digest(password, expected_pass):
-                return True
-        except Exception:
-            pass
-    return False
 
 # ---------------------------------------------------------------------------
 # Page & Portal Routes
@@ -417,6 +440,7 @@ async def websocket_endpoint(websocket: WebSocket):
         latest_data, trackers, settings = await asyncio.to_thread(fetch_ws_initial_data, today, link_status_path)
         
         if latest_data:
+            latest_data["system_id"] = SYSTEM_ID
             await websocket.send_json({
                 "type": "data_update", 
                 "data": latest_data, 
@@ -434,18 +458,18 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 @app.get("/api/trackers")
-async def get_trackers(username: str = Depends(verify_credentials)):
+async def get_trackers(_: None = Depends(require_auth)):
     from db.db_manager import get_all_tracker_status
     return await asyncio.to_thread(get_all_tracker_status)
 
 
 @app.get("/api/status")
-async def get_settings(user: str = Depends(verify_credentials)):
+async def get_settings(_: None = Depends(require_auth)):
     from processor_watchdog_final import load_user_settings
     return JSONResponse(load_user_settings())
 
 @app.get("/api/link_status")
-async def get_link_status(user: str = Depends(verify_credentials)):
+async def get_link_status(_: None = Depends(require_auth)):
     status_file = ROOT / "db" / "link_status.json"
     if status_file.exists():
         with open(status_file, "r") as f:
@@ -454,7 +478,7 @@ async def get_link_status(user: str = Depends(verify_credentials)):
 
 
 @app.post("/api/settings")
-async def update_settings(request: Request, background_tasks: BackgroundTasks, user: str = Depends(verify_credentials)):
+async def update_settings(request: Request, background_tasks: BackgroundTasks, _: None = Depends(require_auth)):
     try:
         new_settings = await request.json()
         
@@ -484,7 +508,7 @@ async def update_settings(request: Request, background_tasks: BackgroundTasks, u
 
 
 @app.post("/api/forensic/rescan")
-async def rescan(user: str = Depends(verify_credentials)):
+async def rescan(_: None = Depends(require_auth)):
     """Delete current today's snapshots, clear error folders, and re-trigger analyze_site."""
     today = datetime.now().strftime("%Y-%m-%d")
     root_errors = ROOT / "errors"
@@ -522,7 +546,7 @@ async def rescan(user: str = Depends(verify_credentials)):
 
 
 @app.post("/api/telegram/test")
-async def test_telegram(user: str = Depends(verify_credentials)):
+async def test_telegram(_: None = Depends(require_auth)):
     """Send a test message with the detailed system upgrade summary."""
     from processor_watchdog_final import load_user_settings, send_telegram_notification
     try:
@@ -549,7 +573,7 @@ except ImportError:
     ask_llm = None
 
 @app.post("/api/chat")
-async def chat_endpoint(request: Request, user: str = Depends(verify_credentials)):
+async def chat_endpoint(request: Request, _: None = Depends(require_auth)):
     if not ask_llm:
         return JSONResponse({"status": "error", "message": "llm_agent module not found."}, status_code=500)
     
@@ -587,7 +611,7 @@ async def chat_endpoint(request: Request, user: str = Depends(verify_credentials
 # ---------------------------------------------------------------------------
 
 @app.get("/api/analytics/config")
-async def get_analytics_config(user: str = Depends(verify_credentials)):
+async def get_analytics_config(_: None = Depends(require_auth)):
     """Return available metrics and inverters for the analytics UI."""
     try:
         from db.db_manager import METRIC_TABLE_MAP, get_available_inverters, get_available_dates
@@ -608,7 +632,7 @@ async def get_analytics_data(
     start: str, 
     end: str, 
     inverters: str = None, 
-    user: str = Depends(verify_credentials)
+    _: None = Depends(require_auth)
 ):
     """Fetch historical data for charting."""
     try:
