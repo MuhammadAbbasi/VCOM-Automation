@@ -1115,6 +1115,10 @@
       add("Modo", tt.mode); add("Allarme", tt.alarm); add("Nota", tt.reason);
     }
     if (sel.kind === "inverter") { this.detail.appendChild(kv); this.renderInverter(sel.id); return; }
+    if (sel.kind === "tx" || sel.kind === "transformer" || sel.id === "TX1" || sel.id === "TX2" || sel.id === "TX3") {
+      this.renderTxDetail(sel.id);
+      return;
+    }
     var trk = s0 && this.byTracker[s0.tracker];
     if (trk && (sel.kind === "string" || sel.kind === "tracker")) {
       add("Moduli", trk.modules); add("Pali", trk.piles);
@@ -1147,6 +1151,78 @@
       });
       this.detail.appendChild(lst);
     }
+  };
+
+  /* Render all inverters under the selected Transformer (TX) */
+  P.renderTxDetail = function (txId) {
+    var self = this, L = this.layout, st = this.state || {};
+
+    var txInverters = (L.inverters || []).filter(function (inv) {
+      return inv.tx === txId || inv.id.indexOf(txId) === 0;
+    });
+
+    var totalStrings = 0;
+    var trackerSet = {};
+
+    txInverters.forEach(function (inv) {
+      var invStrings = self.stringsFor({ kind: "inverter", id: inv.id });
+      totalStrings += invStrings.length;
+      invStrings.forEach(function (s) { if (s.tracker) trackerSet[s.tracker] = true; });
+    });
+    var totalTrackers = Object.keys(trackerSet).length;
+
+    var kv = el("div", "svm-kv");
+    kv.appendChild(el("span", "svm-k", "Cabina / TX")); kv.appendChild(el("span", "svm-v", txId));
+    kv.appendChild(el("span", "svm-k", "Inverter totali")); kv.appendChild(el("span", "svm-v", txInverters.length));
+    kv.appendChild(el("span", "svm-k", "Tracker serviti")); kv.appendChild(el("span", "svm-v", totalTrackers));
+    kv.appendChild(el("span", "svm-k", "Stringhe totali")); kv.appendChild(el("span", "svm-v", totalStrings));
+    this.detail.appendChild(kv);
+
+    var lst = el("div", "svm-sub");
+    lst.appendChild(el("div", "svm-sub-head", "Inverter della Cabina (" + txInverters.length + " Inverter)"));
+
+    txInverters.forEach(function (inv) {
+      var invId = inv.id;
+      var invState = (st.inverters && st.inverters[invId]) || {};
+
+      var invProblems = (st.problems || []).filter(function (p) {
+        if (!p) return false;
+        if (p.inverters && p.inverters.indexOf(invId) >= 0) return true;
+        if (p.element && (p.element === invId || p.element.indexOf(invId) === 0)) return true;
+        return false;
+      });
+
+      var issueLabel = "Regolare";
+      var statusColor = "#10b981";
+
+      if (invProblems.length > 0) {
+        var firstType = invProblems[0].type || invProblems[0].key;
+        issueLabel = invProblems.length > 1 ? firstType + " (+" + (invProblems.length - 1) + ")" : firstType;
+        if (ISSUE_COLORS[firstType]) statusColor = ISSUE_COLORS[firstType];
+        else statusColor = "#f43f5e";
+      }
+
+      var b = el("button", "svm-subrow", null, { style: "display: flex; align-items: center; justify-content: space-between; padding: 0.45rem 0.65rem;" });
+
+      var leftDiv = el("div", null, null, { style: "display: flex; align-items: center; gap: 0.5rem;" });
+      var swatch = el("span", "svm-sw", null, { style: "background: " + statusColor + " !important;" });
+      var label = el("span", null, invId, { style: "font-weight: 600; color: var(--text);" });
+      leftDiv.appendChild(swatch);
+      leftDiv.appendChild(label);
+
+      var rightDiv = el("span", "svm-subrow-m", issueLabel, { style: "font-size: 0.72rem; color: " + (invProblems.length ? statusColor : "var(--muted)") + "; font-weight: 500;" });
+
+      b.appendChild(leftDiv);
+      b.appendChild(rightDiv);
+
+      b.onclick = function () {
+        self.select({ kind: "inverter", id: invId });
+      };
+
+      lst.appendChild(b);
+    });
+
+    this.detail.appendChild(lst);
   };
 
   /* Everything under one inverter: what it is producing now, then every
