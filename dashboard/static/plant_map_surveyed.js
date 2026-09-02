@@ -493,21 +493,24 @@
     this.invBlocks = {};
     var invBounds = {};
 
-    // 1. Add tracker string bounds
+    // 1. Add tracker string bounds mapped to inverter ID (e.g. TX1-INV01)
     L.trackers.forEach(function (t) {
-      var invId = t.inverter;
-      if (!invId) return;
       var cx = px(t.x), top = py(t.y0), h = t.y0 - t.y1;
       var x0 = cx - t.w / 2, x1 = cx + t.w / 2;
       var y0 = top, y1 = top + h;
 
-      if (!invBounds[invId]) {
-        invBounds[invId] = { minX: x0, maxX: x1, minY: y0, maxY: y1 };
-      } else {
-        var b = invBounds[invId];
-        b.minX = Math.min(b.minX, x0); b.maxX = Math.max(b.maxX, x1);
-        b.minY = Math.min(b.minY, y0); b.maxY = Math.max(b.maxY, y1);
-      }
+      (t.strings || []).forEach(function (sid) {
+        var invId = sid.split("-STR")[0];
+        if (!invId) return;
+
+        if (!invBounds[invId]) {
+          invBounds[invId] = { minX: x0, maxX: x1, minY: y0, maxY: y1 };
+        } else {
+          var b = invBounds[invId];
+          b.minX = Math.min(b.minX, x0); b.maxX = Math.max(b.maxX, x1);
+          b.minY = Math.min(b.minY, y0); b.maxY = Math.max(b.maxY, y1);
+        }
+      });
     });
 
     // 2. Add inverter station shape bounds so bounded polygon encompasses the inverter station too
