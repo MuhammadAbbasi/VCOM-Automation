@@ -3576,3 +3576,25 @@ section>h2 {
 .svm-sw.s-corrente-dc, .svm-chip.s-corrente-dc { background: #06b6d4 !important; }
 .svm-sw.s-tracker, .svm-chip.s-tracker { background: #6366f1 !important; }
 
+/* ═══════════════════════════════════════════════════════════
+   INVERTER BOUNDED BLOCK & MULTI-STRIPE STYLES
+   ═══════════════════════════════════════════════════════════ */
+.svm-inv-block {
+  transition: fill 0.25s ease, stroke 0.25s ease, stroke-width 0.25s ease;
+  cursor: pointer;
+}
+
+.svm-inv-block:hover {
+  stroke-width: 3px !important;
+  filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.85));
+}
+
+.svm-inv-block-label {
+  font-size: 2.2px;
+  font-weight: 700;
+  fill: #ffffff;
+  pointer-events: none;
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.9);
+  letter-spacing: -0.01em;
+}
+

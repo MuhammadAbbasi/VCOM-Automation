@@ -489,6 +489,56 @@
         cy: py(o.y) - o.d / 2, w: o.w, d: o.d, id: o.id });
     });
 
+    // ─── Inverter Bounded Area Blocks (bounded rectangle over all strings of an inverter)
+    this.invBlocks = {};
+    var invBounds = {};
+    L.trackers.forEach(function (t) {
+      var invId = t.inverter;
+      if (!invId) return;
+      var cx = px(t.x), top = py(t.y0), h = t.y0 - t.y1;
+      var x0 = cx - t.w / 2, x1 = cx + t.w / 2;
+      var y0 = top, y1 = top + h;
+
+      if (!invBounds[invId]) {
+        invBounds[invId] = { minX: x0, maxX: x1, minY: y0, maxY: y1 };
+      } else {
+        var b = invBounds[invId];
+        b.minX = Math.min(b.minX, x0); b.maxX = Math.max(b.maxX, x1);
+        b.minY = Math.min(b.minY, y0); b.maxY = Math.max(b.maxY, y1);
+      }
+    });
+
+    var gInvBlockGroup = sv("g", { class: "svm-inv-blocks-group" });
+    gDev.appendChild(gInvBlockGroup);
+    this.gInvBlockGroup = gInvBlockGroup;
+
+    var defs = sv("defs", { id: "svm-pattern-defs" });
+    this.svg.appendChild(defs);
+    this.patternDefs = defs;
+    this.createdPatterns = {};
+
+    Object.keys(invBounds).forEach(function (invId) {
+      var b = invBounds[invId];
+      var padX = 1.2, padY = 1.5;
+      var bx = b.minX - padX, by = b.minY - padY;
+      var bw = (b.maxX - b.minX) + 2 * padX, bh = (b.maxY - b.minY) + 2 * padY;
+
+      var blockShape = sv("rect", { class: "svm-inv-block", x: bx, y: by, width: bw, height: bh, rx: 1.5 });
+      var blockHit = sv("rect", { class: "svm-hit", x: bx, y: by, width: bw, height: bh });
+      blockHit.dataset.inv = invId;
+
+      var label = sv("text", { class: "svm-inv-block-label", x: bx + bw / 2, y: by - 0.8, "text-anchor": "middle" });
+      label.textContent = invId;
+
+      var blockGroup = sv("g", { class: "svm-inv-block-unit" });
+      blockGroup.appendChild(blockShape);
+      blockGroup.appendChild(blockHit);
+      blockGroup.appendChild(label);
+      gInvBlockGroup.appendChild(blockGroup);
+
+      self.invBlocks[invId] = { shape: blockShape, hit: blockHit, label: label, group: blockGroup };
+    });
+
     this.gSel = gSel;
     this.measure(); this.fitAll();
     this.syncSegs();
@@ -550,6 +600,39 @@
       .catch(function () {});
   };
 
+  P.getMultiStripePatternId = function (colors) {
+    if (!colors || !colors.length) return null;
+    if (colors.length === 1) return null;
+
+    var patKey = colors.join("_").replace(/[^a-zA-Z0-9_]/g, "");
+    var patId = "svm-pat-" + patKey;
+    if (this.createdPatterns[patId]) return patId;
+
+    var sv = function (tag, attrs) {
+      var el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+      if (attrs) Object.keys(attrs).forEach(function (k) { el.setAttribute(k, attrs[k]); });
+      return el;
+    };
+
+    var pat = sv("pattern", {
+      id: patId,
+      width: 20,
+      height: 20,
+      patternUnits: "userSpaceOnUse",
+      patternTransform: "rotate(45)"
+    });
+
+    var w = 20 / colors.length;
+    colors.forEach(function (col, i) {
+      var r = sv("rect", { x: i * w, y: 0, width: w + 0.5, height: 20, fill: col });
+      pat.appendChild(r);
+    });
+
+    if (this.patternDefs) this.patternDefs.appendChild(pat);
+    this.createdPatterns[patId] = true;
+    return patId;
+  };
+
   P.paint = function () {
     var self = this, L = this.layout, st = this.state;
     if (!L) return;
@@ -571,14 +654,66 @@
           var c = self.fillFor(t, sid);
           r.setAttribute("class", "svm-str" + (c ? "" : " s-" + self.statusOf(sid)));
           if (c) r.style.fill = c; else r.style.fill = "";
-          r.classList.toggle("dim", !!keep && !keep.has(sid));
+          r.classList.toggle("dim", (self.view === "inverter" && !keep) || (!!keep && !keep.has(sid)));
         });
       }
     });
+
     this.invShapes.forEach(function (o) {
       var s = (st && st.inverters[o.id] && st.inverters[o.id].status) || "grey";
       o.shape.setAttribute("class", "svm-inv s-" + s);
     });
+
+    // ─── Paint Inverter Bounded Blocks (VISTA -> Inverter)
+    var isInvView = self.view === "inverter";
+    if (this.gInvBlockGroup) {
+      this.gInvBlockGroup.style.display = isInvView ? "inline" : "none";
+    }
+
+    if (isInvView && this.invBlocks) {
+      Object.keys(this.invBlocks).forEach(function (invId) {
+        var block = self.invBlocks[invId];
+        if (!block) return;
+
+        // Find all active issue types for this inverter
+        var invProblems = (st && st.problems || []).filter(function (p) {
+          return (p.inverters || []).indexOf(invId) >= 0 || p.element === invId;
+        });
+
+        var problemTypes = [];
+        invProblems.forEach(function (p) {
+          var t = p.type || p.key;
+          if (t && problemTypes.indexOf(t) < 0) problemTypes.push(t);
+        });
+
+        var colors = [];
+        problemTypes.forEach(function (t) {
+          if (ISSUE_COLORS[t] && colors.indexOf(ISSUE_COLORS[t]) < 0) {
+            colors.push(ISSUE_COLORS[t]);
+          }
+        });
+
+        if (colors.length === 0) {
+          // Healthy inverter block (Green)
+          block.shape.style.fill = "rgba(16, 185, 129, 0.25)";
+          block.shape.style.stroke = "#10b981";
+          block.shape.style.strokeWidth = "1px";
+        } else if (colors.length === 1) {
+          // Single issue (Solid color fill)
+          block.shape.style.fill = colors[0];
+          block.shape.style.fillOpacity = "0.45";
+          block.shape.style.stroke = colors[0];
+          block.shape.style.strokeWidth = "1.8px";
+        } else {
+          // Multi-issue inverter (High Temp + Low PR, etc.) -> DUAL MULTI-STRIPE PATTERN FILL!
+          var patId = self.getMultiStripePatternId(colors);
+          block.shape.style.fill = "url(#" + patId + ")";
+          block.shape.style.fillOpacity = "0.75";
+          block.shape.style.stroke = colors[0];
+          block.shape.style.strokeWidth = "2.2px";
+        }
+      });
+    }
 
     this.paintDim(); this.drawSerialProblems();
     this.drawCounts(); this.drawLegend(); this.drawProblems();
