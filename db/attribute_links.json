@@ -1011,10 +1011,6 @@
     ],
     "PR inverter": [
         {
-            "timestamp": "2026-09-02T03:40:25",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=C6DI3&type=wr"
-        },
-        {
             "timestamp": "2026-09-02T03:57:30",
             "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=C6DI3&type=wr"
         },
@@ -1209,13 +1205,13 @@
         {
             "timestamp": "2026-09-02T17:56:16",
             "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=C6DI3&type=wr"
+        },
+        {
+            "timestamp": "2026-09-02T17:59:19",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=C6DI3&type=wr"
         }
     ],
     "Potenza AC": [
-        {
-            "timestamp": "2026-09-02T03:40:36",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=5EJH8&type=wr"
-        },
         {
             "timestamp": "2026-09-02T03:57:41",
             "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=5EJH8&type=wr"
@@ -1410,6 +1406,10 @@
         },
         {
             "timestamp": "2026-09-02T17:56:29",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=5EJH8&type=wr"
+        },
+        {
+            "timestamp": "2026-09-02T17:59:32",
             "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=5EJH8&type=wr"
         }
     ]
