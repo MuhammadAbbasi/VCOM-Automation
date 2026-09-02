@@ -13,7 +13,7 @@
   "TRACKER_OFFLINE": {
     "first_detected": "2026-04-29T16:45:10.484172",
     "type": "TRACKER",
-    "message": "82 tracker(s) stale >60 min. NCUs: NCU_02, NCU_01, NCU_03",
+    "message": "82 tracker(s) stale >60 min. NCUs: NCU_03, NCU_01, NCU_02",
     "odoo_anomalia_id": 21,
     "odoo_intervento_id": 23,
     "notified": true,
