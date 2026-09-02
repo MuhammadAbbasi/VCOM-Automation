@@ -2685,88 +2685,118 @@ function updateLinkStatusUI(linkInfo) {
   }
 }
 
-// ─── 24-Hour Inverter Heatmap Renderer (15-Min Granularity) ───────────────
+// ─── 24-Hour Inverter Heatmap Renderer (Real Data API & 15-Min Granularity) ─
 
-function renderInverterHeatmap() {
+let heatmapPendingFetch = false;
+
+async function renderInverterHeatmap() {
   const container = el("inverter-heatmap-grid");
   const metricSelect = el("heatmap-metric-select");
-  if (!container) return;
+  const dateInput = el("heatmap-date-select");
+  if (!container || heatmapPendingFetch) return;
+
+  // Set default date picker to Today if empty
+  if (dateInput && !dateInput.value) {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    dateInput.value = todayStr;
+  }
 
   const selectedMetric = metricSelect ? metricSelect.value : "ac";
-  const inverters = [
-    "TX1-01", "TX1-02", "TX1-03", "TX1-04", "TX1-05", "TX1-06",
-    "TX1-07", "TX1-08", "TX1-09", "TX1-10", "TX1-11", "TX1-12",
-    "TX2-01", "TX2-02", "TX2-03", "TX2-04", "TX2-05", "TX2-06",
-    "TX2-07", "TX2-08", "TX2-09", "TX2-10", "TX2-11", "TX2-12",
-    "TX3-01", "TX3-02", "TX3-03", "TX3-04", "TX3-05", "TX3-06",
-    "TX3-07", "TX3-08", "TX3-09", "TX3-10", "TX3-11", "TX3-12"
-  ];
+  const selectedDate = dateInput ? dateInput.value : new Date().toISOString().slice(0, 10);
 
-  // 96 slots of 15 minutes across 24h
-  const slots = Array.from({ length: 96 }, (_, i) => {
-    const hh = String(Math.floor(i / 4)).padStart(2, "0");
-    const mm = String((i % 4) * 15).padStart(2, "0");
-    return `${hh}:${mm}`;
-  });
+  heatmapPendingFetch = true;
 
-  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0") + ":00");
+  try {
+    const resp = await fetch(`/api/heatmap/data?date=${encodeURIComponent(selectedDate)}&metric=${encodeURIComponent(selectedMetric)}`, { credentials: "same-origin" });
+    if (!resp.ok) throw new Error("API error " + resp.status);
+    const data = await resp.json();
 
-  container.innerHTML = "";
+    const inverters = data.inverters || [
+      "TX1-01", "TX1-02", "TX1-03", "TX1-04", "TX1-05", "TX1-06",
+      "TX1-07", "TX1-08", "TX1-09", "TX1-10", "TX1-11", "TX1-12",
+      "TX2-01", "TX2-02", "TX2-03", "TX2-04", "TX2-05", "TX2-06",
+      "TX2-07", "TX2-08", "TX2-09", "TX2-10", "TX2-11", "TX2-12",
+      "TX3-01", "TX3-02", "TX3-03", "TX3-04", "TX3-05", "TX3-06",
+      "TX3-07", "TX3-08", "TX3-09", "TX3-10", "TX3-11", "TX3-12"
+    ];
 
-  // Time Header Row (24 hour labels, each spanning 4 x 15-min slots)
-  const headerRow = document.createElement("div");
-  headerRow.className = "hm-time-header";
-  headerRow.innerHTML = '<div class="hm-inv-label"></div>' +
-    hours.map(h => `<div class="hm-time-label">${h}</div>`).join("");
-  container.appendChild(headerRow);
-
-  // Inverter Rows
-  inverters.forEach(invId => {
-    const row = document.createElement("div");
-    row.className = "hm-row";
-    row.innerHTML = `<div class="hm-inv-label">${invId}</div>`;
-
-    slots.forEach((timeStr, sIdx) => {
-      const cell = document.createElement("div");
-      cell.className = "hm-cell";
-
-      let val = 0;
-      let color = "rgba(30, 41, 59, 0.45)"; // Dark slate night
-
-      // Daylight between 06:00 (slot 24) and 19:45 (slot 79)
-      if (sIdx >= 24 && sIdx <= 79) {
-        const sunFactor = Math.sin(((sIdx - 24) / 55) * Math.PI);
-        if (selectedMetric === "ac") {
-          val = (sunFactor * 112 + (Math.random() * 3 - 1.5)).toFixed(1); // kW
-          const pct = Math.min(100, Math.max(0, (val / 115) * 100));
-          color = `hsl(${135 * (pct / 100)}, 72%, 44%)`;
-        } else if (selectedMetric === "pr") {
-          val = (85.5 + sunFactor * 4.5 + (Math.random() * 2 - 1)).toFixed(1); // %
-          color = val < 80 ? "#8b5cf6" : "#10b981";
-        } else if (selectedMetric === "temp") {
-          val = (24 + sunFactor * 26 + (Math.random() * 3 - 1.5)).toFixed(1); // °C
-          color = val > 45 ? "#f43f5e" : `hsl(${165 - val * 2.2}, 68%, 42%)`;
-        } else if (selectedMetric === "dc") {
-          val = (sunFactor * 185 + (Math.random() * 8 - 4)).toFixed(1); // A
-          color = `hsl(${180 + (val / 200) * 38}, 75%, 44%)`;
-        }
-      }
-
-      cell.style.background = color;
-      const unit = selectedMetric === 'ac' ? 'kW' : (selectedMetric === 'pr' ? '%' : (selectedMetric === 'temp' ? '°C' : 'A'));
-      cell.title = `Inverter: ${invId}\nOra: ${timeStr}\nValore: ${val} ${unit}`;
-      row.appendChild(cell);
+    const slots = data.slots || Array.from({ length: 96 }, (_, i) => {
+      const hh = String(Math.floor(i / 4)).padStart(2, "0");
+      const mm = String((i % 4) * 15).padStart(2, "0");
+      return `${hh}:${mm}`;
     });
 
-    container.appendChild(row);
-  });
+    const matrix = data.matrix || {};
+    const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0") + ":00");
+    const unit = selectedMetric === 'ac' ? 'kW' : (selectedMetric === 'pr' ? '%' : (selectedMetric === 'temp' ? '°C' : 'A'));
+
+    container.innerHTML = "";
+
+    // Time Header Row
+    const headerRow = document.createElement("div");
+    headerRow.className = "hm-time-header";
+    headerRow.innerHTML = '<div class="hm-inv-label"></div>' +
+      hours.map(h => `<div class="hm-time-label">${h}</div>`).join("");
+    container.appendChild(headerRow);
+
+    // Inverter Rows with REAL Database Values
+    inverters.forEach(invId => {
+      const row = document.createElement("div");
+      row.className = "hm-row";
+      row.innerHTML = `<div class="hm-inv-label">${invId}</div>`;
+
+      const invValues = matrix[invId] || [];
+
+      slots.forEach((timeStr, sIdx) => {
+        const cell = document.createElement("div");
+        cell.className = "hm-cell";
+
+        const val = invValues[sIdx];
+        let color = "rgba(30, 41, 59, 0.25)"; // Missing / Future slot background (Dark Slate Translucent)
+        let displayVal = "Dati non disponibili";
+
+        if (val !== null && val !== undefined) {
+          displayVal = `${val} ${unit}`;
+          if (val === 0) {
+            color = "#0f172a"; // Night zero output
+          } else if (selectedMetric === "ac") {
+            const pct = Math.min(100, Math.max(0, (val / 115) * 100));
+            color = `hsl(${135 * (pct / 100)}, 75%, 44%)`;
+          } else if (selectedMetric === "pr") {
+            color = val < 80 ? "#8b5cf6" : "#10b981";
+          } else if (selectedMetric === "temp") {
+            color = val > 45 ? "#f43f5e" : `hsl(${165 - Math.min(60, val) * 2.2}, 68%, 42%)`;
+          } else if (selectedMetric === "dc") {
+            color = `hsl(${180 + Math.min(40, (val / 200) * 40)}, 75%, 44%)`;
+          }
+        }
+
+        cell.style.background = color;
+        cell.title = `Inverter: ${invId}\nOra: ${timeStr}\nValore: ${displayVal}`;
+        row.appendChild(cell);
+      });
+
+      container.appendChild(row);
+    });
+
+  } catch (err) {
+    console.error("Heatmap render error:", err);
+  } finally {
+    heatmapPendingFetch = false;
+  }
 }
 
 document.addEventListener("DOMContentLoaded", () => {
   const metricSelect = el("heatmap-metric-select");
-  if (metricSelect) {
-    metricSelect.addEventListener("change", renderInverterHeatmap);
+  const dateInput = el("heatmap-date-select");
+
+  if (dateInput && !dateInput.value) {
+    dateInput.value = new Date().toISOString().slice(0, 10);
   }
+
+  if (metricSelect) metricSelect.addEventListener("change", renderInverterHeatmap);
+  if (dateInput) dateInput.addEventListener("change", renderInverterHeatmap);
+
   renderInverterHeatmap();
 });
 

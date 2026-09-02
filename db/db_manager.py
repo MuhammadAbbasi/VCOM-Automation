@@ -1578,3 +1578,107 @@ def get_tracker_summary() -> dict:
     except Exception as e:
         logger.error(f"Failed to get tracker summary: {e}")
         return {}
+
+
+def get_heatmap_matrix(date_str: str, metric: str = "ac") -> dict:
+    """
+    Extract real database metrics for all 36 inverters for the specified date and metric,
+    mapped into a 96-slot (15-minute granularity) matrix across 24 hours.
+    Missing/future data slots return None (rendered as grey missing tile).
+    """
+    import pandas as pd
+    metric_map = {
+        "ac": "Potenza AC",
+        "pr": "PR inverter",
+        "temp": "Temperatura",
+        "dc": "Corrente DC"
+    }
+    raw_metric = metric_map.get(metric, "Potenza AC")
+    df = load_metric(date_str, raw_metric)
+    dates = get_available_dates()
+
+    slots = [f"{h:02d}:{m:02d}" for h in range(24) for m in (0, 15, 30, 45)]
+    matrix = {inv_id: [None] * 96 for inv_id in INVERTER_IDS}
+
+    if df is None or df.empty:
+        return {
+            "date": date_str,
+            "metric": metric,
+            "slots": slots,
+            "inverters": INVERTER_IDS,
+            "matrix": matrix,
+            "available_dates": dates
+        }
+
+    # Match inverter columns for each INVERTER_ID
+    inv_col_map = {}
+    for inv_id in INVERTER_IDS:
+        matches = [c for c in df.columns if f"TX{inv_id}" in c or f"INV {inv_id}" in c or f"({inv_id})" in c or f" {inv_id} " in c or c == inv_id or c == f"INV {inv_id}"]
+        if not matches:
+            matches = [c for c in df.columns if inv_id in c]
+        if matches:
+            inv_col_map[inv_id] = matches[0]
+
+    # Handle vertical PR table vs wide time-series tables
+    if raw_metric == "PR inverter" and "PR inverter [%]" in df.columns:
+        inv_col = "PR inverter" if "PR inverter" in df.columns else "Inverter"
+        pr_val_col = "PR inverter [%]"
+        for _, row in df.iterrows():
+            inv_name = str(row.get(inv_col, ""))
+            pr_val = row.get(pr_val_col)
+            if pd.notna(pr_val):
+                for inv_id in INVERTER_IDS:
+                    if inv_id in inv_name:
+                        try:
+                            val = float(pr_val)
+                            for s_idx in range(24, 80):
+                                matrix[inv_id][s_idx] = round(val, 1)
+                        except Exception:
+                            pass
+        return {
+            "date": date_str,
+            "metric": metric,
+            "slots": slots,
+            "inverters": INVERTER_IDS,
+            "matrix": matrix,
+            "available_dates": dates
+        }
+
+    # Map time-series rows by Ora column
+    for _, row in df.iterrows():
+        ora_val = row.get("Ora")
+        if pd.isna(ora_val):
+            continue
+
+        try:
+            if isinstance(ora_val, (int, float)):
+                h = int(ora_val)
+                m = int(round((ora_val - h) * 100))
+            else:
+                parts = str(ora_val).split(":")
+                h, m = int(parts[0]), int(parts[1])
+            slot_idx = min(95, max(0, h * 4 + (m // 15)))
+        except Exception:
+            continue
+
+        for inv_id, col in inv_col_map.items():
+            val = row.get(col)
+            if pd.notna(val):
+                try:
+                    num = float(val)
+                    if metric == "ac":
+                        num = round(num / 1000.0, 1)  # Watts to kW
+                    else:
+                        num = round(num, 1)
+                    matrix[inv_id][slot_idx] = num
+                except Exception:
+                    pass
+
+    return {
+        "date": date_str,
+        "metric": metric,
+        "slots": slots,
+        "inverters": INVERTER_IDS,
+        "matrix": matrix,
+        "available_dates": dates
+    }
