@@ -489,9 +489,11 @@
         cy: py(o.y) - o.d / 2, w: o.w, d: o.d, id: o.id });
     });
 
-    // ─── Inverter Bounded Area Blocks (bounded rectangle over all strings of an inverter)
+    // ─── Inverter Bounded Area Blocks (bounded rectangle over all strings + inverter station)
     this.invBlocks = {};
     var invBounds = {};
+
+    // 1. Add tracker string bounds
     L.trackers.forEach(function (t) {
       var invId = t.inverter;
       if (!invId) return;
@@ -508,6 +510,22 @@
       }
     });
 
+    // 2. Add inverter station shape bounds so bounded polygon encompasses the inverter station too
+    (L.inverters || []).forEach(function (o) {
+      var invId = o.id;
+      if (!invId) return;
+      var ix0 = px(o.x), ix1 = px(o.x) + o.w;
+      var iy0 = py(o.y) - o.d, iy1 = py(o.y);
+
+      if (!invBounds[invId]) {
+        invBounds[invId] = { minX: ix0, maxX: ix1, minY: iy0, maxY: iy1 };
+      } else {
+        var b = invBounds[invId];
+        b.minX = Math.min(b.minX, ix0); b.maxX = Math.max(b.maxX, ix1);
+        b.minY = Math.min(b.minY, iy0); b.maxY = Math.max(b.maxY, iy1);
+      }
+    });
+
     var gInvBlockGroup = sv("g", { class: "svm-inv-blocks-group" });
     gDev.appendChild(gInvBlockGroup);
     this.gInvBlockGroup = gInvBlockGroup;
@@ -519,7 +537,7 @@
 
     Object.keys(invBounds).forEach(function (invId) {
       var b = invBounds[invId];
-      var padX = 1.2, padY = 1.5;
+      var padX = 1.5, padY = 1.8;
       var bx = b.minX - padX, by = b.minY - padY;
       var bw = (b.maxX - b.minX) + 2 * padX, bh = (b.maxY - b.minY) + 2 * padY;
 
@@ -648,13 +666,14 @@
         if (c) r.style.fill = c; else r.style.fill = "";
         r.classList.toggle("dim", !(!keep || t.strings.some(function (x) { return keep.has(x); })));
       } else {
+        // Individual strings carry their own status colors (Green, Yellow, Red)!
         t.strings.forEach(function (sid) {
           var r = self.rects[sid];
           if (!r) return;
           var c = self.fillFor(t, sid);
           r.setAttribute("class", "svm-str" + (c ? "" : " s-" + self.statusOf(sid)));
           if (c) r.style.fill = c; else r.style.fill = "";
-          r.classList.toggle("dim", (self.view === "inverter" && !keep) || (!!keep && !keep.has(sid)));
+          r.classList.toggle("dim", !!keep && !keep.has(sid));
         });
       }
     });
@@ -694,21 +713,22 @@
         });
 
         if (colors.length === 0) {
-          // Healthy inverter block (Green)
-          block.shape.style.fill = "rgba(16, 185, 129, 0.25)";
+          // Healthy inverter bounded box: Green background with 60% transparency (0.4 fill opacity)
+          block.shape.style.fill = "#10b981";
+          block.shape.style.fillOpacity = "0.4";
           block.shape.style.stroke = "#10b981";
-          block.shape.style.strokeWidth = "1px";
+          block.shape.style.strokeWidth = "1.2px";
         } else if (colors.length === 1) {
-          // Single issue (Solid color fill)
+          // Single issue: Inverter color fill with 60% transparency (0.4 fill opacity)
           block.shape.style.fill = colors[0];
-          block.shape.style.fillOpacity = "0.45";
+          block.shape.style.fillOpacity = "0.4";
           block.shape.style.stroke = colors[0];
           block.shape.style.strokeWidth = "1.8px";
         } else {
-          // Multi-issue inverter (High Temp + Low PR, etc.) -> DUAL MULTI-STRIPE PATTERN FILL!
+          // Multi-issue inverter: Multi-stripe fill at 60% transparency (0.4 fill opacity)
           var patId = self.getMultiStripePatternId(colors);
           block.shape.style.fill = "url(#" + patId + ")";
-          block.shape.style.fillOpacity = "0.75";
+          block.shape.style.fillOpacity = "0.4";
           block.shape.style.stroke = colors[0];
           block.shape.style.strokeWidth = "2.2px";
         }
