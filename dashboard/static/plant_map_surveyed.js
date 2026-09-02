@@ -489,11 +489,11 @@
         cy: py(o.y) - o.d / 2, w: o.w, d: o.d, id: o.id });
     });
 
-    // ─── Inverter Bounded Area Blocks (Tight Convex Polygon over all strings + inverter station)
+    // ─── Inverter Bounded Area Blocks (Strict String Area Polygon over inverter's strings)
     this.invBlocks = {};
     var invPoints = {};
 
-    // 1. Collect 4 corner points for all trackers serving each inverter ID
+    // 1. Collect 4 corner points strictly for trackers/strings belonging to each inverter ID
     L.trackers.forEach(function (t) {
       var cx = px(t.x), top = py(t.y0), h = t.y0 - t.y1;
       var w = t.w;
@@ -510,21 +510,6 @@
         if (!invPoints[invId]) invPoints[invId] = [];
         pts.forEach(function (pt) { invPoints[invId].push(pt); });
       });
-    });
-
-    // 2. Include 4 corner points of inverter station footprint
-    (L.inverters || []).forEach(function (o) {
-      var invId = o.id;
-      if (!invId) return;
-      var ix = px(o.x), iy = py(o.y);
-      var pts = [
-        { x: ix, y: iy - o.d },
-        { x: ix + o.w, y: iy - o.d },
-        { x: ix, y: iy },
-        { x: ix + o.w, y: iy }
-      ];
-      if (!invPoints[invId]) invPoints[invId] = [];
-      pts.forEach(function (pt) { invPoints[invId].push(pt); });
     });
 
     var gInvBlockGroup = sv("g", { class: "svm-inv-blocks-group" });
@@ -590,7 +575,7 @@
       if (!rawPts || !rawPts.length) return;
 
       var hull = getConvexHull(rawPts);
-      var expanded = expandPolygonPoints(hull, 1.2);
+      var expanded = expandPolygonPoints(hull, 0.4);
       var pointsStr = expanded.map(function (p) { return p.x + "," + p.y; }).join(" ");
 
       var lcx = 0, lcy = 0;
