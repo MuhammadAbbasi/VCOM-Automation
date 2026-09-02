@@ -489,44 +489,42 @@
         cy: py(o.y) - o.d / 2, w: o.w, d: o.d, id: o.id });
     });
 
-    // ─── Inverter Bounded Area Blocks (bounded rectangle over all strings + inverter station)
+    // ─── Inverter Bounded Area Blocks (Tight Convex Polygon over all strings + inverter station)
     this.invBlocks = {};
-    var invBounds = {};
+    var invPoints = {};
 
-    // 1. Add tracker string bounds mapped to inverter ID (e.g. TX1-INV01)
+    // 1. Collect 4 corner points for all trackers serving each inverter ID
     L.trackers.forEach(function (t) {
       var cx = px(t.x), top = py(t.y0), h = t.y0 - t.y1;
-      var x0 = cx - t.w / 2, x1 = cx + t.w / 2;
-      var y0 = top, y1 = top + h;
+      var w = t.w;
+      var pts = [
+        { x: cx - w / 2, y: top },
+        { x: cx + w / 2, y: top },
+        { x: cx - w / 2, y: top + h },
+        { x: cx + w / 2, y: top + h }
+      ];
 
       (t.strings || []).forEach(function (sid) {
         var invId = sid.split("-STR")[0];
         if (!invId) return;
-
-        if (!invBounds[invId]) {
-          invBounds[invId] = { minX: x0, maxX: x1, minY: y0, maxY: y1 };
-        } else {
-          var b = invBounds[invId];
-          b.minX = Math.min(b.minX, x0); b.maxX = Math.max(b.maxX, x1);
-          b.minY = Math.min(b.minY, y0); b.maxY = Math.max(b.maxY, y1);
-        }
+        if (!invPoints[invId]) invPoints[invId] = [];
+        pts.forEach(function (pt) { invPoints[invId].push(pt); });
       });
     });
 
-    // 2. Add inverter station shape bounds so bounded polygon encompasses the inverter station too
+    // 2. Include 4 corner points of inverter station footprint
     (L.inverters || []).forEach(function (o) {
       var invId = o.id;
       if (!invId) return;
-      var ix0 = px(o.x), ix1 = px(o.x) + o.w;
-      var iy0 = py(o.y) - o.d, iy1 = py(o.y);
-
-      if (!invBounds[invId]) {
-        invBounds[invId] = { minX: ix0, maxX: ix1, minY: iy0, maxY: iy1 };
-      } else {
-        var b = invBounds[invId];
-        b.minX = Math.min(b.minX, ix0); b.maxX = Math.max(b.maxX, ix1);
-        b.minY = Math.min(b.minY, iy0); b.maxY = Math.max(b.maxY, iy1);
-      }
+      var ix = px(o.x), iy = py(o.y);
+      var pts = [
+        { x: ix, y: iy - o.d },
+        { x: ix + o.w, y: iy - o.d },
+        { x: ix, y: iy },
+        { x: ix + o.w, y: iy }
+      ];
+      if (!invPoints[invId]) invPoints[invId] = [];
+      pts.forEach(function (pt) { invPoints[invId].push(pt); });
     });
 
     var gInvBlockGroup = sv("g", { class: "svm-inv-blocks-group" });
@@ -538,17 +536,72 @@
     this.patternDefs = defs;
     this.createdPatterns = {};
 
-    Object.keys(invBounds).forEach(function (invId) {
-      var b = invBounds[invId];
-      var padX = 1.5, padY = 1.8;
-      var bx = b.minX - padX, by = b.minY - padY;
-      var bw = (b.maxX - b.minX) + 2 * padX, bh = (b.maxY - b.minY) + 2 * padY;
+    function getConvexHull(points) {
+      if (!points || points.length <= 3) return points;
+      var sorted = points.slice().sort(function (a, b) {
+        return a.x === b.x ? a.y - b.y : a.x - b.x;
+      });
 
-      var blockShape = sv("rect", { class: "svm-inv-block", x: bx, y: by, width: bw, height: bh, rx: 1.5 });
-      var blockHit = sv("rect", { class: "svm-hit", x: bx, y: by, width: bw, height: bh });
+      function cross(o, a, b) {
+        return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+      }
+
+      var lower = [];
+      for (var i = 0; i < sorted.length; i++) {
+        while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], sorted[i]) <= 0) {
+          lower.pop();
+        }
+        lower.push(sorted[i]);
+      }
+
+      var upper = [];
+      for (var i = sorted.length - 1; i >= 0; i--) {
+        while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], sorted[i]) <= 0) {
+          upper.pop();
+        }
+        upper.push(sorted[i]);
+      }
+
+      lower.pop();
+      upper.pop();
+      return lower.concat(upper);
+    }
+
+    function expandPolygonPoints(hull, margin) {
+      if (!hull || hull.length < 3) return hull;
+      var cx = 0, cy = 0;
+      hull.forEach(function (p) { cx += p.x; cy += p.y; });
+      cx /= hull.length; cy /= hull.length;
+
+      return hull.map(function (p) {
+        var dx = p.x - cx;
+        var dy = p.y - cy;
+        var dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist === 0) return p;
+        return {
+          x: Math.round((p.x + (dx / dist) * margin) * 100) / 100,
+          y: Math.round((p.y + (dy / dist) * margin) * 100) / 100
+        };
+      });
+    }
+
+    Object.keys(invPoints).forEach(function (invId) {
+      var rawPts = invPoints[invId];
+      if (!rawPts || !rawPts.length) return;
+
+      var hull = getConvexHull(rawPts);
+      var expanded = expandPolygonPoints(hull, 1.2);
+      var pointsStr = expanded.map(function (p) { return p.x + "," + p.y; }).join(" ");
+
+      var lcx = 0, lcy = 0;
+      expanded.forEach(function (p) { lcx += p.x; lcy += p.y; });
+      lcx /= expanded.length; lcy /= expanded.length;
+
+      var blockShape = sv("polygon", { class: "svm-inv-block", points: pointsStr });
+      var blockHit = sv("polygon", { class: "svm-hit", points: pointsStr });
       blockHit.dataset.inv = invId;
 
-      var label = sv("text", { class: "svm-inv-block-label", x: bx + bw / 2, y: by - 0.8, "text-anchor": "middle" });
+      var label = sv("text", { class: "svm-inv-block-label", x: lcx, y: lcy, "text-anchor": "middle" });
       label.textContent = invId;
 
       var blockGroup = sv("g", { class: "svm-inv-block-unit" });
