@@ -657,8 +657,10 @@ def _load_wide_metric(table_name: str, date_str: str) -> pd.DataFrame | None:
     # Remove the internal _date column to match the original CSV format
     df = df.drop(columns=["_date"], errors="ignore")
 
-    # Deduplicate by Ora if present (same logic as old load_metric)
-    if "Ora" in df.columns:
+    # Deduplicate by Ora if present (same logic as old load_metric).
+    # Skip deduplication for pr_readings because PR data lists inverters line-by-line
+    # rather than minute time-slots.
+    if "Ora" in df.columns and table_name != "pr_readings":
         df = df.drop_duplicates(subset=["Ora"], keep="last").reset_index(drop=True)
 
     logger.debug(f"[DB] Loaded {table_name} for {date_str} ({len(df)} rows)")

@@ -215,6 +215,38 @@
     modes.appendChild(this.exportBtn);
 
     var tools = el("div", "svm-tools");
+
+    // Inverter Filter Dropdown
+    this.invSelect = el("select", "svm-select svm-inv-select");
+    this.invSelect.title = "Filtra per Inverter (TX1-01 .. TX3-12)";
+    var optAll = el("option", null, "Tutti gli Inverter (36)");
+    optAll.value = "";
+    this.invSelect.appendChild(optAll);
+
+    ["TX1", "TX2", "TX3"].forEach(function (tx) {
+      var grp = document.createElement("optgroup");
+      grp.label = "Sotto-campo " + tx;
+      for (var i = 1; i <= 12; i++) {
+        var invId = tx + "-" + (i < 10 ? "0" + i : i);
+        var opt = el("option", null, "Inverter " + invId);
+        opt.value = invId;
+        grp.appendChild(opt);
+      }
+      self.invSelect.appendChild(grp);
+    });
+
+    this.invSelect.addEventListener("change", function () {
+      self.selectedInverterFilter = this.value || null;
+      if (this.value) {
+        self.select({ kind: "inverter", id: this.value });
+      } else {
+        self.select(null);
+        self.fitAll();
+      }
+      self.paint();
+    });
+    tools.appendChild(this.invSelect);
+
     this.search = el("input", "svm-search");
     this.search.type = "search";
     this.search.placeholder = "Cerca TRACKER 198, STR21, MPPT05, seriale…";
@@ -584,10 +616,35 @@
     }
   };
 
+  var ISSUE_COLORS = {
+    "PR BASSO": "#8b5cf6",
+    "PR CRITICO": "#7c3aed",
+    "TEMPERATURA ALTA": "#f43f5e",
+    "GUASTO ISOLAMENTO": "#ec4899",
+    "DISPERSIONE": "#db2777",
+    "CORRENTE DC": "#06b6d4",
+    "CORRENTE DC ANOMALA": "#0891b2",
+    "POTENZA AC BASSA": "#eab308",
+    "POTENZA AC TRIP": "#d97706",
+    "TRACKER": "#6366f1",
+    "TRACKER OFFLINE": "#4f46e5",
+    "LINK MQTT PERSO": "#ea580c",
+    "PORTALE VCOM DOWN": "#dc2626"
+  };
+
   P.filterSet = function () {
     var st = this.state, L = this.layout, self = this;
-    if (!this.filter || !st) return null;
     var keep = new Set();
+
+    if (this.selectedInverterFilter) {
+      var targetInv = this.selectedInverterFilter;
+      L.strings.forEach(function (s) {
+        if (s.inverter === targetInv) keep.add(s.id);
+      });
+      return keep;
+    }
+
+    if (!this.filter || !st) return null;
     if (RANK[this.filter] !== undefined) {
       L.strings.forEach(function (s) { if (self.statusOf(s.id) === self.filter) keep.add(s.id); });
       return keep;
@@ -674,7 +731,8 @@
         }));
       });
       (st.legend || []).forEach(function (e) {
-        ul.appendChild(mk(null, e.severity, e.label, e.count, self.filter === e.key, function () {
+        var customCol = ISSUE_COLORS[e.key] || ISSUE_COLORS[e.label] || null;
+        ul.appendChild(mk(customCol, e.severity, e.label, e.count, self.filter === e.key, function () {
           self.setFilter(self.filter === e.key ? null : e.key);
         }));
       });
@@ -694,9 +752,6 @@
       this.problems.appendChild(el("div", "svm-none", "Nessun problema attivo."));
       return;
     }
-    // 49 rows of one fault must not bury the single row that is different, so
-    // they are grouped by type. Small groups stay open; a flood folds behind
-    // its count and opens on click.
     var groups = [], byKey = {};
     st.problems.forEach(function (p) {
       var k = p.type || p.key || "ANOMALIA";
@@ -716,14 +771,20 @@
       box.open = groups.length === 1 || g.items.length <= 8;
       var sum = document.createElement("summary");
       sum.className = "svm-pgroup-head";
-      sum.appendChild(el("span", "svm-sw s-" + g.severity));
+      var customCol = ISSUE_COLORS[g.key] || (g.items[0] && ISSUE_COLORS[g.items[0].type]) || null;
+      var sw = el("span", "svm-sw" + (customCol ? "" : " s-" + g.severity));
+      if (customCol) sw.style.background = customCol;
+      sum.appendChild(sw);
       sum.appendChild(el("span", "svm-prob-type", g.key));
       sum.appendChild(el("span", "svm-prob-el", String(g.items.length)));
       box.appendChild(sum);
       g.items.forEach(function (p) {
         var b = el("button", "svm-prob");
         var top = el("div", "svm-prob-top");
-        top.appendChild(el("span", "svm-sw s-" + p.severity));
+        var pCol = ISSUE_COLORS[p.type] || ISSUE_COLORS[p.key] || null;
+        var pSw = el("span", "svm-sw" + (pCol ? "" : " s-" + p.severity));
+        if (pCol) pSw.style.background = pCol;
+        top.appendChild(pSw);
         top.appendChild(el("span", "svm-prob-type", p.element || p.type || p.key));
         b.appendChild(top);
         if (p.message) b.appendChild(el("div", "svm-prob-msg", p.message));

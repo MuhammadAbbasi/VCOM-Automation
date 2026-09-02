@@ -240,4 +240,5 @@ temp_llm_codes/
 artifacts/
 db/last_ai_audit.json
 run_monitor.pid
+_claude_check.py
 

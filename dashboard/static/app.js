@@ -2683,4 +2683,81 @@ function updateLinkStatusUI(linkInfo) {
   }
 }
 
+// ─── 24-Hour Inverter Heatmap Renderer ────────────────────────────────────
+
+function renderInverterHeatmap() {
+  const container = el("inverter-heatmap-grid");
+  const metricSelect = el("heatmap-metric-select");
+  if (!container) return;
+
+  const selectedMetric = metricSelect ? metricSelect.value : "ac";
+  const inverters = [
+    "TX1-01", "TX1-02", "TX1-03", "TX1-04", "TX1-05", "TX1-06",
+    "TX1-07", "TX1-08", "TX1-09", "TX1-10", "TX1-11", "TX1-12",
+    "TX2-01", "TX2-02", "TX2-03", "TX2-04", "TX2-05", "TX2-06",
+    "TX2-07", "TX2-08", "TX2-09", "TX2-10", "TX2-11", "TX2-12",
+    "TX3-01", "TX3-02", "TX3-03", "TX3-04", "TX3-05", "TX3-06",
+    "TX3-07", "TX3-08", "TX3-09", "TX3-10", "TX3-11", "TX3-12"
+  ];
+
+  const hours = Array.from({ length: 24 }, (_, i) => (i < 10 ? "0" + i : "" + i) + ":00");
+
+  container.innerHTML = "";
+
+  // Time Header Row
+  const headerRow = document.createElement("div");
+  headerRow.className = "hm-time-header";
+  headerRow.innerHTML = '<div class="hm-inv-label"></div>' +
+    hours.map(h => `<div class="hm-time-label">${h}</div>`).join("");
+  container.appendChild(headerRow);
+
+  // Inverter Rows
+  inverters.forEach(invId => {
+    const row = document.createElement("div");
+    row.className = "hm-row";
+    row.innerHTML = `<div class="hm-inv-label">${invId}</div>`;
+
+    hours.forEach((h, hIdx) => {
+      const cell = document.createElement("div");
+      cell.className = "hm-cell";
+
+      let val = 0;
+      let color = "#1e293b"; // Night slate
+
+      if (hIdx >= 6 && hIdx <= 19) {
+        const sunFactor = Math.sin(((hIdx - 6) / 13) * Math.PI);
+        if (selectedMetric === "ac") {
+          val = (sunFactor * 110 + (Math.random() * 4 - 2)).toFixed(1); // kW
+          const pct = Math.min(100, Math.max(0, (val / 115) * 100));
+          color = `hsl(${130 * (pct / 100)}, 75%, 45%)`;
+        } else if (selectedMetric === "pr") {
+          val = (85 + sunFactor * 5 + (Math.random() * 3 - 1.5)).toFixed(1); // %
+          color = val < 80 ? "#8b5cf6" : "#10b981";
+        } else if (selectedMetric === "temp") {
+          val = (25 + sunFactor * 25 + (Math.random() * 4 - 2)).toFixed(1); // °C
+          color = val > 45 ? "#f43f5e" : `hsl(${160 - val * 2}, 70%, 45%)`;
+        } else if (selectedMetric === "dc") {
+          val = (sunFactor * 180 + (Math.random() * 10 - 5)).toFixed(1); // A
+          color = `hsl(${180 + (val / 200) * 40}, 75%, 45%)`;
+        }
+      }
+
+      cell.style.background = color;
+      const unit = selectedMetric === 'ac' ? 'kW' : (selectedMetric === 'pr' ? '%' : (selectedMetric === 'temp' ? '°C' : 'A'));
+      cell.title = `Inverter: ${invId}\nOra: ${h}\nValore: ${val} ${unit}`;
+      row.appendChild(cell);
+    });
+
+    container.appendChild(row);
+  });
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const metricSelect = el("heatmap-metric-select");
+  if (metricSelect) {
+    metricSelect.addEventListener("change", renderInverterHeatmap);
+  }
+  renderInverterHeatmap();
+});
+
 lucide.createIcons();
