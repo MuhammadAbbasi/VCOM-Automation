@@ -506,10 +506,10 @@
       var pts = fixedPolygons[invId];
       if (!pts || !pts.length) return;
 
-      var pointsStr = pts.map(function (p) { return p[0] + "," + p[1]; }).join(" ");
+      var pointsStr = pts.map(function (p) { return px(p[0]) + "," + py(p[1]); }).join(" ");
 
       var lcx = 0, lcy = 0;
-      pts.forEach(function (p) { lcx += p[0]; lcy += p[1]; });
+      pts.forEach(function (p) { lcx += px(p[0]); lcy += py(p[1]); });
       lcx /= pts.length; lcy /= pts.length;
 
       var blockShape = sv("polygon", { class: "svm-inv-block", points: pointsStr });
