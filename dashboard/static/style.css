@@ -3501,56 +3501,64 @@ section>h2 {
 .inverter-heatmap-grid {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  min-width: 850px;
+  gap: 1.5px;
+  min-width: 900px;
   font-family: inherit;
   user-select: none;
+  background: rgba(15, 23, 42, 0.6);
+  padding: 0.75rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .hm-time-header {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 1.5px;
   margin-bottom: 4px;
 }
 
 .hm-row {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 1.5px;
 }
 
 .hm-inv-label {
-  width: 70px;
-  font-size: 0.72rem;
+  width: 58px;
+  font-size: 0.65rem;
   font-weight: 600;
   color: var(--muted);
   text-align: right;
   padding-right: 6px;
   flex-shrink: 0;
+  letter-spacing: -0.02em;
 }
 
 .hm-time-label {
-  flex: 1;
-  font-size: 0.68rem;
+  flex: 4;
+  font-size: 0.64rem;
+  font-weight: 500;
   color: var(--muted);
-  text-align: center;
+  text-align: left;
+  padding-left: 2px;
 }
 
 .hm-cell {
   flex: 1;
-  height: 18px;
-  border-radius: 3px;
-  background: rgba(255, 255, 255, 0.05);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  height: 10px;
+  border-radius: 1.5px;
+  background: rgba(255, 255, 255, 0.03);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
   cursor: pointer;
   position: relative;
 }
 
 .hm-cell:hover {
-  transform: scale(1.2);
-  z-index: 10;
-  box-shadow: 0 0 8px rgba(255, 255, 255, 0.4);
+  transform: scale(1.6);
+  z-index: 100;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.9);
+  border-radius: 3px;
 }
 
 /* ═══════════════════════════════════════════════════════════
