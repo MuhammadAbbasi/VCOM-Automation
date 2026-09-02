@@ -2779,11 +2779,60 @@ async function renderInverterHeatmap() {
       container.appendChild(row);
     });
 
+    renderHeatmapLegend(selectedMetric);
+
   } catch (err) {
     console.error("Heatmap render error:", err);
   } finally {
     heatmapPendingFetch = false;
   }
+}
+
+function renderHeatmapLegend(metric) {
+  const legendContainer = el("heatmap-legend");
+  if (!legendContainer) return;
+
+  let items = [];
+
+  if (metric === "ac") {
+    items = [
+      { label: "Assenti / Futuri", color: "rgba(30, 41, 59, 0.45)" },
+      { label: "Notte (0 kW)", color: "#0f172a" },
+      { label: "< 25 kW", color: "hsl(25, 75%, 44%)" },
+      { label: "25 - 60 kW", color: "hsl(65, 75%, 44%)" },
+      { label: "60 - 90 kW", color: "hsl(100, 75%, 44%)" },
+      { label: "> 90 kW (Picco)", color: "hsl(135, 75%, 44%)" }
+    ];
+  } else if (metric === "pr") {
+    items = [
+      { label: "Assenti / Futuri", color: "rgba(30, 41, 59, 0.45)" },
+      { label: "PR Basso (< 80%)", color: "#8b5cf6" },
+      { label: "PR Ottimale (≥ 80%)", color: "#10b981" }
+    ];
+  } else if (metric === "temp") {
+    items = [
+      { label: "Assenti / Futuri", color: "rgba(30, 41, 59, 0.45)" },
+      { label: "Cool (< 30°C)", color: "hsl(165, 68%, 42%)" },
+      { label: "Normale (30 - 45°C)", color: "hsl(70, 68%, 42%)" },
+      { label: "Temperatura Alta (> 45°C)", color: "#f43f5e" }
+    ];
+  } else if (metric === "dc") {
+    items = [
+      { label: "Assenti / Futuri", color: "rgba(30, 41, 59, 0.45)" },
+      { label: "0 A (Notte)", color: "#0f172a" },
+      { label: "< 50 A", color: "hsl(180, 75%, 44%)" },
+      { label: "50 - 120 A", color: "hsl(200, 75%, 44%)" },
+      { label: "> 120 A (Max)", color: "hsl(220, 75%, 44%)" }
+    ];
+  }
+
+  legendContainer.innerHTML = '<span style="font-weight:600; margin-right: 0.25rem;">LEGENDA:</span>' +
+    items.map(item => `
+      <div style="display: flex; align-items: center; gap: 0.35rem;">
+        <span style="width: 12px; height: 10px; border-radius: 2px; background: ${item.color}; border: 1px solid rgba(255,255,255,0.15); display: inline-block;"></span>
+        <span>${item.label}</span>
+      </div>
+    `).join("");
 }
 
 document.addEventListener("DOMContentLoaded", () => {
