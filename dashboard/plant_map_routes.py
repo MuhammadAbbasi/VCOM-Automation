@@ -144,9 +144,18 @@ async def get_surveyed_layout_route():
     """Static topology and geometry for the surveyed map."""
     try:
         from db.surveyed_map_helpers import load_surveyed_layout
+        import json, os
         layout = load_surveyed_layout()
         if not layout:
             raise HTTPException(status_code=404, detail="Surveyed layout not found")
+        
+        poly_file = os.path.join("db", "inverter_polygons.json")
+        if os.path.exists(poly_file):
+            try:
+                with open(poly_file, "r") as f:
+                    layout["inverter_polygons"] = json.load(f)
+            except Exception:
+                pass
         return layout
     except HTTPException:
         raise

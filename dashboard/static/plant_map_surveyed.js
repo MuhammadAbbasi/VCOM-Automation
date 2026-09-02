@@ -489,28 +489,9 @@
         cy: py(o.y) - o.d / 2, w: o.w, d: o.d, id: o.id });
     });
 
-    // ─── Inverter Bounded Area Blocks (Strict String Area Polygon over inverter's strings)
+    // ─── Fixed Inverter Polygon Masks (db/inverter_polygons.json) ───────────
     this.invBlocks = {};
-    var invPoints = {};
-
-    // 1. Collect 4 corner points strictly for trackers/strings belonging to each inverter ID
-    L.trackers.forEach(function (t) {
-      var cx = px(t.x), top = py(t.y0), h = t.y0 - t.y1;
-      var w = t.w;
-      var pts = [
-        { x: cx - w / 2, y: top },
-        { x: cx + w / 2, y: top },
-        { x: cx - w / 2, y: top + h },
-        { x: cx + w / 2, y: top + h }
-      ];
-
-      (t.strings || []).forEach(function (sid) {
-        var invId = sid.split("-STR")[0];
-        if (!invId) return;
-        if (!invPoints[invId]) invPoints[invId] = [];
-        pts.forEach(function (pt) { invPoints[invId].push(pt); });
-      });
-    });
+    var fixedPolygons = L.inverter_polygons || {};
 
     var gInvBlockGroup = sv("g", { class: "svm-inv-blocks-group" });
     gDev.appendChild(gInvBlockGroup);
@@ -521,66 +502,15 @@
     this.patternDefs = defs;
     this.createdPatterns = {};
 
-    function getConvexHull(points) {
-      if (!points || points.length <= 3) return points;
-      var sorted = points.slice().sort(function (a, b) {
-        return a.x === b.x ? a.y - b.y : a.x - b.x;
-      });
+    Object.keys(fixedPolygons).forEach(function (invId) {
+      var pts = fixedPolygons[invId];
+      if (!pts || !pts.length) return;
 
-      function cross(o, a, b) {
-        return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-      }
-
-      var lower = [];
-      for (var i = 0; i < sorted.length; i++) {
-        while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], sorted[i]) <= 0) {
-          lower.pop();
-        }
-        lower.push(sorted[i]);
-      }
-
-      var upper = [];
-      for (var i = sorted.length - 1; i >= 0; i--) {
-        while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], sorted[i]) <= 0) {
-          upper.pop();
-        }
-        upper.push(sorted[i]);
-      }
-
-      lower.pop();
-      upper.pop();
-      return lower.concat(upper);
-    }
-
-    function expandPolygonPoints(hull, margin) {
-      if (!hull || hull.length < 3) return hull;
-      var cx = 0, cy = 0;
-      hull.forEach(function (p) { cx += p.x; cy += p.y; });
-      cx /= hull.length; cy /= hull.length;
-
-      return hull.map(function (p) {
-        var dx = p.x - cx;
-        var dy = p.y - cy;
-        var dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist === 0) return p;
-        return {
-          x: Math.round((p.x + (dx / dist) * margin) * 100) / 100,
-          y: Math.round((p.y + (dy / dist) * margin) * 100) / 100
-        };
-      });
-    }
-
-    Object.keys(invPoints).forEach(function (invId) {
-      var rawPts = invPoints[invId];
-      if (!rawPts || !rawPts.length) return;
-
-      var hull = getConvexHull(rawPts);
-      var expanded = expandPolygonPoints(hull, 0.4);
-      var pointsStr = expanded.map(function (p) { return p.x + "," + p.y; }).join(" ");
+      var pointsStr = pts.map(function (p) { return p[0] + "," + p[1]; }).join(" ");
 
       var lcx = 0, lcy = 0;
-      expanded.forEach(function (p) { lcx += p.x; lcy += p.y; });
-      lcx /= expanded.length; lcy /= expanded.length;
+      pts.forEach(function (p) { lcx += p[0]; lcy += p[1]; });
+      lcx /= pts.length; lcy /= pts.length;
 
       var blockShape = sv("polygon", { class: "svm-inv-block", points: pointsStr });
       var blockHit = sv("polygon", { class: "svm-hit", points: pointsStr });
