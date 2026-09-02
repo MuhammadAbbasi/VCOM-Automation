@@ -1,5 +1,6 @@
 {
-  "date": "2026-07-22",
-  "timestamp": "2026-07-22T09:40:12.523472",
-  "backup_file": "scada_data_backup_20260722_094012.db"
+  "date": "2026-09-02",
+  "timestamp": "2026-09-02T02:00:00.586893",
+  "backup_file": "scada_data_backup_20260902_020000.zip",
+  "size_mb": 1005.66
 }

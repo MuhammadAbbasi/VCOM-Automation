@@ -13,7 +13,7 @@
   "TRACKER_OFFLINE": {
     "first_detected": "2026-04-29T16:45:10.484172",
     "type": "TRACKER",
-    "message": "370 tracker(s) stale >60 min. NCUs: NCU_02, NCU_01, NCU_03",
+    "message": "82 tracker(s) stale >60 min. NCUs: NCU_02, NCU_03, NCU_01",
     "odoo_anomalia_id": 21,
     "odoo_intervento_id": 23,
     "notified": true,
@@ -2456,6 +2456,28 @@
     "first_detected": "2026-05-21T07:08:26.231038",
     "type": "DC CRITICAL",
     "message": "",
+    "odoo_anomalia_id": null,
+    "odoo_intervento_id": null,
+    "notified": false,
+    "assignment_notified": false,
+    "resolved": false,
+    "last_technician": null
+  },
+  "ISO_TX1-08": {
+    "first_detected": "2026-08-21T07:25:59.348140",
+    "type": "ISO FAULT",
+    "message": "Resistenza isolamento critica: 37.0 kΩ (Soglia: 50 kΩ) — necessaria ispezione sul campo (attivo da 3 min)",
+    "odoo_anomalia_id": null,
+    "odoo_intervento_id": null,
+    "notified": false,
+    "assignment_notified": false,
+    "resolved": false,
+    "last_technician": null
+  },
+  "ISO_TX3-01": {
+    "first_detected": "2026-08-29T07:22:11.359050",
+    "type": "ISO FAULT",
+    "message": "Resistenza isolamento critica: 42.0 kΩ (Soglia: 50 kΩ) — necessaria ispezione sul campo (attivo da 4 min)",
     "odoo_anomalia_id": null,
     "odoo_intervento_id": null,
     "notified": false,
