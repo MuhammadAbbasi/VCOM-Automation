@@ -322,6 +322,8 @@ function updateInverterGrid(data) {
       nsSummary.textContent = "";
     }
   }
+
+  renderInverterHeatmap();
 }
 
 // ─── 4. Active alerts ─────────────────────────────────────────────────────

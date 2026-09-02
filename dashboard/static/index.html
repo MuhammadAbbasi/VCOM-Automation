@@ -155,6 +155,30 @@
       </section>
     </div>
 
+    <section style="margin-top: 1.5rem;">
+      <!-- ── 24-Hour Inverter Heatmap ── -->
+      <div class="card chart-card" id="card-inverter-heatmap" style="padding: 1.25rem;">
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+          <h2 style="font-size: 1.1rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem; color: var(--text); margin: 0;">
+            <i data-lucide="grid" class="icon" style="color: var(--accent);"></i>
+            Matrice Heatmap Inverter 24 Ore (36 Inverter)
+          </h2>
+          <div class="card-controls" style="display: flex; align-items: center; gap: 0.75rem;">
+            <label for="heatmap-metric-select" style="font-size: 0.8rem; color: var(--muted);">Metrica:</label>
+            <select id="heatmap-metric-select" class="select-sm" style="background: rgba(255,255,255,0.08); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 0.25rem 0.6rem; font-size: 0.8rem;">
+              <option value="ac">Potenza AC (kW)</option>
+              <option value="pr">Performance Ratio (%)</option>
+              <option value="temp">Temperatura (°C)</option>
+              <option value="dc">Corrente DC (A)</option>
+            </select>
+          </div>
+        </div>
+        <div class="heatmap-wrapper" style="overflow-x: auto; position: relative;">
+          <div id="inverter-heatmap-grid" class="inverter-heatmap-grid"></div>
+        </div>
+      </div>
+    </section>
+
     <section>
       <h2>Diagnostica Attiva (Avvisi e Info)</h2>
       <div id="alerts-container-others" class="alert-list compact horizontal-grid"></div>

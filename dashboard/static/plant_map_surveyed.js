@@ -171,7 +171,7 @@
       };
       return g;
     }
-    this.segView = group("Vista", [["string", "Stringhe"], ["tracker", "Tracker"]],
+    this.segView = group("Vista", [["string", "Stringhe"], ["tracker", "Tracker"], ["inverter", "Inverter"]],
       function () { return self.view; },
       function (v) { self.view = v; self.sel = null; self.draw(); self.paint(); });
     this.segCol = group("Colore", LAYOUT_MODES,
@@ -666,8 +666,10 @@
     this.legend.innerHTML = "";
     var mk = function (colour, cls, label, n, on, fn) {
       var b = el("button", "svm-legend-item" + (on ? " on" : ""));
-      var sw = el("span", "svm-sw" + (cls ? " s-" + cls : ""));
-      if (colour) sw.style.background = colour;
+      var sw = el("span", "svm-sw" + (colour ? "" : (cls ? " s-" + cls : "")));
+      if (colour) {
+        sw.style.setProperty("background", colour, "important");
+      }
       b.appendChild(sw); b.appendChild(el("span", "svm-legend-label", label));
       if (n !== null && n !== undefined) b.appendChild(el("span", "svm-legend-n", n));
       if (fn) b.onclick = fn; else b.disabled = true;
@@ -773,7 +775,9 @@
       sum.className = "svm-pgroup-head";
       var customCol = ISSUE_COLORS[g.key] || (g.items[0] && ISSUE_COLORS[g.items[0].type]) || null;
       var sw = el("span", "svm-sw" + (customCol ? "" : " s-" + g.severity));
-      if (customCol) sw.style.background = customCol;
+      if (customCol) {
+        sw.style.setProperty("background", customCol, "important");
+      }
       sum.appendChild(sw);
       sum.appendChild(el("span", "svm-prob-type", g.key));
       sum.appendChild(el("span", "svm-prob-el", String(g.items.length)));
@@ -783,7 +787,9 @@
         var top = el("div", "svm-prob-top");
         var pCol = ISSUE_COLORS[p.type] || ISSUE_COLORS[p.key] || null;
         var pSw = el("span", "svm-sw" + (pCol ? "" : " s-" + p.severity));
-        if (pCol) pSw.style.background = pCol;
+        if (pCol) {
+          pSw.style.setProperty("background", pCol, "important");
+        }
         top.appendChild(pSw);
         top.appendChild(el("span", "svm-prob-type", p.element || p.type || p.key));
         b.appendChild(top);

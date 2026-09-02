@@ -3553,3 +3553,18 @@ section>h2 {
   box-shadow: 0 0 8px rgba(255, 255, 255, 0.4);
 }
 
+/* ═══════════════════════════════════════════════════════════
+   CUSTOM ISSUE COLOR SWATCHES & INVERTER VIEW HIGHLIGHT
+   ═══════════════════════════════════════════════════════════ */
+.svm-inv.inv-mode-active {
+  stroke: #38bdf8 !important;
+  stroke-width: 3px !important;
+  filter: drop-shadow(0 0 8px #38bdf8);
+}
+
+.svm-sw.s-pr-basso, .svm-chip.s-pr-basso { background: #8b5cf6 !important; }
+.svm-sw.s-temperatura-alta, .svm-chip.s-temperatura-alta { background: #f43f5e !important; }
+.svm-sw.s-guasto-isolamento, .svm-chip.s-guasto-isolamento { background: #ec4899 !important; }
+.svm-sw.s-corrente-dc, .svm-chip.s-corrente-dc { background: #06b6d4 !important; }
+.svm-sw.s-tracker, .svm-chip.s-tracker { background: #6366f1 !important; }
+
