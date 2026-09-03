@@ -2706,6 +2706,18 @@ async function renderInverterHeatmap() {
 
   heatmapPendingFetch = true;
 
+  // Render sleek loading bar indicator inside container
+  container.innerHTML = `
+    <div class="hm-loading-box">
+      <div class="hm-loading-bar-track">
+        <div class="hm-loading-bar-fill"></div>
+      </div>
+      <div class="hm-loading-text">
+        <span class="hm-loading-spinner"></span> Caricamento matrice Heatmap 24 Ore (${selectedMetric.toUpperCase()})...
+      </div>
+    </div>
+  `;
+
   try {
     const resp = await fetch(`/api/heatmap/data?date=${encodeURIComponent(selectedDate)}&metric=${encodeURIComponent(selectedMetric)}`, { credentials: "same-origin" });
     if (!resp.ok) throw new Error("API error " + resp.status);

@@ -1051,25 +1051,26 @@ class SQLiteLogHandler(logging.Handler):
 # Utility Functions
 # ---------------------------------------------------------------------------
 
+@lru_cache(maxsize=16)
 def get_available_dates() -> list[str]:
     """Return a sorted list of all dates that have data in the DB."""
     conn = get_data_conn()
 
     dates = set()
     try:
-        # Check all wide metric tables
-        tables = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name != 'sqlite_sequence'"
-        ).fetchall()
-        for (table_name,) in tables:
-            if table_name in ("corrente_dc", "analysis_snapshots", "extraction_status"):
-                rows = conn.execute(f"SELECT DISTINCT date FROM \"{table_name}\"").fetchall()
-            else:
-                try:
-                    rows = conn.execute(f'SELECT DISTINCT _date FROM "{table_name}"').fetchall()
-                except Exception:
-                    continue
-            dates.update(r[0] for r in rows)
+        # Check primary telemetry tables directly for maximum performance
+        for table_name in ("potenza_ac", "temperatura", "pr_inverter", "irraggiamento"):
+            try:
+                rows = conn.execute(f'SELECT DISTINCT _date FROM "{table_name}"').fetchall()
+                dates.update(r[0] for r in rows if r[0])
+            except Exception:
+                pass
+
+        try:
+            rows = conn.execute('SELECT DISTINCT date FROM corrente_dc').fetchall()
+            dates.update(r[0] for r in rows if r[0])
+        except Exception:
+            pass
     except Exception:
         pass
 
@@ -1580,7 +1581,8 @@ def get_tracker_summary() -> dict:
         return {}
 
 
-def get_heatmap_matrix(date_str: str, metric: str = "ac") -> dict:
+@lru_cache(maxsize=64)
+def _get_heatmap_matrix_cached(date_str: str, metric: str = "ac") -> dict:
     """
     Extract real database metrics for all 36 inverters for the specified date and metric,
     mapped into a 96-slot (15-minute granularity) matrix across 24 hours.
@@ -1685,3 +1687,30 @@ def get_heatmap_matrix(date_str: str, metric: str = "ac") -> dict:
         "matrix": matrix,
         "available_dates": dates
     }
+
+
+def get_heatmap_matrix(date_str: str = None, metric: str = "ac") -> dict:
+    """
+    Public heatmap entry point. If requested date has no data or is empty,
+    automatically falls back to the latest date that contains real telemetry data.
+    """
+    dates = get_available_dates()
+    if not dates:
+        return _get_heatmap_matrix_cached(date_str or "2026-09-02", metric)
+
+    target_date = date_str if (date_str and date_str in dates) else dates[-1]
+
+    # Check if target_date has real non-zero data; if empty, find latest valid date
+    mat = _get_heatmap_matrix_cached(target_date, metric)
+    non_zero_count = sum(1 for inv in mat["inverters"] for v in mat["matrix"].get(inv, []) if v and v > 0)
+
+    if non_zero_count == 0:
+        for d in reversed(dates):
+            if d == target_date:
+                continue
+            cand_mat = _get_heatmap_matrix_cached(d, metric)
+            cand_non_zero = sum(1 for inv in cand_mat["inverters"] for v in cand_mat["matrix"].get(inv, []) if v and v > 0)
+            if cand_non_zero > 0:
+                return cand_mat
+
+    return mat
