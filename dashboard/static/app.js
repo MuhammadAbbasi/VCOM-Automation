@@ -2689,7 +2689,7 @@ function updateLinkStatusUI(linkInfo) {
 
 let heatmapPendingFetch = false;
 
-async function renderInverterHeatmap() {
+async function renderInverterHeatmap(forceLoading = false) {
   const container = el("inverter-heatmap-grid");
   const metricSelect = el("heatmap-metric-select");
   const dateInput = el("heatmap-date-select");
@@ -2706,9 +2706,11 @@ async function renderInverterHeatmap() {
 
   heatmapPendingFetch = true;
 
-  // Render sleek loading bar indicator ONLY on initial load or metric change
-  const hasExistingGrid = container.querySelector(".hm-row");
-  if (!hasExistingGrid) {
+  // Show glowing loading bar immediately whenever metric/date changes or on initial load
+  const activeKey = `${selectedDate}_${selectedMetric}`;
+  const isDifferentKey = container.dataset.activeKey !== activeKey;
+  if (forceLoading || isDifferentKey || !container.querySelector(".hm-row")) {
+    container.dataset.activeKey = activeKey;
     container.innerHTML = `
       <div class="hm-loading-box">
         <div class="hm-loading-bar-track">
@@ -2809,12 +2811,25 @@ async function renderInverterHeatmap() {
             // Nominal max inverter capacity ~280 kW; peak percentile (> 250 kW) renders in rich green
             const pct = Math.min(100, Math.max(0, (val / 280) * 100));
             color = `hsl(${140 * (pct / 100)}, 85%, 42%)`;
-          } else if (selectedMetric === "pr") {
-            color = val < 80 ? "#8b5cf6" : "#10b981";
-          } else if (selectedMetric === "temp") {
-            color = val > 45 ? "#f43f5e" : `hsl(${165 - Math.min(60, val) * 2.2}, 68%, 42%)`;
           } else if (selectedMetric === "dc") {
-            color = `hsl(${180 + Math.min(40, (val / 200) * 40)}, 75%, 44%)`;
+            // String DC Current range: 0 A to 25 A (Peak ~23 A)
+            if (val < 5) color = "hsl(195, 85%, 45%)";       // Deep Cyan / Blue (< 5 A)
+            else if (val < 12) color = "hsl(180, 85%, 45%)";  // Bright Cyan (5 - 12 A)
+            else if (val < 20) color = "hsl(150, 85%, 45%)";  // Spring Green (12 - 20 A)
+            else color = "hsl(120, 85%, 45%)";               // Vibrant Lime / Emerald (> 20 A Peak)
+          } else if (selectedMetric === "temp") {
+            // Operating Inverter Temperature range: 30°C to 75°C
+            if (val < 35) color = "hsl(185, 75%, 45%)";       // Cool Slate / Cyan (< 35°C)
+            else if (val < 50) color = "hsl(140, 75%, 42%)";  // Healthy Green (35 - 50°C)
+            else if (val < 62) color = "hsl(45, 90%, 50%)";   // Warm Amber / Yellow (50 - 62°C)
+            else if (val < 70) color = "hsl(25, 90%, 50%)";   // Warm Orange (62 - 70°C)
+            else color = "#ef4444";                          // Critical Red (> 70°C)
+          } else if (selectedMetric === "pr") {
+            // Performance Ratio range: 60% to 95%
+            if (val < 75) color = "#ef4444";                 // Critico (< 75%)
+            else if (val < 82) color = "#f59e0b";            // Sotto Soglia (75 - 82%)
+            else if (val < 86) color = "#84cc16";            // Buono (82 - 86%)
+            else color = "#10b981";                          // Eccellente (≥ 86%)
           }
         }
 
@@ -2847,27 +2862,33 @@ function renderHeatmapLegend(metric) {
       { label: "150 - 250 kW", color: "hsl(95, 85%, 45%)" },
       { label: "> 250 kW (Picco)", color: "hsl(140, 85%, 42%)" }
     ];
-  } else if (metric === "pr") {
+  } else if (metric === "dc") {
     items = [
       { label: "Assenti / Futuri", color: "rgba(30, 41, 59, 0.45)" },
-      { label: "PR Basso (< 80%)", color: "#8b5cf6" },
-      { label: "PR Ottimale (≥ 80%)", color: "#10b981" }
+      { label: "0 A (Notte)", color: "rgba(15, 23, 42, 0.9)" },
+      { label: "< 5 A", color: "hsl(195, 85%, 45%)" },
+      { label: "5 - 12 A", color: "hsl(180, 85%, 45%)" },
+      { label: "12 - 20 A", color: "hsl(150, 85%, 45%)" },
+      { label: "> 20 A (Picco)", color: "hsl(120, 85%, 45%)" }
     ];
   } else if (metric === "temp") {
     items = [
       { label: "Assenti / Futuri", color: "rgba(30, 41, 59, 0.45)" },
-      { label: "Cool (< 30°C)", color: "hsl(165, 68%, 42%)" },
-      { label: "Normale (30 - 45°C)", color: "hsl(70, 68%, 42%)" },
-      { label: "Temperatura Alta (> 45°C)", color: "#f43f5e" }
+      { label: "Cool (< 35°C)", color: "hsl(185, 75%, 45%)" },
+      { label: "Normale (35 - 50°C)", color: "hsl(140, 75%, 42%)" },
+      { label: "Operativa (50 - 62°C)", color: "hsl(45, 90%, 50%)" },
+      { label: "Calda (62 - 70°C)", color: "hsl(25, 90%, 50%)" },
+      { label: "Critica (> 70°C)", color: "#ef4444" }
     ];
-  } else if (metric === "dc") {
+  } else if (metric === "pr") {
     items = [
       { label: "Assenti / Futuri", color: "rgba(30, 41, 59, 0.45)" },
-      { label: "0 A (Notte)", color: "#0f172a" },
-      { label: "< 50 A", color: "hsl(180, 75%, 44%)" },
-      { label: "50 - 120 A", color: "hsl(200, 75%, 44%)" },
-      { label: "> 120 A (Max)", color: "hsl(220, 75%, 44%)" }
+      { label: "Critico (< 75%)", color: "#ef4444" },
+      { label: "Sotto Soglia (75 - 82%)", color: "#f59e0b" },
+      { label: "Buono (82 - 86%)", color: "#84cc16" },
+      { label: "Eccellente (≥ 86%)", color: "#10b981" }
     ];
+  }
   }
 
   legendContainer.innerHTML = '<span style="font-weight:600; margin-right: 0.25rem;">LEGENDA:</span>' +
@@ -2887,8 +2908,8 @@ document.addEventListener("DOMContentLoaded", () => {
     dateInput.value = new Date().toISOString().slice(0, 10);
   }
 
-  if (metricSelect) metricSelect.addEventListener("change", renderInverterHeatmap);
-  if (dateInput) dateInput.addEventListener("change", renderInverterHeatmap);
+  if (metricSelect) metricSelect.addEventListener("change", () => renderInverterHeatmap(true));
+  if (dateInput) dateInput.addEventListener("change", () => renderInverterHeatmap(true));
 
   renderInverterHeatmap();
 });
