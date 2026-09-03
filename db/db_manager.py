@@ -1598,7 +1598,8 @@ def get_heatmap_matrix(date_str: str, metric: str = "ac") -> dict:
     dates = get_available_dates()
 
     slots = [f"{h:02d}:{m:02d}" for h in range(24) for m in (0, 15, 30, 45)]
-    matrix = {inv_id: [None] * 96 for inv_id in INVERTER_IDS}
+    all_inv_keys = list(INVERTER_IDS) + [inv_id.replace("-INV", "-") for inv_id in INVERTER_IDS]
+    matrix = {inv_id: [None] * 96 for inv_id in all_inv_keys}
 
     if df is None or df.empty:
         return {
@@ -1613,11 +1614,11 @@ def get_heatmap_matrix(date_str: str, metric: str = "ac") -> dict:
     # Match inverter columns for each INVERTER_ID
     inv_col_map = {}
     for inv_id in INVERTER_IDS:
-        matches = [c for c in df.columns if f"TX{inv_id}" in c or f"INV {inv_id}" in c or f"({inv_id})" in c or f" {inv_id} " in c or c == inv_id or c == f"INV {inv_id}"]
-        if not matches:
-            matches = [c for c in df.columns if inv_id in c]
+        short_id = inv_id.replace("-INV", "-")
+        matches = [c for c in df.columns if f"INV {inv_id}" in c or f"INV {short_id}" in c or f"({inv_id})" in c or f"({short_id})" in c or inv_id in c or short_id in c]
         if matches:
             inv_col_map[inv_id] = matches[0]
+            inv_col_map[short_id] = matches[0]
 
     # Handle vertical PR table vs wide time-series tables
     if raw_metric == "PR inverter" and "PR inverter [%]" in df.columns:
@@ -1628,11 +1629,13 @@ def get_heatmap_matrix(date_str: str, metric: str = "ac") -> dict:
             pr_val = row.get(pr_val_col)
             if pd.notna(pr_val):
                 for inv_id in INVERTER_IDS:
-                    if inv_id in inv_name:
+                    short_id = inv_id.replace("-INV", "-")
+                    if inv_id in inv_name or short_id in inv_name:
                         try:
                             val = float(pr_val)
                             for s_idx in range(24, 80):
                                 matrix[inv_id][s_idx] = round(val, 1)
+                                matrix[short_id][s_idx] = round(val, 1)
                         except Exception:
                             pass
         return {

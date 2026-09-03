@@ -2711,6 +2711,15 @@ async function renderInverterHeatmap() {
     if (!resp.ok) throw new Error("API error " + resp.status);
     const data = await resp.json();
 
+    // Auto-update date picker bounds and default value from available dates
+    if (dateInput && data.available_dates && data.available_dates.length) {
+      dateInput.max = data.available_dates[data.available_dates.length - 1];
+      dateInput.min = data.available_dates[0];
+      if (!dateInput.value || (data.date && data.date !== dateInput.value)) {
+        dateInput.value = data.date || data.available_dates[data.available_dates.length - 1];
+      }
+    }
+
     const inverters = data.inverters || [
       "TX1-01", "TX1-02", "TX1-03", "TX1-04", "TX1-05", "TX1-06",
       "TX1-07", "TX1-08", "TX1-09", "TX1-10", "TX1-11", "TX1-12",
@@ -2745,7 +2754,9 @@ async function renderInverterHeatmap() {
       row.className = "hm-row";
       row.innerHTML = `<div class="hm-inv-label">${invId}</div>`;
 
-      const invValues = matrix[invId] || [];
+      // Lookup values using both short format (TX1-01) and long format (TX1-INV01)
+      const altInvId = invId.includes("-INV") ? invId.replace("-INV", "-") : invId.replace("TX1-", "TX1-INV").replace("TX2-", "TX2-INV").replace("TX3-", "TX3-INV");
+      const invValues = matrix[invId] || matrix[altInvId] || [];
 
       slots.forEach((timeStr, sIdx) => {
         const cell = document.createElement("div");
@@ -2758,7 +2769,8 @@ async function renderInverterHeatmap() {
         if (val !== null && val !== undefined) {
           displayVal = `${val} ${unit}`;
           if (val === 0) {
-            color = "#0f172a"; // Night zero output
+            color = "rgba(15, 23, 42, 0.9)"; // Night zero output
+            cell.style.border = "1px solid rgba(255, 255, 255, 0.04)";
           } else if (selectedMetric === "ac") {
             const pct = Math.min(100, Math.max(0, (val / 115) * 100));
             color = `hsl(${135 * (pct / 100)}, 75%, 44%)`;
