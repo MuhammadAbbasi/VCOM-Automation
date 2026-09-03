@@ -2784,8 +2784,9 @@ async function renderInverterHeatmap() {
             color = "rgba(15, 23, 42, 0.9)"; // Night zero output
             cell.style.border = "1px solid rgba(255, 255, 255, 0.04)";
           } else if (selectedMetric === "ac") {
-            const pct = Math.min(100, Math.max(0, (val / 115) * 100));
-            color = `hsl(${135 * (pct / 100)}, 75%, 44%)`;
+            // Nominal max inverter capacity ~280 kW; peak percentile (> 250 kW) renders in rich green
+            const pct = Math.min(100, Math.max(0, (val / 280) * 100));
+            color = `hsl(${140 * (pct / 100)}, 85%, 42%)`;
           } else if (selectedMetric === "pr") {
             color = val < 80 ? "#8b5cf6" : "#10b981";
           } else if (selectedMetric === "temp") {
@@ -2821,11 +2822,11 @@ function renderHeatmapLegend(metric) {
   if (metric === "ac") {
     items = [
       { label: "Assenti / Futuri", color: "rgba(30, 41, 59, 0.45)" },
-      { label: "Notte (0 kW)", color: "#0f172a" },
-      { label: "< 25 kW", color: "hsl(25, 75%, 44%)" },
-      { label: "25 - 60 kW", color: "hsl(65, 75%, 44%)" },
-      { label: "60 - 90 kW", color: "hsl(100, 75%, 44%)" },
-      { label: "> 90 kW (Picco)", color: "hsl(135, 75%, 44%)" }
+      { label: "Notte (0 kW)", color: "rgba(15, 23, 42, 0.9)" },
+      { label: "< 50 kW", color: "hsl(25, 85%, 48%)" },
+      { label: "50 - 150 kW", color: "hsl(60, 85%, 48%)" },
+      { label: "150 - 250 kW", color: "hsl(95, 85%, 45%)" },
+      { label: "> 250 kW (Picco)", color: "hsl(140, 85%, 42%)" }
     ];
   } else if (metric === "pr") {
     items = [
