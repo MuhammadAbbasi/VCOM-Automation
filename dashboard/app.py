@@ -78,8 +78,13 @@ except Exception:
 
 
 def is_authenticated(request: Request) -> bool:
-    """Check if request is authenticated via session cookie or Basic Auth."""
-    session = request.cookies.get("get_session")
+    """Check if request is authenticated via local network bypass, session cookie, or Basic Auth."""
+    host = (request.headers.get("x-forwarded-host") or request.headers.get("host") or "").split(":")[0].lower()
+    client_ip = request.client.host if request.client else ""
+    if host in ("localhost", "127.0.0.1", "192.168.10.40") or client_ip in ("127.0.0.1", "::1", "192.168.10.40"):
+        return True
+
+    session = request.cookies.get("get_session") or request.cookies.get("session")
     if session == "authenticated":
         return True
 
