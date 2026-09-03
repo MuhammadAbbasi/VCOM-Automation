@@ -2706,17 +2706,20 @@ async function renderInverterHeatmap() {
 
   heatmapPendingFetch = true;
 
-  // Render sleek loading bar indicator inside container
-  container.innerHTML = `
-    <div class="hm-loading-box">
-      <div class="hm-loading-bar-track">
-        <div class="hm-loading-bar-fill"></div>
+  // Render sleek loading bar indicator ONLY on initial load or metric change
+  const hasExistingGrid = container.querySelector(".hm-row");
+  if (!hasExistingGrid) {
+    container.innerHTML = `
+      <div class="hm-loading-box">
+        <div class="hm-loading-bar-track">
+          <div class="hm-loading-bar-fill"></div>
+        </div>
+        <div class="hm-loading-text">
+          <span class="hm-loading-spinner"></span> Caricamento matrice Heatmap 24 Ore (${selectedMetric.toUpperCase()})...
+        </div>
       </div>
-      <div class="hm-loading-text">
-        <span class="hm-loading-spinner"></span> Caricamento matrice Heatmap 24 Ore (${selectedMetric.toUpperCase()})...
-      </div>
-    </div>
-  `;
+    `;
+  }
 
   try {
     const resp = await fetch(`/api/heatmap/data?date=${encodeURIComponent(selectedDate)}&metric=${encodeURIComponent(selectedMetric)}`, { credentials: "same-origin" });
@@ -2751,28 +2754,47 @@ async function renderInverterHeatmap() {
     const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0") + ":00");
     const unit = selectedMetric === 'ac' ? 'kW' : (selectedMetric === 'pr' ? '%' : (selectedMetric === 'temp' ? '°C' : 'A'));
 
-    container.innerHTML = "";
+    // Rebuild grid structure only if not present (prevents screen flicker)
+    if (!container.querySelector(".hm-row")) {
+      container.innerHTML = "";
 
-    // Time Header Row
-    const headerRow = document.createElement("div");
-    headerRow.className = "hm-time-header";
-    headerRow.innerHTML = '<div class="hm-inv-label"></div>' +
-      hours.map(h => `<div class="hm-time-label">${h}</div>`).join("");
-    container.appendChild(headerRow);
+      // Time Header Row
+      const headerRow = document.createElement("div");
+      headerRow.className = "hm-time-header";
+      headerRow.innerHTML = '<div class="hm-inv-label"></div>' +
+        hours.map(h => `<div class="hm-time-label">${h}</div>`).join("");
+      container.appendChild(headerRow);
 
-    // Inverter Rows with REAL Database Values
+      // Inverter Rows
+      inverters.forEach(invId => {
+        const row = document.createElement("div");
+        row.className = "hm-row";
+        row.dataset.invId = invId;
+        row.innerHTML = `<div class="hm-inv-label">${invId}</div>`;
+
+        slots.forEach((_, sIdx) => {
+          const cell = document.createElement("div");
+          cell.className = "hm-cell";
+          cell.dataset.slotIdx = sIdx;
+          row.appendChild(cell);
+        });
+
+        container.appendChild(row);
+      });
+    }
+
+    // Update cell background colors and tooltips in-place seamlessly without DOM destruction
     inverters.forEach(invId => {
-      const row = document.createElement("div");
-      row.className = "hm-row";
-      row.innerHTML = `<div class="hm-inv-label">${invId}</div>`;
+      const row = container.querySelector(`.hm-row[data-inv-id="${invId}"]`);
+      if (!row) return;
 
-      // Lookup values using both short format (TX1-01) and long format (TX1-INV01)
       const altInvId = invId.includes("-INV") ? invId.replace("-INV", "-") : invId.replace("TX1-", "TX1-INV").replace("TX2-", "TX2-INV").replace("TX3-", "TX3-INV");
       const invValues = matrix[invId] || matrix[altInvId] || [];
+      const cells = row.querySelectorAll(".hm-cell");
 
       slots.forEach((timeStr, sIdx) => {
-        const cell = document.createElement("div");
-        cell.className = "hm-cell";
+        const cell = cells[sIdx];
+        if (!cell) return;
 
         const val = invValues[sIdx];
         let color = "rgba(30, 41, 59, 0.25)"; // Missing / Future slot background (Dark Slate Translucent)
@@ -2798,10 +2820,7 @@ async function renderInverterHeatmap() {
 
         cell.style.background = color;
         cell.title = `Inverter: ${invId}\nOra: ${timeStr}\nValore: ${displayVal}`;
-        row.appendChild(cell);
       });
-
-      container.appendChild(row);
     });
 
     renderHeatmapLegend(selectedMetric);

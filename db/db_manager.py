@@ -1657,10 +1657,12 @@ def _get_heatmap_matrix_cached(date_str: str, metric: str = "ac") -> dict:
 
         try:
             if isinstance(ora_val, (int, float)):
-                h = int(ora_val)
-                m = int(round((ora_val - h) * 100))
+                ora_str = f"{float(ora_val):05.2f}"
+                parts = ora_str.split(".")
+                h, m = int(parts[0]), int(parts[1])
             else:
-                parts = str(ora_val).split(":")
+                s = str(ora_val).strip().replace(".", ":")
+                parts = s.split(":")
                 h, m = int(parts[0]), int(parts[1])
             slot_idx = min(95, max(0, h * 4 + (m // 15)))
         except Exception:
