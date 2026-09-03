@@ -425,11 +425,12 @@ def fetch_ws_initial_data(today, link_status_path):
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    session = websocket.cookies.get("get_session")
-    host = websocket.headers.get("host", "").split(":")[0].lower()
-    is_local = host in ("localhost", "127.0.0.1", "192.168.10.40")
+    session = websocket.cookies.get("get_session") or websocket.cookies.get("session")
+    forwarded_host = websocket.headers.get("x-forwarded-host", "")
+    host = (forwarded_host or websocket.headers.get("host", "")).split(":")[0].lower()
+    is_allowed = host in ("localhost", "127.0.0.1", "192.168.10.40") or "monitoraggioget.it" in host
 
-    if session != "authenticated" and not is_local:
+    if session != "authenticated" and not is_allowed:
         await websocket.close(code=1008)
         return
     await manager.connect(websocket)

@@ -2900,6 +2900,21 @@ function renderHeatmapLegend(metric) {
     `).join("");
 }
 
+async function fetchInitialData() {
+  try {
+    const resp = await fetch("/api/plants/summary", { credentials: "same-origin" });
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data) {
+        lastData = data;
+        updateDashboard(data);
+      }
+    }
+  } catch (err) {
+    console.warn("Initial summary fetch error:", err);
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   const metricSelect = el("heatmap-metric-select");
   const dateInput = el("heatmap-date-select");
@@ -2911,6 +2926,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (metricSelect) metricSelect.addEventListener("change", () => renderInverterHeatmap(true));
   if (dateInput) dateInput.addEventListener("change", () => renderInverterHeatmap(true));
 
+  fetchInitialData();
   renderInverterHeatmap();
 });
 
