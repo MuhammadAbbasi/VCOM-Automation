@@ -1047,53 +1047,10 @@
     head.appendChild(up);
     this.detail.appendChild(head);
 
-    var kv = el("div", "svm-kv");
-    function add(k, v) {
-      if (v === undefined || v === null || v === "") return;
-      kv.appendChild(el("span", "svm-k", k)); kv.appendChild(el("span", "svm-v", v));
-    }
-    var ss = this.stringsFor(sel), s0 = ss[0];
-    if (s0) {
-      add("Inverter", s0.inverter); add("TX", s0.tx); add("Area", s0.area);
-      add("Tracker", s0.tracker); add("TCU", s0.tcu); add("NCU", s0.ncu);
-      if (sel.kind !== "string") add("Stringhe", ss.length);
-    }
-    if (sel.kind === "string" && st.strings && st.strings[sel.id]) {
-      var sd = st.strings[sel.id];
-      add("MPPT", s0 && s0.mppt);
-      add("Stato", SEV_LABEL[sd.status] || sd.status);
-      add("Corrente stringa", sd.per_string_a != null ? sd.per_string_a + " A" : null);
-      add("Corrente MPPT", sd.mppt_a != null
-        ? sd.mppt_a + " A su " + sd.mppt_exp_a + " A attesi" : null);
-      add("Nota", sd.note);
-    }
-    if (sel.kind === "mppt" && st.mppts && st.mppts[sel.id]) {
-      var mm = st.mppts[sel.id];
-      add("Stato", SEV_LABEL[mm.status] || mm.status);
-      add("Corrente", mm.v != null ? mm.v + " A" : null);
-      add("Attesa", mm.exp != null ? mm.exp + " A" : null);
-      add("Rapporto", mm.ratio != null ? Math.round(mm.ratio * 100) + "%" : null);
-      add("Nota", mm.note);
-    }
-    if (sel.kind === "tracker" && st.trackers && st.trackers[sel.id]) {
-      var tt = st.trackers[sel.id];
-      add("Stato", SEV_LABEL[tt.status] || tt.status);
-      add("Angolo target", tt.target_angle); add("Angolo attuale", tt.actual_angle);
-      add("Scarto", tt.deviation != null ? tt.deviation + " deg" : null);
-      add("Modo", tt.mode); add("Allarme", tt.alarm); add("Nota", tt.reason);
-    }
-    if (sel.kind === "inverter") { this.detail.appendChild(kv); this.renderInverter(sel.id); return; }
-    if (sel.kind === "tx" || sel.kind === "transformer" || sel.id === "TX1" || sel.id === "TX2" || sel.id === "TX3") {
-      this.renderTxDetail(sel.id);
+    if (sel.kind === "string" || sel.kind === "mppt") {
+      this.renderStringOrMpptDetail(sel);
       return;
     }
-    var trk = s0 && this.byTracker[s0.tracker];
-    if (trk && (sel.kind === "string" || sel.kind === "tracker")) {
-      add("Moduli", trk.modules); add("Pali", trk.piles);
-      add("Lunghezza", trk.len + " m"); add("Quota", trk.alt + " m");
-      add("Coordinate", trk.lat + ", " + trk.lon);
-    }
-    this.detail.appendChild(kv);
 
     if (this.panelSel && sel.kind === "string" && this.panelSel.string === sel.id) {
       var ps = this.panelSel;
@@ -1118,6 +1075,145 @@
         lst.appendChild(b);
       });
       this.detail.appendChild(lst);
+    }
+  };
+
+  /* Render String / MPPT Detail: Monitoring Results & Issues FIRST, then Structural Parameters */
+  P.renderStringOrMpptDetail = function (sel) {
+    var self = this, st = this.state || {}, L = this.layout;
+    var ss = this.stringsFor(sel), s0 = ss[0];
+    var trk = s0 && this.byTracker[s0.tracker];
+
+    var status = "green";
+    var measuredA = null, expectedA = null, ratio = null, note = null, mpptId = s0 ? s0.mppt : null;
+
+    if (sel.kind === "string" && st.strings && st.strings[sel.id]) {
+      var sd = st.strings[sel.id];
+      status = sd.status || "green";
+      measuredA = sd.per_string_a != null ? sd.per_string_a : (sd.mppt_a != null ? sd.mppt_a : null);
+      expectedA = sd.mppt_exp_a != null ? sd.mppt_exp_a : null;
+      if (measuredA != null && expectedA != null && expectedA > 0) {
+        ratio = Math.min(100, Math.round((measuredA / expectedA) * 100));
+      }
+      note = sd.note;
+    } else if (sel.kind === "mppt" && st.mppts && st.mppts[sel.id]) {
+      var mm = st.mppts[sel.id];
+      status = mm.status || "green";
+      measuredA = mm.v;
+      expectedA = mm.exp;
+      ratio = mm.ratio != null ? Math.round(mm.ratio * 100) : (measuredA != null && expectedA != null && expectedA > 0 ? Math.round((measuredA / expectedA) * 100) : null);
+      note = mm.note;
+    }
+
+    // Find active problem in st.problems matching this element
+    var activeProblem = (st.problems || []).find(function (p) {
+      if (!p) return false;
+      if (p.element === sel.id || p.element === mpptId) return true;
+      if (p.mppts && (p.mppts.indexOf(sel.id) >= 0 || p.mppts.indexOf(mpptId) >= 0)) return true;
+      if (p.strings && p.strings.indexOf(sel.id) >= 0) return true;
+      return false;
+    });
+
+    var monSec = el("div", "svm-mon-section");
+
+    // 1. Status Badge
+    var statusLabel = SEV_LABEL[status] || status || "Regolare";
+    var badge = el("div", "svm-status-badge s-" + status);
+    badge.appendChild(el("span", "svm-sw s-" + status));
+    badge.appendChild(el("span", null, statusLabel));
+    monSec.appendChild(badge);
+
+    // 2. Active Issue Banner (if status is not green or if activeProblem / note exists)
+    if (status !== "green" || note || activeProblem) {
+      var bannerClass = status === "red" || (activeProblem && activeProblem.severity === "critical") ? "s-red" : "s-yellow";
+      var banner = el("div", "svm-issue-banner " + bannerClass);
+      var issueTitle = activeProblem ? (activeProblem.title || activeProblem.type || "ANOMALIA DC") : "AVVISO MONITORAGGIO";
+      var issueMsg = note || (activeProblem ? activeProblem.msg : "Prestazione ridotta rispetto all'atteso.");
+
+      var headBox = el("div", "svm-issue-head");
+      headBox.textContent = "⚠️ " + issueTitle;
+      banner.appendChild(headBox);
+
+      var msgBox = el("div", null, issueMsg);
+      banner.appendChild(msgBox);
+      monSec.appendChild(banner);
+    }
+
+    // 3. Live Monitoring Metrics Grid Cards
+    var grid = el("div", "svm-metrics-grid");
+
+    var card1 = el("div", "svm-metric-card");
+    card1.appendChild(el("span", "svm-metric-label", "Corrente Misurata"));
+    card1.appendChild(el("span", "svm-metric-val", measuredA != null ? measuredA + " A" : "N/D"));
+    grid.appendChild(card1);
+
+    var card2 = el("div", "svm-metric-card");
+    card2.appendChild(el("span", "svm-metric-label", "Corrente Attesa"));
+    card2.appendChild(el("span", "svm-metric-val", expectedA != null ? expectedA + " A" : "N/D"));
+    grid.appendChild(card2);
+
+    if (ratio != null) {
+      var card3 = el("div", "svm-metric-card full");
+      var rHead = el("div", "svm-side-head", null);
+      rHead.appendChild(el("span", "svm-metric-label", "Rapporto Prestazione (PR)"));
+      rHead.appendChild(el("span", "svm-metric-val", ratio + "%"));
+      card3.appendChild(rHead);
+
+      var progressBg = el("div", "svm-progress-bg");
+      var fillClass = ratio < 70 ? "s-red" : (ratio < 90 ? "s-yellow" : "s-green");
+      var progressFill = el("div", "svm-progress-fill " + fillClass);
+      progressFill.style.width = Math.min(100, Math.max(5, ratio)) + "%";
+      progressBg.appendChild(progressFill);
+      card3.appendChild(progressBg);
+      grid.appendChild(card3);
+    }
+
+    monSec.appendChild(grid);
+    this.detail.appendChild(monSec);
+
+    // SECTION 2: Structural & Topological Parameters Card
+    var structCard = el("div", "svm-struct-card");
+    var structTitle = el("div", "svm-struct-title");
+    structTitle.textContent = "📐 Parametri Strutturali";
+    structCard.appendChild(structTitle);
+
+    var kv = el("div", "svm-kv");
+    function add(k, v) {
+      if (v === undefined || v === null || v === "") return;
+      kv.appendChild(el("span", "svm-k", k));
+      kv.appendChild(el("span", "svm-v", v));
+    }
+
+    if (s0) {
+      add("MPPT", s0.mppt);
+      add("Inverter", s0.inverter);
+      add("Cabina / TX", s0.tx);
+      add("Area", s0.area);
+      add("Tracker", s0.tracker);
+      add("TCU", s0.tcu);
+      add("NCU", s0.ncu);
+    }
+    if (trk) {
+      add("Moduli", trk.modules);
+      add("Pali", trk.piles);
+      add("Lunghezza", trk.len + " m");
+      add("Quota", trk.alt + " m");
+      add("Coordinate", trk.lat + ", " + trk.lon);
+    }
+    structCard.appendChild(kv);
+    this.detail.appendChild(structCard);
+
+    // Panel Replacement Mode integration
+    if (this.panelSel && sel.kind === "string" && this.panelSel.string === sel.id) {
+      var ps = this.panelSel;
+      var cached = (this.panelCache || {})[ps.tracker + "#" + ps.n];
+      var pb = el("div", "svm-panelsel");
+      pb.appendChild(el("span", "svm-k", "Pannello " + ps.n + " del tracker"));
+      pb.appendChild(el("span", "svm-serial-code", cached || "seriale non caricato"));
+      this.detail.appendChild(pb);
+    }
+    if (this.serialMode) {
+      this.renderSerials(sel);
     }
   };
 
