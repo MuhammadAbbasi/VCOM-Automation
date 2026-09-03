@@ -1052,6 +1052,42 @@
       return;
     }
 
+    if (sel.kind === "inverter") {
+      this.renderInverter(sel.id);
+      return;
+    }
+
+    if (sel.kind === "tx" || sel.kind === "transformer" || sel.id === "TX1" || sel.id === "TX2" || sel.id === "TX3") {
+      this.renderTxDetail(sel.id);
+      return;
+    }
+
+    var ss = this.stringsFor(sel), s0 = ss[0];
+    var kv = el("div", "svm-kv");
+    function add(k, v) {
+      if (v === undefined || v === null || v === "") return;
+      kv.appendChild(el("span", "svm-k", k)); kv.appendChild(el("span", "svm-v", v));
+    }
+    if (s0) {
+      add("Inverter", s0.inverter); add("TX", s0.tx); add("Area", s0.area);
+      add("Tracker", s0.tracker); add("TCU", s0.tcu); add("NCU", s0.ncu);
+      if (sel.kind !== "string") add("Stringhe", ss.length);
+    }
+    if (sel.kind === "tracker" && st.trackers && st.trackers[sel.id]) {
+      var tt = st.trackers[sel.id];
+      add("Stato", SEV_LABEL[tt.status] || tt.status);
+      add("Angolo target", tt.target_angle); add("Angolo attuale", tt.actual_angle);
+      add("Scarto", tt.deviation != null ? tt.deviation + " deg" : null);
+      add("Modo", tt.mode); add("Allarme", tt.alarm); add("Nota", tt.reason);
+    }
+    var trk = s0 && this.byTracker[s0.tracker];
+    if (trk && sel.kind === "tracker") {
+      add("Moduli", trk.modules); add("Pali", trk.piles);
+      add("Lunghezza", trk.len + " m"); add("Quota", trk.alt + " m");
+      add("Coordinate", trk.lat + ", " + trk.lon);
+    }
+    this.detail.appendChild(kv);
+
     if (this.panelSel && sel.kind === "string" && this.panelSel.string === sel.id) {
       var ps = this.panelSel;
       var cached = (this.panelCache || {})[ps.tracker + "#" + ps.n];
