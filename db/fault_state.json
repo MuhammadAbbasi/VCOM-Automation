@@ -13,7 +13,7 @@
   "TRACKER_OFFLINE": {
     "first_detected": "2026-04-29T16:45:10.484172",
     "type": "TRACKER",
-    "message": "82 tracker(s) stale >60 min. NCUs: NCU_03, NCU_01, NCU_02",
+    "message": "370 tracker(s) stale >60 min. NCUs: NCU_01, NCU_03, NCU_02",
     "odoo_anomalia_id": 21,
     "odoo_intervento_id": 23,
     "notified": true,
@@ -1206,7 +1206,7 @@
     "odoo_intervento_id": 108,
     "notified": true,
     "assignment_notified": false,
-    "resolved": false,
+    "resolved": true,
     "last_technician": null
   },
   "DC_TX3-03_MPPT_8": {
@@ -1250,7 +1250,7 @@
     "odoo_intervento_id": 115,
     "notified": true,
     "assignment_notified": false,
-    "resolved": false,
+    "resolved": true,
     "last_technician": null
   },
   "DC_TX3-03_MPPT_4": {

@@ -2193,91 +2193,6 @@ section>h2 {
   color: #60a5fa;
 }
 
-/* ─── Sensor Grid ─────────────────────────────────────────── */
-.sensor-container {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 1.5rem;
-}
-
-.sensor-box {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 0.75rem;
-  padding: 1.25rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.sensor-box:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
-  border-color: var(--accent);
-}
-
-.sensor-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.sensor-id {
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.sensor-type-icon {
-  font-size: 1.2rem;
-}
-
-.sensor-val-row {
-  display: flex;
-  align-items: baseline;
-  gap: 0.4rem;
-}
-
-.sensor-val {
-  font-size: 2.2rem;
-  font-weight: 700;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-}
-
-.sensor-unit {
-  font-size: 0.9rem;
-  color: var(--muted);
-  font-weight: 600;
-}
-
-.sensor-label {
-  font-size: 0.85rem;
-  color: var(--text);
-  opacity: 0.9;
-  font-weight: 500;
-}
-
-/* Specific sensor types */
-.sensor-box.poa {
-  border-left: 4px solid #3b82f6;
-}
-
-.sensor-box.ghi {
-  border-left: 4px solid #10b981;
-}
-
-.sensor-box.temp {
-  border-left: 4px solid #f97316;
-}
-
-.sensor-box.al {
-  border-left: 4px solid #8b5cf6;
-}
-
 /* Responsive tweaks */
 @media (max-width: 640px) {
   .sensor-container {
@@ -2651,32 +2566,6 @@ section>h2 {
   100% { opacity: 0.8; transform: scale(1); }
 }
 
-/* New Data Highlights */
-.new-badge {
-  position: absolute;
-  top: -8px;
-  right: 10px;
-  background: #3b82f6;
-  color: white;
-  font-size: 0.55rem;
-  font-weight: 900;
-  padding: 1px 5px;
-  border-radius: 4px;
-  box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
-  z-index: 2;
-  animation: pulse-glow 2s infinite;
-}
-
-.tracker-card.new-arrival {
-  background: rgba(59, 130, 246, 0.05) !important;
-}
-
-@keyframes pulse-glow {
-  0% { opacity: 0.8; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.1); }
-  100% { opacity: 0.8; transform: scale(1); }
-}
-
 .breakdown-item {
   font-size: 0.65rem;
   color: var(--muted);
@@ -2734,7 +2623,7 @@ section>h2 {
 }
 
 .filter-btn.active {
-  background: linear-gradient(135deg, var(--accent), #3b82f6);
+  background: linear-gradient(135deg, var(--accent), #2563eb);
   color: #fff;
   box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
 }

@@ -35,7 +35,7 @@
 
   var LAYOUT_MODES = [
     ["status", "Stato"], ["tx", "TX"], ["area", "Area"],
-    ["alt", "Quota"], ["type", "Tipologia"], ["nstr", "Stringhe"], ["serial", "Seriali"]
+    ["alt", "Elevazione"], ["type", "Tipologia"], ["nstr", "Stringhe"], ["serial", "Seriali"]
   ];
   // one hue, light to dark, for the continuous ones
   var RAMP = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"];
@@ -189,7 +189,7 @@
 
     // one click to the physical picture of the site
     this.layoutBtn = el("button", "svm-btn", "Layout generale");
-    this.layoutBtn.title = "Vista d'insieme: quota, tipologia, stringhe, seriali";
+    this.layoutBtn.title = "Vista d'insieme: elevazione (s.l.m.), tipologia, stringhe, seriali";
     this.layoutBtn.onclick = function () {
       self.colour = "alt"; self.view = "tracker"; self.sel = null;
       self.draw(); self.paint();
@@ -802,7 +802,7 @@
       return b;
     };
     var TITLES = { status: "Legenda — clicca per filtrare", tx: "Sotto-campo (TX)",
-      area: "Area", alt: "Quota telaio (m s.l.m.)", type: "Tipologia struttura",
+      area: "Area", alt: "Elevazione telaio (m s.l.m.)", type: "Tipologia struttura",
       nstr: "Stringhe per tracker", serial: "Copertura seriali" };
     var head = el("div", "svm-legend-head", TITLES[this.colour] || "Legenda");
     this.legend.appendChild(head);
@@ -1083,7 +1083,7 @@
     var trk = s0 && this.byTracker[s0.tracker];
     if (trk && sel.kind === "tracker") {
       add("Moduli", trk.modules); add("Pali", trk.piles);
-      add("Lunghezza", trk.len + " m"); add("Quota", trk.alt + " m");
+      add("Lunghezza", trk.len + " m"); add("Elevazione (s.l.m.)", trk.alt + " m");
       add("Coordinate", trk.lat + ", " + trk.lon);
     }
     this.detail.appendChild(kv);
@@ -1233,7 +1233,7 @@
       add("Moduli", trk.modules);
       add("Pali", trk.piles);
       add("Lunghezza", trk.len + " m");
-      add("Quota", trk.alt + " m");
+      add("Elevazione (s.l.m.)", trk.alt + " m");
       add("Coordinate", trk.lat + ", " + trk.lon);
     }
     structCard.appendChild(kv);

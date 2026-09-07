@@ -629,10 +629,16 @@ def load_metric(date_str: str, metric_name: str) -> pd.DataFrame | None:
 
     Returns the same wide-format DataFrame that the processor/watchdog expects,
     preserving full backward compatibility with the CSV-based system.
+    Bypasses LRU cache for today's date so newly arrived telemetry is instantly reflected.
 
     Returns None if the metric is not found or the table doesn't exist.
     """
-    df = _load_metric_cached(date_str, metric_name)
+    import datetime
+    today_str = datetime.date.today().isoformat()
+    if date_str == today_str:
+        df = _load_metric_cached.__wrapped__(date_str, metric_name)
+    else:
+        df = _load_metric_cached(date_str, metric_name)
     if df is not None:
         return df.copy()
     return None
@@ -1051,9 +1057,17 @@ class SQLiteLogHandler(logging.Handler):
 # Utility Functions
 # ---------------------------------------------------------------------------
 
-@lru_cache(maxsize=16)
+_available_dates_cache: list[str] = []
+_available_dates_ts: float = 0.0
+
 def get_available_dates() -> list[str]:
-    """Return a sorted list of all dates that have data in the DB."""
+    """Return a sorted list of all dates that have data in the DB (cached with 60s TTL)."""
+    global _available_dates_cache, _available_dates_ts
+    import time
+    now = time.time()
+    if _available_dates_cache and (now - _available_dates_ts) < 60.0:
+        return _available_dates_cache
+
     conn = get_data_conn()
 
     dates = set()
@@ -1074,7 +1088,18 @@ def get_available_dates() -> list[str]:
     except Exception:
         pass
 
-    return sorted(dates)
+    res = sorted(dates)
+    if res:
+        _available_dates_cache = res
+        _available_dates_ts = now
+    return res
+
+def _clear_available_dates_cache():
+    global _available_dates_cache, _available_dates_ts
+    _available_dates_cache = []
+    _available_dates_ts = 0.0
+
+get_available_dates.cache_clear = _clear_available_dates_cache
 
 
 def get_db_stats() -> dict:
@@ -1531,8 +1556,121 @@ def get_all_tracker_status() -> list:
         logger.error(f"Failed to load tracker status: {e}")
         return []
 
+def get_stopped_trackers(threshold_degrees: float = 3.0) -> list[dict]:
+    """
+    Find all trackers that are stopped, stuck, or misaligned (target vs actual angle discrepancy >= threshold),
+    and trace historical records in tracker_history to determine for how long they have been in that state.
+    """
+    from datetime import datetime, timedelta
+    import re
+    conn = get_data_conn()
+    limit_time = (datetime.now() - timedelta(hours=36)).isoformat()
+    stopped = []
+
+    try:
+        rows = conn.execute("""
+            SELECT ncu_id, tcu_id, tracker_no, target_angle, actual_angle, alarm, mode, last_update
+            FROM tracker_status
+            WHERE last_update >= ?
+            ORDER BY ncu_id, tcu_id
+        """, (limit_time,)).fetchall()
+
+        now = datetime.now()
+
+        for r in rows:
+            ncu_raw, tcu_raw, tno, target, actual, alarm, mode, last_update = r
+            if target is None or actual is None:
+                continue
+
+            diff = abs(target - actual)
+            # A tracker is stopped / misaligned if diff >= threshold (with either angle significant)
+            # or if alarm indicates an issue
+            is_discrepant = (diff >= threshold_degrees and (target > 5.0 or actual > 5.0))
+            is_alarm = alarm and str(alarm).strip().lower() not in ('normal', 'green', '', 'none', 'ok')
+
+            if is_discrepant or is_alarm:
+                # Normalize NCU and TCU labels
+                m_ncu = re.search(r'(\d+)', str(ncu_raw))
+                ncu_label = f"NCU {int(m_ncu.group(1)):02d}" if m_ncu else str(ncu_raw)
+
+                m_tcu = re.search(r'(\d+)', str(tcu_raw))
+                tcu_label = f"TCU {int(m_tcu.group(1)):02d}" if m_tcu else str(tcu_raw)
+
+                # Query tracker_history for this unit to calculate duration stopped
+                hist = conn.execute("""
+                    SELECT timestamp, target_angle, actual_angle
+                    FROM tracker_history
+                    WHERE ncu_id = ? AND tcu_id = ?
+                    ORDER BY timestamp DESC
+                    LIMIT 100
+                """, (ncu_raw, tcu_raw)).fetchall()
+
+                stuck_since = last_update
+                stuck_actual = actual
+                if hist:
+                    for h_ts, h_target, h_actual in hist:
+                        if h_target is None or h_actual is None:
+                            continue
+                        h_diff = abs(h_target - h_actual)
+                        is_h_stuck = h_diff >= (threshold_degrees - 0.5) or (abs(h_actual - stuck_actual) <= 0.5 and h_diff >= 2.0)
+                        if is_h_stuck:
+                            stuck_since = h_ts
+                        elif h_target == 0.0 and h_actual == 0.0:
+                            continue
+                        else:
+                            break
+
+                try:
+                    t_start = datetime.fromisoformat(stuck_since)
+                    t_last = datetime.fromisoformat(last_update)
+                    ref_time = now if (now - t_last).total_seconds() < 7200 else t_last
+                    secs = max(0, int((ref_time - t_start).total_seconds()))
+                except Exception:
+                    secs = 0
+                    t_start = None
+
+                hrs = secs // 3600
+                mins = (secs % 3600) // 60
+                if hrs > 24:
+                    days = hrs // 24
+                    rem_hrs = hrs % 24
+                    duration_str = f"{days}g {rem_hrs}h"
+                    duration_it = f"{days} giorn{'o' if days == 1 else 'i'} e {rem_hrs} ore"
+                elif hrs > 0:
+                    duration_str = f"{hrs}h {mins}m"
+                    duration_it = f"{hrs} or{'a' if hrs == 1 else 'e'} e {mins} minuti"
+                else:
+                    duration_str = f"{mins}m"
+                    duration_it = f"{mins} minuti"
+
+                since_str = t_start.strftime("%H:%M") if t_start else "N/A"
+                if t_start and (now.date() != t_start.date()):
+                    since_str = t_start.strftime("%d/%m %H:%M")
+
+                stopped.append({
+                    "ncu": ncu_label,
+                    "tcu": tcu_label,
+                    "tracker_no": str(tno).zfill(3) if tno else "?",
+                    "target_angle": round(target, 1),
+                    "actual_angle": round(actual, 1),
+                    "delta_angle": round(diff, 1),
+                    "alarm": alarm,
+                    "mode": mode,
+                    "last_update": last_update,
+                    "stuck_since": stuck_since,
+                    "stuck_since_formatted": since_str,
+                    "duration_seconds": secs,
+                    "duration_str": duration_str,
+                    "duration_it": duration_it
+                })
+    except Exception as e:
+        logger.error(f"Failed to get stopped trackers: {e}")
+
+    return stopped
+
+
 def get_tracker_summary() -> dict:
-    """Get high-level summary of tracker field (Avg angles, alarms), filtering out stale records."""
+    """Get high-level summary of tracker field (Avg angles, alarms, stopped units), filtering out stale records."""
     from datetime import timedelta
     conn = get_data_conn()
     try:
@@ -1542,7 +1680,7 @@ def get_tracker_summary() -> dict:
             SELECT ncu_id, 
                    AVG(actual_angle) as avg_angle,
                    COUNT(*) as total,
-                   SUM(CASE WHEN alarm != 'Normal' AND alarm != '' THEN 1 ELSE 0 END) as alarms
+                   SUM(CASE WHEN alarm != 'Normal' AND alarm != '' AND alarm != 'green' THEN 1 ELSE 0 END) as alarms
             FROM tracker_status 
             WHERE last_update >= ?
             GROUP BY ncu_id
@@ -1570,11 +1708,16 @@ def get_tracker_summary() -> dict:
             (limit_time,)
         )
         modes = {row[0]: row[1] for row in cursor.fetchall()}
+
+        # 3. Stopped / Misaligned Trackers with durations
+        stopped_trackers = get_stopped_trackers()
         
         return {
             "ncu_stats": summary,
             "modes": modes,
-            "total_plant_trackers": sum(s["total_trackers"] for s in summary.values())
+            "total_plant_trackers": sum(s["total_trackers"] for s in summary.values()),
+            "stopped_trackers": stopped_trackers,
+            "stopped_count": len(stopped_trackers)
         }
     except Exception as e:
         logger.error(f"Failed to get tracker summary: {e}")
@@ -1626,6 +1769,43 @@ def _get_heatmap_matrix_cached(date_str: str, metric: str = "ac") -> dict:
     if raw_metric == "PR inverter" and "PR inverter [%]" in df.columns:
         inv_col = "PR inverter" if "PR inverter" in df.columns else "Inverter"
         pr_val_col = "PR inverter [%]"
+
+        # Correlate with Potenza AC to determine active daytime generation slots
+        # so PR matches real operating hours and never paints future unelapsed or night slots
+        df_ac = load_metric(date_str, "Potenza AC")
+        ac_slot_status = {}
+        if df_ac is not None and not df_ac.empty and "Ora" in df_ac.columns:
+            for _, ac_row in df_ac.iterrows():
+                ora_val = ac_row.get("Ora")
+                if pd.isna(ora_val):
+                    continue
+                try:
+                    if isinstance(ora_val, (int, float)):
+                        ora_str = f"{float(ora_val):05.2f}"
+                        parts = ora_str.split(".")
+                        h, m = int(parts[0]), int(parts[1])
+                    else:
+                        s = str(ora_val).strip().replace(".", ":")
+                        parts = s.split(":")
+                        h, m = int(parts[0]), int(parts[1])
+                    s_idx = min(95, max(0, h * 4 + (m // 15)))
+                except Exception:
+                    continue
+
+                for inv_id in INVERTER_IDS:
+                    short_id = inv_id.replace("-INV", "-")
+                    matches = [c for c in df_ac.columns if f"INV {inv_id}" in c or f"INV {short_id}" in c or f"({inv_id})" in c or f"({short_id})" in c or inv_id in c or short_id in c]
+                    if matches:
+                        p_val = ac_row.get(matches[0])
+                        if pd.notna(p_val):
+                            p_num = float(p_val)
+                            if s_idx not in ac_slot_status.setdefault(inv_id, {}):
+                                ac_slot_status[inv_id][s_idx] = 0
+                                ac_slot_status.setdefault(short_id, {})[s_idx] = 0
+                            if p_num > 0:
+                                ac_slot_status[inv_id][s_idx] = 1
+                                ac_slot_status[short_id][s_idx] = 1
+
         for _, row in df.iterrows():
             inv_name = str(row.get(inv_col, ""))
             pr_val = row.get(pr_val_col)
@@ -1635,9 +1815,23 @@ def _get_heatmap_matrix_cached(date_str: str, metric: str = "ac") -> dict:
                     if inv_id in inv_name or short_id in inv_name:
                         try:
                             val = float(pr_val)
-                            for s_idx in range(24, 80):
-                                matrix[inv_id][s_idx] = round(val, 1)
-                                matrix[short_id][s_idx] = round(val, 1)
+                            inv_slots = ac_slot_status.get(inv_id, {})
+                            if inv_slots:
+                                for s_idx, status in inv_slots.items():
+                                    if status == 1:
+                                        matrix[inv_id][s_idx] = round(val, 1)
+                                        matrix[short_id][s_idx] = round(val, 1)
+                                    else:
+                                        matrix[inv_id][s_idx] = 0
+                                        matrix[short_id][s_idx] = 0
+                            else:
+                                # Fallback: clamp daytime slots up to current time if today, or sunset if past day
+                                import datetime
+                                now_dt = datetime.datetime.now()
+                                max_slot = (now_dt.hour * 4 + now_dt.minute // 15) if date_str == now_dt.strftime("%Y-%m-%d") else 78
+                                for s_idx in range(28, min(79, max_slot + 1)):
+                                    matrix[inv_id][s_idx] = round(val, 1)
+                                    matrix[short_id][s_idx] = round(val, 1)
                         except Exception:
                             pass
         return {
@@ -1695,15 +1889,24 @@ def get_heatmap_matrix(date_str: str = None, metric: str = "ac") -> dict:
     """
     Public heatmap entry point. If requested date has no data or is empty,
     automatically falls back to the latest date that contains real telemetry data.
+    If date_str is explicitly requested (e.g. today), it is respected directly.
     """
+    import datetime
+    today_str = datetime.date.today().isoformat()
     dates = get_available_dates()
     if not dates:
-        return _get_heatmap_matrix_cached(date_str or "2026-09-02", metric)
+        return _get_heatmap_matrix_cached(date_str or today_str, metric)
 
-    target_date = date_str if (date_str and date_str in dates) else dates[-1]
+    # When user explicitly asks for a date (like today), respect it directly
+    if date_str:
+        target_date = date_str
+        if target_date == today_str:
+            return _get_heatmap_matrix_cached.__wrapped__(target_date, metric)
+        return _get_heatmap_matrix_cached(target_date, metric)
 
-    # Check if target_date has real non-zero data; if empty, find latest valid date
-    mat = _get_heatmap_matrix_cached(target_date, metric)
+    # If no date explicitly requested, prefer today if it has non-zero data, else latest date with data
+    target_date = today_str if (today_str in dates) else dates[-1]
+    mat = _get_heatmap_matrix_cached.__wrapped__(target_date, metric) if target_date == today_str else _get_heatmap_matrix_cached(target_date, metric)
     non_zero_count = sum(1 for inv in mat["inverters"] for v in mat["matrix"].get(inv, []) if v and v > 0)
 
     if non_zero_count == 0:

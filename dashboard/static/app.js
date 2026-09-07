@@ -1319,10 +1319,12 @@ function connectWebSocket() {
   };
   
   socket.onclose = () => {
-    const statusEl = el("last-updated");
-    statusEl.textContent = `Offline: Reconnecting...`;
-    statusEl.style.color = "var(--yellow)";
-    statusEl.style.opacity = "0.7";
+    const statusEl = el("global-last-update");
+    if (statusEl) {
+      statusEl.textContent = `Offline: Reconnecting...`;
+      statusEl.style.color = "var(--yellow)";
+      statusEl.style.opacity = "0.7";
+    }
     setTimeout(connectWebSocket, reconnectInterval);
     reconnectInterval = Math.min(reconnectInterval * 1.5, 30000);
   };
@@ -2687,7 +2689,13 @@ function updateLinkStatusUI(linkInfo) {
 
 // ─── 24-Hour Inverter Heatmap Renderer (Real Data API & 15-Min Granularity) ─
 
+function getLocalTodayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 let heatmapPendingFetch = false;
+let lastHeatmapFetchTime = 0;
 
 async function renderInverterHeatmap(forceLoading = false) {
   const container = el("inverter-heatmap-grid");
@@ -2695,14 +2703,19 @@ async function renderInverterHeatmap(forceLoading = false) {
   const dateInput = el("heatmap-date-select");
   if (!container || heatmapPendingFetch) return;
 
+  const nowTs = Date.now();
+  if (!forceLoading && (nowTs - lastHeatmapFetchTime) < 15000) return;
+  lastHeatmapFetchTime = nowTs;
+
+  const localToday = getLocalTodayStr();
+
   // Set default date picker to Today if empty
   if (dateInput && !dateInput.value) {
-    const todayStr = new Date().toISOString().slice(0, 10);
-    dateInput.value = todayStr;
+    dateInput.value = localToday;
   }
 
   const selectedMetric = metricSelect ? metricSelect.value : "ac";
-  const selectedDate = dateInput ? dateInput.value : new Date().toISOString().slice(0, 10);
+  const selectedDate = dateInput ? dateInput.value : localToday;
 
   heatmapPendingFetch = true;
 
@@ -2728,12 +2741,17 @@ async function renderInverterHeatmap(forceLoading = false) {
     if (!resp.ok) throw new Error("API error " + resp.status);
     const data = await resp.json();
 
-    // Auto-update date picker bounds and default value from available dates
-    if (dateInput && data.available_dates && data.available_dates.length) {
-      dateInput.max = data.available_dates[data.available_dates.length - 1];
-      dateInput.min = data.available_dates[0];
-      if (!dateInput.value || (data.date && data.date !== dateInput.value)) {
-        dateInput.value = data.date || data.available_dates[data.available_dates.length - 1];
+    // Auto-update date picker bounds ensuring today is always selectable
+    if (dateInput) {
+      const latestAvail = (data.available_dates && data.available_dates.length)
+        ? data.available_dates[data.available_dates.length - 1]
+        : localToday;
+      dateInput.max = latestAvail > localToday ? latestAvail : localToday;
+      if (data.available_dates && data.available_dates.length) {
+        dateInput.min = data.available_dates[0];
+      }
+      if (!dateInput.value) {
+        dateInput.value = data.date || localToday;
       }
     }
 
@@ -2889,7 +2907,6 @@ function renderHeatmapLegend(metric) {
       { label: "Eccellente (≥ 86%)", color: "#10b981" }
     ];
   }
-  }
 
   legendContainer.innerHTML = '<span style="font-weight:600; margin-right: 0.25rem;">LEGENDA:</span>' +
     items.map(item => `
@@ -2920,7 +2937,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const dateInput = el("heatmap-date-select");
 
   if (dateInput && !dateInput.value) {
-    dateInput.value = new Date().toISOString().slice(0, 10);
+    dateInput.value = getLocalTodayStr();
   }
 
   if (metricSelect) metricSelect.addEventListener("change", () => renderInverterHeatmap(true));
@@ -2928,6 +2945,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
   fetchInitialData();
   renderInverterHeatmap();
+
+  // Auto-refresh today's heatmap every 30 seconds
+  setInterval(() => {
+    const dateInput = el("heatmap-date-select");
+    const localToday = getLocalTodayStr();
+    if (!dateInput || dateInput.value === localToday) {
+      renderInverterHeatmap();
+    }
+  }, 30000);
 });
 
 lucide.createIcons();

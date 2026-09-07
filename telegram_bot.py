@@ -338,7 +338,10 @@ def load_settings() -> dict:
 
 def get_latest_dashboard_json() -> dict | None:
     try:
-        from db.db_manager import get_latest_snapshot_date, load_latest_snapshot, get_all_tracker_status
+        from db.db_manager import (
+            get_latest_snapshot_date, load_latest_snapshot, 
+            get_all_tracker_status, get_tracker_summary, get_stopped_trackers
+        )
         today = datetime.now().strftime("%Y-%m-%d")
         data = load_latest_snapshot(today)
         if not data:
@@ -347,6 +350,27 @@ def get_latest_dashboard_json() -> dict | None:
                 data = load_latest_snapshot(latest_date)
         if data:
             data["trackers"] = get_all_tracker_status()
+            data["tracker_summary"] = get_tracker_summary()
+            stopped = get_stopped_trackers()
+            data["stopped_trackers"] = stopped
+
+            # Inject stopped trackers into active_anomalies so /alerts and /status pick them up
+            if stopped:
+                anomalies = list(data.get("active_anomalies", []))
+                existing_inverters = {a.get("inverter") for a in anomalies if isinstance(a, dict)}
+                for s in stopped:
+                    tag = f"{s['ncu']} - {s['tcu']}"
+                    if tag not in existing_inverters:
+                        anomalies.append({
+                            "id": f"TRACKER_{s['ncu']}_{s['tcu']}".replace(" ", "_"),
+                            "inverter": tag,
+                            "type": "TRACKER BLOCCATO",
+                            "severity": "yellow",
+                            "trip_time": s.get("stuck_since", datetime.now().isoformat()),
+                            "message": f"Angolo {s['actual_angle']}° (Target {s['target_angle']}°, Δ {s['delta_angle']}°), fermo da {s['duration_str']}"
+                        })
+                data["active_anomalies"] = anomalies
+
             return data
     except Exception as e:
         logger.warning(f"DB snapshot read failed: {e}")
@@ -884,6 +908,46 @@ def build_uptime_message(data: dict) -> str:
     return "\n".join(lines)
 
 
+def build_trackers_message() -> str:
+    """Build detailed status of all 370 trackers with specific stopped/misaligned units and durations."""
+    try:
+        from db.db_manager import get_tracker_summary, get_stopped_trackers
+        summary = get_tracker_summary()
+        ncu_stats = summary.get("ncu_stats", {})
+        stopped = summary.get("stopped_trackers") or get_stopped_trackers()
+
+        lines = [
+            "🛰️ *Mazara 01 — Stato Tracker*",
+            f"🕐 Ultimo aggiornamento: *{datetime.now().strftime('%H:%M')}*",
+            "━━━━━━━━━━━━━━━━━━━",
+            "",
+            "📊 *Medie e Allineamento per NCU:*"
+        ]
+
+        for ncu_id, stats in sorted(ncu_stats.items()):
+            avg = stats.get("avg_angle", 0)
+            tot = stats.get("total_trackers", 0)
+            lines.append(f" • *{ncu_id}*: {tot} tracker | Angolo medio: *{avg:.1f}°*")
+
+        lines.append("")
+        if stopped:
+            lines.append(f"🚨 *TRACKER BLOCCATI / ANOMALIE ({len(stopped)}):*")
+            for t in stopped:
+                lines.append(
+                    f" • *{t['ncu']} — {t['tcu']}* (Trk #{t['tracker_no']}):\n"
+                    f"   📐 Target: *{t['target_angle']}°* | Effettivo: *{t['actual_angle']}°* (Δ: *{t['delta_angle']}°*)\n"
+                    f"   ⏱️ *Fermo da:* {t['duration_it']} (dalle {t['stuck_since_formatted']})\n"
+                    f"   ⚙️ Modo: `{t['mode']}` | Allarme: `{t['alarm']}`"
+                )
+        else:
+            lines.append("✅ *Tutti i 370 tracker sono allineati* all'angolo target e operativi in Auto (AM).")
+
+        return "\n".join(lines)
+    except Exception as e:
+        logger.error(f"Error building tracker message: {e}")
+        return f"⚠️ Errore nel recupero dati tracker: {e}"
+
+
 HELP_TEXT = (
     "🌞 *Mazara 01 - Guida Comandi*\n"
     "━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -891,6 +955,7 @@ HELP_TEXT = (
     "📊 /status — Potenza, PR e stato in tempo reale\n"
     "🏭 /plant — Stato sintetico impianto (Energia, PR, Errori)\n"
     "🚨 /alerts — Guasti e anomalie attive\n"
+    "🛰 /trackers — Stato 370 tracker e anomalie / fermi\n"
     "⏱ /uptime — Disponibilità impianto oggi\n"
     "🌤 /weather — Irraggiamento e sensori temperatura\n\n"
     "*Produzione*\n"
@@ -967,6 +1032,7 @@ class TelegramBot:
             {"command": "status",          "description": "📊 Potenza, PR e stato in tempo reale"},
             {"command": "plant",           "description": "🏭 Riepilogo completo stato impianto"},
             {"command": "alerts",          "description": "🚨 Guasti e anomalie attive"},
+            {"command": "trackers",        "description": "🛰️ Stato 370 tracker e anomalie"},
             {"command": "daily",           "description": "📅 Report energia giornaliero"},
             {"command": "week",            "description": "📆 Storico produzione 7 giorni"},
             {"command": "inverters",       "description": "🔌 Matrice salute tutti gli inverter"},
@@ -1171,6 +1237,9 @@ def main() -> None:
                         data = get_latest_dashboard_json()
                         bot.send_message(chat_id, build_uptime_message(data) if data else "⚠️ No data.")
 
+                    elif cmd in ("/trackers", "/tracker"):
+                        bot.send_message(chat_id, build_trackers_message())
+
                     elif cmd == "/generate_ticket":
                         start_ticket_flow(bot, chat_id)
 
@@ -1187,10 +1256,15 @@ def main() -> None:
                             _dispatch_ai(bot, chat_id, question, data, settings, ai_semaphore)
 
                     else:
-                        # ── Any free text → LLM ───────────────────────────────
-                        bot.send_message(chat_id, "⏳ _Elaborazione..._")
-                        data = get_latest_dashboard_json()
-                        _dispatch_ai(bot, chat_id, text, data, settings, ai_semaphore)
+                        # ── Check direct plain text intent before AI ─────────
+                        clean_text = text.lower().strip().rstrip(".?!")
+                        if clean_text in ("tracker", "trackers", "tracker status", "trackers status", "stato tracker", "stato dei tracker"):
+                            bot.send_message(chat_id, build_trackers_message())
+                        else:
+                            # ── Any other free text → LLM ─────────────────────
+                            bot.send_message(chat_id, "⏳ _Elaborazione..._")
+                            data = get_latest_dashboard_json()
+                            _dispatch_ai(bot, chat_id, text, data, settings, ai_semaphore)
 
                 except Exception as cmd_err:
                     logger.error(f"Command error [{cmd!r}]: {cmd_err}", exc_info=True)

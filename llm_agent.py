@@ -58,7 +58,7 @@ import pandas as pd
 import numpy as np
 from db.db_manager import (
     load_metric, load_latest_snapshot, get_db_stats, get_data_conn, 
-    get_logs_conn, get_tracker_summary, get_all_tracker_status,
+    get_logs_conn, get_tracker_summary, get_all_tracker_status, get_stopped_trackers,
     load_all_snapshots
 )
 
@@ -716,7 +716,7 @@ def build_data_snapshot(plant_data, question):
         "IRRADIANCE": ["irradiance", "sun", "irraggiamento", "solar", "radiation", "pyranometer", "sole", "luce"],
         "INSULATION": ["insulation", "iso", "isolamento", "resistenza", "kohm", "kohm", "omega"],
         "HISTORY": ["history", "historical", "trail", "past", "last alarms", "storia", "passato", "ieri", "precedente", "quanti", "how many", "how long", "durata", "duration"],
-        "TRACKERS": ["tracker", "trackers", "ncu", "tcu", "angle", "position", "tilt", "seguimento", "inclinazione", "angolo", "motore", "motor"]
+        "TRACKERS": ["tracker", "trackers", "ncu", "tcu", "angle", "position", "tilt", "seguimento", "inclinazione", "angolo", "angoli", "motore", "motor", "target", "effettivi", "discrepanza", "tcus", "ncus"]
     }
     
     # Determine active categories
@@ -856,14 +856,31 @@ def build_data_snapshot(plant_data, question):
     if "TRACKERS" in active_cats:
         summary = get_tracker_data_summary()
         plant_data["tracker_summary"] = summary
-        snapshot.append(f"TRACKER SUMMARY: {json.dumps(summary, default=str)}")
-        # If user mentions a specific TCU or asks for full list, include full data
-        if any(w in q for w in ["list", "tcu", "every", "all trackers"]):
-             data = get_tracker_data_all()
-             plant_data["trackers"] = data
-             # Only show first 5 to keep context manageable in the prompt text
-             snapshot.append(f"TRACKER DATA (Sample of 5): {json.dumps(data[:5], default=str)}")
-             snapshot.append("NOTE: The full 'trackers' list is available in the 'data' variable for analysis.")
+        stopped = summary.get("stopped_trackers", [])
+        plant_data["stopped_trackers"] = stopped
+
+        tracker_summary_clean = {k: v for k, v in summary.items() if k != "stopped_trackers"}
+        snapshot.append(f"TRACKER SUMMARY (Averages & Modes): {json.dumps(tracker_summary_clean, default=str)}")
+
+        if stopped:
+            st_lines = [f"⚠️ TRACKER ANOMALIES / STOPPED TRACKERS ({len(stopped)} UNITS DETECTED WITH TARGET VS ACTUAL DISCREPANCY OR STUCK):"]
+            for item in stopped:
+                st_lines.append(
+                    f" • {item['ncu']} — {item['tcu']} (Tracker #{item['tracker_no']}): "
+                    f"Target={item['target_angle']}°, Actual={item['actual_angle']}° (Delta={item['delta_angle']}°). "
+                    f"FERMO DA: {item['duration_it']} (dalle {item['stuck_since_formatted']}). "
+                    f"Modo={item['mode']}, Allarme={item['alarm']}."
+                )
+            snapshot.append("\n".join(st_lines))
+        else:
+            snapshot.append("TRACKER ANOMALIES: 0. All 370 trackers are nominal and tracking target angles within <3.0°.")
+
+        # If user asks about specific TCU, tracker numbers, or full list
+        if any(w in q for w in ["list", "tcu", "every", "all trackers", "quali", "elenco", "tutti", "tutte", "discrepanz", "differen"]):
+            data = get_tracker_data_all()
+            plant_data["trackers"] = data
+            snapshot.append(f"TRACKER DATA (Sample of 5): {json.dumps(data[:5], default=str)}")
+            snapshot.append("NOTE: The full 'trackers' and 'stopped_trackers' lists are available in the 'data' variable for analysis.")
 
     # 6. Fallback (If no categories matched, provide general overview)
     if not snapshot or len(snapshot) <= 2:
@@ -921,6 +938,7 @@ def run_python_analysis(code: str, plant_data: dict) -> tuple:
         "get_tracker_summary": get_tracker_summary,
         "get_tracker_data": get_all_tracker_status,
         "get_tracker_data_summary": get_tracker_data_summary,
+        "get_stopped_trackers": get_stopped_trackers,
         "get_alarm_history": get_alarm_history,
         "get_active_anomalies": get_active_anomalies,
         "search_logs": search_logs,
@@ -1168,6 +1186,10 @@ def _react_search_logs(query: str, limit: int = 20, **kwargs) -> str:
     """Search system logs for specific patterns or errors."""
     return json.dumps(search_logs(query, limit), default=str)
 
+def _react_get_stopped_trackers(**kwargs) -> str:
+    """Get list of all stopped, stuck, or misaligned trackers with duration and angles."""
+    return json.dumps(get_stopped_trackers(), default=str)
+
 TOOLS = {
     "get_plant_summary": get_plant_summary,
     "get_temperatures": _react_get_temperatures,
@@ -1182,6 +1204,7 @@ TOOLS = {
     "get_latest_readings": get_latest_readings,
     "get_tracker_data": get_tracker_data,
     "get_tracker_summary": get_tracker_data,
+    "get_stopped_trackers": _react_get_stopped_trackers,
     "query_db": _react_query_db,
     "search_logs": _react_search_logs,
     "list_data_files": list_data_files
