@@ -2825,29 +2825,8 @@ async function renderInverterHeatmap(forceLoading = false) {
           if (val === 0) {
             color = "rgba(15, 23, 42, 0.9)"; // Night zero output
             cell.style.border = "1px solid rgba(255, 255, 255, 0.04)";
-          } else if (selectedMetric === "ac") {
-            // Nominal max inverter capacity ~280 kW; peak percentile (> 250 kW) renders in rich green
-            const pct = Math.min(100, Math.max(0, (val / 280) * 100));
-            color = `hsl(${140 * (pct / 100)}, 85%, 42%)`;
-          } else if (selectedMetric === "dc") {
-            // String DC Current range: 0 A to 25 A (Peak ~23 A)
-            if (val < 5) color = "hsl(195, 85%, 45%)";       // Deep Cyan / Blue (< 5 A)
-            else if (val < 12) color = "hsl(180, 85%, 45%)";  // Bright Cyan (5 - 12 A)
-            else if (val < 20) color = "hsl(150, 85%, 45%)";  // Spring Green (12 - 20 A)
-            else color = "hsl(120, 85%, 45%)";               // Vibrant Lime / Emerald (> 20 A Peak)
-          } else if (selectedMetric === "temp") {
-            // Operating Inverter Temperature range: 30°C to 75°C
-            if (val < 35) color = "hsl(185, 75%, 45%)";       // Cool Slate / Cyan (< 35°C)
-            else if (val < 50) color = "hsl(140, 75%, 42%)";  // Healthy Green (35 - 50°C)
-            else if (val < 62) color = "hsl(45, 90%, 50%)";   // Warm Amber / Yellow (50 - 62°C)
-            else if (val < 70) color = "hsl(25, 90%, 50%)";   // Warm Orange (62 - 70°C)
-            else color = "#ef4444";                          // Critical Red (> 70°C)
-          } else if (selectedMetric === "pr") {
-            // Performance Ratio range: 60% to 95%
-            if (val < 75) color = "#ef4444";                 // Critico (< 75%)
-            else if (val < 82) color = "#f59e0b";            // Sotto Soglia (75 - 82%)
-            else if (val < 86) color = "#84cc16";            // Buono (82 - 86%)
-            else color = "#10b981";                          // Eccellente (≥ 86%)
+          } else {
+            color = getHeatmapCellColor(selectedMetric, val);
           }
         }
 
@@ -2865,6 +2844,110 @@ async function renderInverterHeatmap(forceLoading = false) {
   }
 }
 
+// ─── Heatmap Cell Color Calculation (Dynamic Hue Ramps for Higher Values) ───
+
+function getHeatmapCellColor(metric, val) {
+  if (val === null || val === undefined) return "rgba(30, 41, 59, 0.25)";
+  if (val === 0) return "rgba(15, 23, 42, 0.9)";
+
+  if (metric === "ac") {
+    // Continuous multi-tier thermal-to-electric hue ramp:
+    // Low / Ramp: Warm Red to Orange (0 - 40 kW)
+    // Rampa Bassa: Orange to Gold/Yellow (40 - 90 kW)
+    // Media Generazione: Yellow to Lime (90 - 160 kW)
+    // Elevata Generazione: Lime to Rich Emerald Green (160 - 220 kW)
+    // Alta Produzione: Deep Green to Vivid Teal (220 - 255 kW)
+    // Picco Massimo: Vivid Teal to Radiant Electric Cyan / Sky Blue (255 - 280+ kW)
+    if (val < 40) {
+      const t = Math.max(0, val / 40);
+      const hue = Math.round(5 + t * 25); // 5 to 30
+      return `hsl(${hue}, 88%, 46%)`;
+    } else if (val < 90) {
+      const t = (val - 40) / 50;
+      const hue = Math.round(30 + t * 28); // 30 to 58
+      return `hsl(${hue}, 92%, 48%)`;
+    } else if (val < 160) {
+      const t = (val - 90) / 70;
+      const hue = Math.round(58 + t * 47); // 58 to 105
+      return `hsl(${hue}, 82%, 43%)`;
+    } else if (val < 220) {
+      const t = (val - 160) / 60;
+      const hue = Math.round(105 + t * 35); // 105 to 140
+      return `hsl(${hue}, 80%, 40%)`;
+    } else if (val < 255) {
+      const t = (val - 220) / 35;
+      const hue = Math.round(140 + t * 30); // 140 to 170 (Green to Teal)
+      return `hsl(${hue}, 85%, 41%)`;
+    } else {
+      const t = Math.min(1, (val - 255) / 30);
+      const hue = Math.round(170 + t * 28); // 170 to 198 (Teal to Cyan/Sky Blue)
+      const light = Math.round(42 + t * 7); // 42% to 49%
+      return `hsl(${hue}, 95%, ${light}%)`;
+    }
+  }
+
+  if (metric === "pr") {
+    // Performance Ratio (%) dynamic hue curve:
+    // Critico (< 75%): Crimson Red
+    // Sotto Soglia (75 - 82%): Amber / Warm Orange
+    // Accettabile (82 - 85%): Golden Yellow / Lime
+    // Buono (85 - 87.5%): Lime to Clean Green
+    // Ottimo (87.5 - 89.5%): Rich Emerald to Mint Teal
+    // Eccellente (89.5 - 91.5%): Bright Mint to Vivid Cyan
+    // Superiore / Top Tier (≥ 91.5%): Radiant Electric Cyan / Sky Blue
+    if (val < 75) {
+      const t = Math.max(0, (val - 50) / 25);
+      const hue = Math.round(t * 18); // 0 to 18
+      return `hsl(${hue}, 85%, 46%)`;
+    } else if (val < 82) {
+      const t = (val - 75) / 7;
+      const hue = Math.round(22 + t * 22); // 22 to 44
+      return `hsl(${hue}, 92%, 48%)`;
+    } else if (val < 85) {
+      const t = (val - 82) / 3;
+      const hue = Math.round(48 + t * 34); // 48 to 82
+      return `hsl(${hue}, 82%, 44%)`;
+    } else if (val < 87.5) {
+      const t = (val - 85) / 2.5;
+      const hue = Math.round(85 + t * 45); // 85 to 130 (Lime to Green)
+      return `hsl(${hue}, 78%, 40%)`;
+    } else if (val < 89.5) {
+      const t = (val - 87.5) / 2;
+      const hue = Math.round(130 + t * 35); // 130 to 165 (Green to Emerald/Teal)
+      return `hsl(${hue}, 82%, 40%)`;
+    } else if (val < 91.5) {
+      const t = (val - 89.5) / 2;
+      const hue = Math.round(165 + t * 25); // 165 to 190 (Teal to Cyan)
+      const light = Math.round(41 + t * 6); // 41% to 47%
+      return `hsl(${hue}, 88%, ${light}%)`;
+    } else {
+      const t = Math.min(1, (val - 91.5) / 3.5);
+      const hue = Math.round(190 + t * 18); // 190 to 208 (Cyan to Electric Sky)
+      const light = Math.round(47 + t * 5); // 47% to 52%
+      return `hsl(${hue}, 95%, ${light}%)`;
+    }
+  }
+
+  if (metric === "dc") {
+    // String DC Current range: 0 A to 25 A (Peak ~23 A)
+    if (val < 5) return "hsl(195, 85%, 45%)";
+    else if (val < 12) return "hsl(180, 85%, 45%)";
+    else if (val < 20) return "hsl(150, 85%, 45%)";
+    else return "hsl(120, 85%, 45%)";
+  }
+
+  if (metric === "temp") {
+    // Operating Inverter Temperature range: 30°C to 75°C
+    if (val < 35) return "hsl(185, 75%, 45%)";
+    else if (val < 50) return "hsl(140, 75%, 42%)";
+    else if (val < 62) return "hsl(45, 90%, 50%)";
+    else if (val < 70) return "hsl(25, 90%, 50%)";
+    else return "#ef4444";
+  }
+
+  return "rgba(30, 41, 59, 0.25)";
+}
+
 function renderHeatmapLegend(metric) {
   const legendContainer = el("heatmap-legend");
   if (!legendContainer) return;
@@ -2875,10 +2958,12 @@ function renderHeatmapLegend(metric) {
     items = [
       { label: "Assenti / Futuri", color: "rgba(30, 41, 59, 0.45)" },
       { label: "Notte (0 kW)", color: "rgba(15, 23, 42, 0.9)" },
-      { label: "< 50 kW", color: "hsl(25, 85%, 48%)" },
-      { label: "50 - 150 kW", color: "hsl(60, 85%, 48%)" },
-      { label: "150 - 250 kW", color: "hsl(95, 85%, 45%)" },
-      { label: "> 250 kW (Picco)", color: "hsl(140, 85%, 42%)" }
+      { label: "< 40 kW", color: "hsl(18, 88%, 46%)" },
+      { label: "40 - 90 kW", color: "hsl(44, 92%, 48%)" },
+      { label: "90 - 160 kW", color: "hsl(80, 82%, 43%)" },
+      { label: "160 - 220 kW", color: "hsl(125, 80%, 40%)" },
+      { label: "220 - 255 kW", color: "hsl(155, 85%, 41%)" },
+      { label: "> 255 kW (Picco)", color: "hsl(185, 95%, 46%)" }
     ];
   } else if (metric === "dc") {
     items = [
@@ -2901,10 +2986,13 @@ function renderHeatmapLegend(metric) {
   } else if (metric === "pr") {
     items = [
       { label: "Assenti / Futuri", color: "rgba(30, 41, 59, 0.45)" },
-      { label: "Critico (< 75%)", color: "#ef4444" },
-      { label: "Sotto Soglia (75 - 82%)", color: "#f59e0b" },
-      { label: "Buono (82 - 86%)", color: "#84cc16" },
-      { label: "Eccellente (≥ 86%)", color: "#10b981" }
+      { label: "Critico (< 75%)", color: "hsl(10, 85%, 46%)" },
+      { label: "Sotto Soglia (75 - 82%)", color: "hsl(33, 92%, 48%)" },
+      { label: "Accettabile (82 - 85%)", color: "hsl(65, 82%, 44%)" },
+      { label: "Buono (85 - 87.5%)", color: "hsl(108, 78%, 40%)" },
+      { label: "Ottimo (87.5 - 89.5%)", color: "hsl(148, 82%, 40%)" },
+      { label: "Eccellente (89.5 - 91.5%)", color: "hsl(178, 88%, 44%)" },
+      { label: "Top Tier (≥ 91.5%)", color: "hsl(198, 95%, 48%)" }
     ];
   }
 
