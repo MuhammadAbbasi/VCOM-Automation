@@ -2865,6 +2865,14 @@ async function renderInverterHeatmap(forceLoading = false) {
       const cells = row.querySelectorAll(".hm-cell");
       const strCount = (mode === "single_inverter_mppt" && mpptStringsMap[invId]) ? mpptStringsMap[invId] : 2;
 
+      // Ensure row label always displays current inverter's MPPT string count badge
+      const labelEl = row.querySelector(".hm-inv-label");
+      if (labelEl) {
+        const sCount = (mode === "single_inverter_mppt" && mpptStringsMap[invId]) ? mpptStringsMap[invId] : null;
+        const strBadge = sCount ? ` <span style="font-size:0.58rem; color:#94a3b8; font-weight:500;">(${sCount}s)</span>` : "";
+        labelEl.innerHTML = `${invId}${strBadge}`;
+      }
+
       const slotColors = [];
 
       slots.forEach((timeStr, sIdx) => {
