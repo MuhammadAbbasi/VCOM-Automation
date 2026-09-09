@@ -525,6 +525,26 @@ header {
   font-weight: 700;
 }
 
+select,
+select option,
+select optgroup,
+.select-sm,
+.filter-select {
+  color-scheme: dark;
+}
+
+select option,
+select optgroup {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+}
+
+select optgroup {
+  font-weight: 700;
+  color: #38bdf8 !important;
+  background-color: #0b1120 !important;
+}
+
 .filter-select {
   background: var(--surface);
   border: 1px solid var(--border);
