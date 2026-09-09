@@ -1724,52 +1724,160 @@ def get_tracker_summary() -> dict:
         return {}
 
 
-@lru_cache(maxsize=64)
-def _get_heatmap_matrix_cached(date_str: str, metric: str = "ac") -> dict:
+@lru_cache(maxsize=128)
+def _get_heatmap_matrix_cached(date_str: str, metric: str = "ac", inverter: str = "ALL") -> dict:
     """
-    Extract real database metrics for all 36 inverters for the specified date and metric,
+    Extract real database metrics for inverters or MPPTs for the specified date and metric,
     mapped into a 96-slot (15-minute granularity) matrix across 24 hours.
-    Missing/future data slots return None (rendered as grey missing tile).
+    
+    If metric == 'dc':
+      - If single inverter selected (e.g. 'TX1-01'): returns 12 individual MPPT string currents (0-25 A).
+      - If multiple inverters selected ('ALL', 'TX1', 'TX2', 'TX3'): returns additive DC current (sum of MPPTs).
     """
     import pandas as pd
+    slots = [f"{h:02d}:{m:02d}" for h in range(24) for m in (0, 15, 30, 45)]
+    dates = get_available_dates()
+    inv_clean = inverter.strip() if inverter else "ALL"
+
+    # ═════════════════════════════════════════════════════════════════════════
+    # SPECIAL DC CURRENT PATH: High-speed direct SQLite query
+    # ═════════════════════════════════════════════════════════════════════════
+    if metric == "dc":
+        conn = get_data_conn()
+
+        # Check if single inverter selected
+        norm_single = None
+        for i_id in INVERTER_IDS:
+            short_id = i_id.replace("-INV", "-")
+            if inv_clean in (i_id, short_id):
+                norm_single = short_id
+                break
+
+        if norm_single:
+            # ── Mode 1: Single Inverter MPPT Heatmap (12 MPPTs) ──
+            c = conn.cursor()
+            c.execute("""
+                SELECT mppt_number, ora, value 
+                FROM corrente_dc 
+                WHERE date = ? AND (inverter_id = ? OR inverter_id = ?) AND value IS NOT NULL
+            """, (date_str, norm_single, norm_single.replace("-", "-INV-")))
+            rows = c.fetchall()
+
+            mppt_rows = [f"MPPT {m:02d}" for m in range(1, 13)]
+            mppt_matrix = {m_lbl: [None] * 96 for m_lbl in mppt_rows}
+
+            for m_num, ora_val, val in rows:
+                if val is None:
+                    continue
+                try:
+                    parts = str(ora_val).strip().replace(".", ":").split(":")
+                    h, m = int(parts[0]), int(parts[1])
+                    s_idx = min(95, max(0, int(round((h * 60 + m) / 15.0))))
+                    m_lbl = f"MPPT {int(m_num):02d}"
+                    if m_lbl in mppt_matrix:
+                        v_clean = 0.0 if float(val) < 0.5 else round(float(val), 1)
+                        mppt_matrix[m_lbl][s_idx] = v_clean
+                except Exception:
+                    continue
+
+            return {
+                "date": date_str,
+                "metric": "dc",
+                "mode": "single_inverter_mppt",
+                "selected_inverter": norm_single,
+                "slots": slots,
+                "inverters": mppt_rows,
+                "matrix": mppt_matrix,
+                "available_dates": dates,
+                "unit": "A"
+            }
+        else:
+            # ── Mode 2: Multiple Inverters Additive DC Current Heatmap ──
+            target_inverters = list(INVERTER_IDS)
+            if inv_clean in ("TX1", "TX2", "TX3"):
+                target_inverters = [i for i in INVERTER_IDS if i.startswith(inv_clean)]
+
+            c = conn.cursor()
+            c.execute("""
+                SELECT inverter_id, ora, SUM(value) as total_dc
+                FROM corrente_dc
+                WHERE date = ? AND value >= 0.5
+                GROUP BY inverter_id, ora
+            """, (date_str,))
+            rows = c.fetchall()
+
+            all_inv_keys = list(INVERTER_IDS) + [inv_id.replace("-INV", "-") for inv_id in INVERTER_IDS]
+            dc_matrix = {k: [None] * 96 for k in all_inv_keys}
+
+            for inv_id, ora_val, total_dc in rows:
+                if total_dc is None:
+                    continue
+                try:
+                    parts = str(ora_val).strip().replace(".", ":").split(":")
+                    h, m = int(parts[0]), int(parts[1])
+                    s_idx = min(95, max(0, int(round((h * 60 + m) / 15.0))))
+                    short_id = inv_id.replace("-INV", "-")
+                    val_clean = 0.0 if float(total_dc) < 1.0 else round(float(total_dc), 1)
+                    if inv_id in dc_matrix:
+                        dc_matrix[inv_id][s_idx] = val_clean
+                    if short_id in dc_matrix:
+                        dc_matrix[short_id][s_idx] = val_clean
+                except Exception:
+                    continue
+
+            return {
+                "date": date_str,
+                "metric": "dc",
+                "mode": "additive_dc",
+                "inverter_filter": inv_clean,
+                "slots": slots,
+                "inverters": target_inverters,
+                "matrix": dc_matrix,
+                "available_dates": dates,
+                "unit": "A"
+            }
+
+    # ═════════════════════════════════════════════════════════════════════════
+    # OTHER METRICS PATH (AC Power, PR, Temperature)
+    # ═════════════════════════════════════════════════════════════════════════
     metric_map = {
         "ac": "Potenza AC",
         "pr": "PR inverter",
-        "temp": "Temperatura",
-        "dc": "Corrente DC"
+        "temp": "Temperatura"
     }
     raw_metric = metric_map.get(metric, "Potenza AC")
     df = load_metric(date_str, raw_metric)
-    dates = get_available_dates()
 
-    slots = [f"{h:02d}:{m:02d}" for h in range(24) for m in (0, 15, 30, 45)]
     all_inv_keys = list(INVERTER_IDS) + [inv_id.replace("-INV", "-") for inv_id in INVERTER_IDS]
     matrix = {inv_id: [None] * 96 for inv_id in all_inv_keys}
+
+    target_inverters = list(INVERTER_IDS)
+    if inv_clean in ("TX1", "TX2", "TX3"):
+        target_inverters = [i for i in INVERTER_IDS if i.startswith(inv_clean)]
+    elif inv_clean not in ("ALL", ""):
+        for i_id in INVERTER_IDS:
+            if inv_clean in (i_id, i_id.replace("-INV", "-")):
+                target_inverters = [i_id]
+                break
 
     if df is None or df.empty:
         return {
             "date": date_str,
             "metric": metric,
             "slots": slots,
-            "inverters": INVERTER_IDS,
+            "inverters": target_inverters,
             "matrix": matrix,
             "available_dates": dates
         }
 
-    # Match inverter columns for each INVERTER_ID
     # Match inverter columns for each INVERTER_ID
     inv_col_map = {}
     for inv_id in INVERTER_IDS:
         short_id = inv_id.replace("-INV", "-")
         matches = [c for c in df.columns if f"INV {inv_id}" in c or f"INV {short_id}" in c or f"({inv_id})" in c or f"({short_id})" in c or inv_id in c or short_id in c]
         if matches:
-            if metric == "dc":
-                # For DC current, keep all MPPT string channels to compute inverter average
-                inv_col_map[inv_id] = matches
-                inv_col_map[short_id] = matches
-            else:
-                inv_col_map[inv_id] = matches[0]
-                inv_col_map[short_id] = matches[0]
+            inv_col_map[inv_id] = matches[0]
+            inv_col_map[short_id] = matches[0]
 
     # Handle vertical PR table vs wide time-series tables
     if raw_metric == "PR inverter" and "PR inverter [%]" in df.columns:
@@ -1777,7 +1885,6 @@ def _get_heatmap_matrix_cached(date_str: str, metric: str = "ac") -> dict:
         pr_val_col = "PR inverter [%]"
 
         # Correlate with Potenza AC to determine active daytime generation slots
-        # so PR matches real operating hours and never paints future unelapsed or night slots
         df_ac = load_metric(date_str, "Potenza AC")
         ac_slot_status = {}
         if df_ac is not None and not df_ac.empty and "Ora" in df_ac.columns:
@@ -1831,7 +1938,6 @@ def _get_heatmap_matrix_cached(date_str: str, metric: str = "ac") -> dict:
                                         matrix[inv_id][s_idx] = 0
                                         matrix[short_id][s_idx] = 0
                             else:
-                                # Fallback: clamp daytime slots up to current time if today, or sunset if past day
                                 import datetime
                                 now_dt = datetime.datetime.now()
                                 max_slot = int(round((now_dt.hour * 60 + now_dt.minute) / 15.0)) if date_str == now_dt.strftime("%Y-%m-%d") else 78
@@ -1844,7 +1950,7 @@ def _get_heatmap_matrix_cached(date_str: str, metric: str = "ac") -> dict:
             "date": date_str,
             "metric": metric,
             "slots": slots,
-            "inverters": INVERTER_IDS,
+            "inverters": target_inverters,
             "matrix": matrix,
             "available_dates": dates
         }
@@ -1869,39 +1975,29 @@ def _get_heatmap_matrix_cached(date_str: str, metric: str = "ac") -> dict:
             continue
 
         for inv_id, col_spec in inv_col_map.items():
-            if isinstance(col_spec, list):
-                # Multiple MPPTs (DC current): average across all non-null MPPT channels
-                m_vals = [float(row[c]) for c in col_spec if pd.notna(row.get(c))]
-                if m_vals:
-                    avg_v = sum(m_vals) / len(m_vals)
-                    # Filter dark standby noise (< 0.5 A)
-                    matrix[inv_id][slot_idx] = 0.0 if avg_v < 0.5 else round(avg_v, 1)
-            else:
-                val = row.get(col_spec)
-                if pd.notna(val):
-                    try:
-                        num = float(val)
-                        if metric == "ac":
-                            num = round(num / 1000.0, 1)  # Watts to kW
-                        elif metric == "dc":
-                            num = 0.0 if num < 0.5 else round(num, 1)
-                        else:
-                            num = round(num, 1)
-                        matrix[inv_id][slot_idx] = num
-                    except Exception:
-                        pass
+            val = row.get(col_spec)
+            if pd.notna(val):
+                try:
+                    num = float(val)
+                    if metric == "ac":
+                        num = round(num / 1000.0, 1)  # Watts to kW
+                    else:
+                        num = round(num, 1)
+                    matrix[inv_id][slot_idx] = num
+                except Exception:
+                    pass
 
     return {
         "date": date_str,
         "metric": metric,
         "slots": slots,
-        "inverters": INVERTER_IDS,
+        "inverters": target_inverters,
         "matrix": matrix,
         "available_dates": dates
     }
 
 
-def get_heatmap_matrix(date_str: str = None, metric: str = "ac") -> dict:
+def get_heatmap_matrix(date_str: str = None, metric: str = "ac", inverter: str = "ALL") -> dict:
     """
     Public heatmap entry point. If requested date has no data or is empty,
     automatically falls back to the latest date that contains real telemetry data.
@@ -1911,25 +2007,25 @@ def get_heatmap_matrix(date_str: str = None, metric: str = "ac") -> dict:
     today_str = datetime.date.today().isoformat()
     dates = get_available_dates()
     if not dates:
-        return _get_heatmap_matrix_cached(date_str or today_str, metric)
+        return _get_heatmap_matrix_cached(date_str or today_str, metric, inverter)
 
     # When user explicitly asks for a date (like today), respect it directly
     if date_str:
         target_date = date_str
         if target_date == today_str:
-            return _get_heatmap_matrix_cached.__wrapped__(target_date, metric)
-        return _get_heatmap_matrix_cached(target_date, metric)
+            return _get_heatmap_matrix_cached.__wrapped__(target_date, metric, inverter)
+        return _get_heatmap_matrix_cached(target_date, metric, inverter)
 
     # If no date explicitly requested, prefer today if it has non-zero data, else latest date with data
     target_date = today_str if (today_str in dates) else dates[-1]
-    mat = _get_heatmap_matrix_cached.__wrapped__(target_date, metric) if target_date == today_str else _get_heatmap_matrix_cached(target_date, metric)
+    mat = _get_heatmap_matrix_cached.__wrapped__(target_date, metric, inverter) if target_date == today_str else _get_heatmap_matrix_cached(target_date, metric, inverter)
     non_zero_count = sum(1 for inv in mat["inverters"] for v in mat["matrix"].get(inv, []) if v and v > 0)
 
     if non_zero_count == 0:
         for d in reversed(dates):
             if d == target_date:
                 continue
-            cand_mat = _get_heatmap_matrix_cached(d, metric)
+            cand_mat = _get_heatmap_matrix_cached(d, metric, inverter)
             cand_non_zero = sum(1 for inv in cand_mat["inverters"] for v in cand_mat["matrix"].get(inv, []) if v and v > 0)
             if cand_non_zero > 0:
                 return cand_mat

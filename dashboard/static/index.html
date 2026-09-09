@@ -161,11 +161,11 @@
       <!-- ── 24-Hour Inverter Heatmap ── -->
       <div class="card chart-card" id="card-inverter-heatmap" style="padding: 1.25rem;">
         <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-          <h2 style="font-size: 1.1rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem; color: var(--text); margin: 0;">
+          <h2 id="heatmap-title" style="font-size: 1.1rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem; color: var(--text); margin: 0;">
             <i data-lucide="grid" class="icon" style="color: var(--accent);"></i>
-            Matrice Heatmap Inverter 24 Ore (36 Inverter)
+            <span>Matrice Heatmap Inverter 24 Ore</span>
           </h2>
-          <div class="card-controls" style="display: flex; align-items: center; gap: 0.75rem;">
+          <div class="card-controls" style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
             <label for="heatmap-date-select" style="font-size: 0.8rem; color: var(--muted);">Data:</label>
             <input type="date" id="heatmap-date-select" class="select-sm" style="background: rgba(255,255,255,0.08); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 0.2rem 0.5rem; font-size: 0.8rem; color-scheme: dark;">
             
@@ -176,6 +176,58 @@
               <option value="temp">Temperatura (°C)</option>
               <option value="dc">Corrente DC (A)</option>
             </select>
+
+            <div id="heatmap-inverter-control" style="display: none; align-items: center; gap: 0.4rem; margin-left: 0.5rem;">
+              <label for="heatmap-inverter-select" style="font-size: 0.8rem; color: var(--muted);">Inverter:</label>
+              <select id="heatmap-inverter-select" class="select-sm" style="background: rgba(255,255,255,0.08); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 0.25rem 0.6rem; font-size: 0.8rem;">
+                <option value="ALL">Tutti gli Inverter (36)</option>
+                <optgroup label="Sotto-campo TX1">
+                  <option value="TX1">Tutti Inverter TX1 (12)</option>
+                  <option value="TX1-01">TX1-01</option>
+                  <option value="TX1-02">TX1-02</option>
+                  <option value="TX1-03">TX1-03</option>
+                  <option value="TX1-04">TX1-04</option>
+                  <option value="TX1-05">TX1-05</option>
+                  <option value="TX1-06">TX1-06</option>
+                  <option value="TX1-07">TX1-07</option>
+                  <option value="TX1-08">TX1-08</option>
+                  <option value="TX1-09">TX1-09</option>
+                  <option value="TX1-10">TX1-10</option>
+                  <option value="TX1-11">TX1-11</option>
+                  <option value="TX1-12">TX1-12</option>
+                </optgroup>
+                <optgroup label="Sotto-campo TX2">
+                  <option value="TX2">Tutti Inverter TX2 (12)</option>
+                  <option value="TX2-01">TX2-01</option>
+                  <option value="TX2-02">TX2-02</option>
+                  <option value="TX2-03">TX2-03</option>
+                  <option value="TX2-04">TX2-04</option>
+                  <option value="TX2-05">TX2-05</option>
+                  <option value="TX2-06">TX2-06</option>
+                  <option value="TX2-07">TX2-07</option>
+                  <option value="TX2-08">TX2-08</option>
+                  <option value="TX2-09">TX2-09</option>
+                  <option value="TX2-10">TX2-10</option>
+                  <option value="TX2-11">TX2-11</option>
+                  <option value="TX2-12">TX2-12</option>
+                </optgroup>
+                <optgroup label="Sotto-campo TX3">
+                  <option value="TX3">Tutti Inverter TX3 (12)</option>
+                  <option value="TX3-01">TX3-01</option>
+                  <option value="TX3-02">TX3-02</option>
+                  <option value="TX3-03">TX3-03</option>
+                  <option value="TX3-04">TX3-04</option>
+                  <option value="TX3-05">TX3-05</option>
+                  <option value="TX3-06">TX3-06</option>
+                  <option value="TX3-07">TX3-07</option>
+                  <option value="TX3-08">TX3-08</option>
+                  <option value="TX3-09">TX3-09</option>
+                  <option value="TX3-10">TX3-10</option>
+                  <option value="TX3-11">TX3-11</option>
+                  <option value="TX3-12">TX3-12</option>
+                </optgroup>
+              </select>
+            </div>
           </div>
         </div>
         <div class="heatmap-wrapper" style="overflow-x: auto; position: relative;">
@@ -930,7 +982,7 @@
     </div>
   </footer>
 
-  <script src="/static/app.js?v=align90dc" defer></script>
+  <script src="/static/app.js?v=invmpptdc_v1" defer></script>
   <script src="/static/plant_map_surveyed.js?v=4c1ef9e1" defer></script>
 </body>
 </html>

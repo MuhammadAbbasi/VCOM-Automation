@@ -656,9 +656,10 @@ async def get_analytics_data(
 async def get_heatmap_data(
     date: str = None,
     metric: str = "ac",
+    inverter: str = "ALL",
     _: None = Depends(require_auth)
 ):
-    """Return real database metrics mapped into a 15-minute 96-slot matrix for all 36 inverters."""
+    """Return real database metrics mapped into a 15-minute 96-slot matrix for inverters or MPPTs."""
     try:
         from db.db_manager import get_heatmap_matrix, get_available_dates
         import datetime
@@ -666,7 +667,7 @@ async def get_heatmap_data(
             dates = await asyncio.to_thread(get_available_dates)
             date = dates[-1] if dates else datetime.date.today().isoformat()
         
-        data = await asyncio.to_thread(get_heatmap_matrix, date, metric)
+        data = await asyncio.to_thread(get_heatmap_matrix, date, metric, inverter)
         return JSONResponse(data)
     except Exception as e:
         print(f"[DASHBOARD] Error fetching heatmap data: {e}")

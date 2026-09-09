@@ -2701,7 +2701,18 @@ async function renderInverterHeatmap(forceLoading = false) {
   const container = el("inverter-heatmap-grid");
   const metricSelect = el("heatmap-metric-select");
   const dateInput = el("heatmap-date-select");
+  const inverterControl = el("heatmap-inverter-control");
+  const inverterSelect = el("heatmap-inverter-select");
   if (!container || heatmapPendingFetch) return;
+
+  const selectedMetric = metricSelect ? metricSelect.value : "ac";
+
+  // Toggle Inverter Selector visibility (only relevant for DC Current)
+  if (inverterControl) {
+    inverterControl.style.display = (selectedMetric === "dc") ? "inline-flex" : "none";
+  }
+
+  const selectedInverter = (selectedMetric === "dc" && inverterSelect) ? (inverterSelect.value || "ALL") : "ALL";
 
   const nowTs = Date.now();
   if (!forceLoading && (nowTs - lastHeatmapFetchTime) < 15000) return;
@@ -2714,30 +2725,33 @@ async function renderInverterHeatmap(forceLoading = false) {
     dateInput.value = localToday;
   }
 
-  const selectedMetric = metricSelect ? metricSelect.value : "ac";
   const selectedDate = dateInput ? dateInput.value : localToday;
 
   heatmapPendingFetch = true;
 
-  // Show glowing loading bar immediately whenever metric/date changes or on initial load
-  const activeKey = `${selectedDate}_${selectedMetric}`;
+  // Show glowing loading bar immediately whenever metric/date/inverter changes or on initial load
+  const activeKey = `${selectedDate}_${selectedMetric}_${selectedInverter}`;
   const isDifferentKey = container.dataset.activeKey !== activeKey;
   if (forceLoading || isDifferentKey || !container.querySelector(".hm-row")) {
     container.dataset.activeKey = activeKey;
+    const metricLabel = selectedMetric === "dc"
+      ? (selectedInverter !== "ALL" && !selectedInverter.startsWith("TX") ? `DC MPPT ${selectedInverter}` : `DC ${selectedInverter}`)
+      : selectedMetric.toUpperCase();
     container.innerHTML = `
       <div class="hm-loading-box">
         <div class="hm-loading-bar-track">
           <div class="hm-loading-bar-fill"></div>
         </div>
         <div class="hm-loading-text">
-          <span class="hm-loading-spinner"></span> Caricamento matrice Heatmap 24 Ore (${selectedMetric.toUpperCase()})...
+          <span class="hm-loading-spinner"></span> Caricamento matrice Heatmap 24 Ore (${metricLabel})...
         </div>
       </div>
     `;
   }
 
   try {
-    const resp = await fetch(`/api/heatmap/data?date=${encodeURIComponent(selectedDate)}&metric=${encodeURIComponent(selectedMetric)}`, { credentials: "same-origin" });
+    const url = `/api/heatmap/data?date=${encodeURIComponent(selectedDate)}&metric=${encodeURIComponent(selectedMetric)}&inverter=${encodeURIComponent(selectedInverter)}`;
+    const resp = await fetch(url, { credentials: "same-origin" });
     if (!resp.ok) throw new Error("API error " + resp.status);
     const data = await resp.json();
 
@@ -2772,10 +2786,36 @@ async function renderInverterHeatmap(forceLoading = false) {
 
     const matrix = data.matrix || {};
     const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0") + ":00");
-    const unit = selectedMetric === 'ac' ? 'kW' : (selectedMetric === 'pr' ? '%' : (selectedMetric === 'temp' ? '°C' : 'A'));
+    const mode = data.mode || (selectedMetric === "dc" ? (data.selected_inverter ? "single_inverter_mppt" : "additive_dc") : "standard");
 
-    // Rebuild grid structure only if not present (prevents screen flicker)
-    if (!container.querySelector(".hm-row")) {
+    let unit = 'kW';
+    if (selectedMetric === 'pr') unit = '%';
+    else if (selectedMetric === 'temp') unit = '°C';
+    else if (selectedMetric === 'dc') unit = mode === 'single_inverter_mppt' ? 'A (MPPT)' : 'A (Totale DC)';
+
+    // Update heatmap title dynamically based on mode and selection
+    const titleEl = el("heatmap-title");
+    if (titleEl) {
+      const titleSpan = titleEl.querySelector("span");
+      if (titleSpan) {
+        if (mode === "single_inverter_mppt") {
+          titleSpan.textContent = `Matrice Heatmap Corrente DC MPPT — ${data.selected_inverter} (12 MPPT)`;
+        } else if (mode === "additive_dc") {
+          const groupName = selectedInverter === "ALL" ? "36 Inverter" : (selectedInverter.startsWith("TX") ? `Gruppo ${selectedInverter} (12 Inverter)` : `${selectedInverter}`);
+          titleSpan.textContent = `Matrice Heatmap Corrente DC Additiva (${groupName})`;
+        } else {
+          titleSpan.textContent = `Matrice Heatmap Inverter 24 Ore (${inverters.length} Inverter)`;
+        }
+      }
+    }
+
+    // Check if DOM rows must be rebuilt (e.g. switching between 36 inverters, 12 inverters, or 12 MPPT channels)
+    const existingRows = container.querySelectorAll(".hm-row");
+    const existingInvIds = Array.from(existingRows).map(r => r.dataset.invId);
+    const needRebuild = existingRows.length !== inverters.length || 
+                        inverters.some((id, idx) => existingInvIds[idx] !== id);
+
+    if (needRebuild) {
       container.innerHTML = "";
 
       // Time Header Row
@@ -2785,7 +2825,7 @@ async function renderInverterHeatmap(forceLoading = false) {
         hours.map(h => `<div class="hm-time-label">${h}</div>`).join("");
       container.appendChild(headerRow);
 
-      // Inverter Rows
+      // Inverter / MPPT Rows
       inverters.forEach(invId => {
         const row = document.createElement("div");
         row.className = "hm-row";
@@ -2817,25 +2857,28 @@ async function renderInverterHeatmap(forceLoading = false) {
         if (!cell) return;
 
         const val = invValues[sIdx];
-        let color = "rgba(30, 41, 59, 0.25)"; // Missing / Future slot background (Dark Slate Translucent)
+        let color = "rgba(30, 41, 59, 0.25)"; // Missing / Future slot background
         let displayVal = "Dati non disponibili";
 
         if (val !== null && val !== undefined) {
           displayVal = `${val} ${unit}`;
-          if (val === 0 || (selectedMetric === "dc" && val < 0.5)) {
+          if (val === 0 || (selectedMetric === "dc" && mode === "single_inverter_mppt" && val < 0.5) || (selectedMetric === "dc" && mode === "additive_dc" && val < 1.0)) {
             color = "rgba(15, 23, 42, 0.9)"; // Night zero output
             cell.style.border = "1px solid rgba(255, 255, 255, 0.04)";
           } else {
-            color = getHeatmapCellColor(selectedMetric, val);
+            color = getHeatmapCellColor(selectedMetric, val, mode);
           }
         }
 
         cell.style.background = color;
-        cell.title = `Inverter: ${invId}\nOra: ${timeStr}\nValore: ${displayVal}`;
+        const entityLabel = mode === "single_inverter_mppt" 
+          ? `Inverter: ${data.selected_inverter || selectedInverter}\nCanale: ${invId}`
+          : `Inverter: ${invId}`;
+        cell.title = `${entityLabel}\nOra: ${timeStr}\nValore: ${displayVal}`;
       });
     });
 
-    renderHeatmapLegend(selectedMetric);
+    renderHeatmapLegend(selectedMetric, mode);
 
   } catch (err) {
     console.error("Heatmap render error:", err);
@@ -2846,7 +2889,7 @@ async function renderInverterHeatmap(forceLoading = false) {
 
 // ─── Heatmap Cell Color Calculation (Dynamic Hue Ramps for Higher Values) ───
 
-function getHeatmapCellColor(metric, val) {
+function getHeatmapCellColor(metric, val, mode = "") {
   if (val === null || val === undefined) return "rgba(30, 41, 59, 0.25)";
   if (val === 0) return "rgba(15, 23, 42, 0.9)";
 
@@ -2929,13 +2972,57 @@ function getHeatmapCellColor(metric, val) {
   }
 
   if (metric === "dc") {
-    // String DC Current range: 0 A to 25 A (Peak ~23 A)
-    // Sensor noise threshold: values < 0.5 A during dark/standby are rendered as night zero
-    if (val < 0.5) return "rgba(15, 23, 42, 0.9)";
-    else if (val < 5) return "hsl(195, 85%, 45%)";
-    else if (val < 12) return "hsl(180, 85%, 45%)";
-    else if (val < 20) return "hsl(150, 85%, 45%)";
-    else return "hsl(120, 85%, 45%)";
+    if (mode === "single_inverter_mppt") {
+      // Individual MPPT string current: 0 A to 25 A (Peak ~20 A)
+      if (val < 0.5) return "rgba(15, 23, 42, 0.9)";
+      if (val < 4) {
+        const t = (val - 0.5) / 3.5;
+        const hue = Math.round(15 + t * 25); // 15 to 40
+        return `hsl(${hue}, 88%, 46%)`;
+      } else if (val < 9) {
+        const t = (val - 4) / 5;
+        const hue = Math.round(40 + t * 45); // 40 to 85
+        return `hsl(${hue}, 85%, 44%)`;
+      } else if (val < 14) {
+        const t = (val - 9) / 5;
+        const hue = Math.round(85 + t * 50); // 85 to 135
+        return `hsl(${hue}, 80%, 40%)`;
+      } else if (val < 18) {
+        const t = (val - 14) / 4;
+        const hue = Math.round(135 + t * 35); // 135 to 170
+        return `hsl(${hue}, 85%, 41%)`;
+      } else {
+        const t = Math.min(1, (val - 18) / 6);
+        const hue = Math.round(170 + t * 28); // 170 to 198
+        const light = Math.round(42 + t * 7);
+        return `hsl(${hue}, 95%, ${light}%)`;
+      }
+    } else {
+      // Additive Inverter DC Current: sum of 12 MPPTs (~0 A to 240+ A)
+      if (val < 1.0) return "rgba(15, 23, 42, 0.9)";
+      if (val < 35) {
+        const t = (val - 1.0) / 34.0;
+        const hue = Math.round(10 + t * 25); // 10 to 35
+        return `hsl(${hue}, 88%, 46%)`;
+      } else if (val < 80) {
+        const t = (val - 35) / 45;
+        const hue = Math.round(35 + t * 45); // 35 to 80
+        return `hsl(${hue}, 88%, 46%)`;
+      } else if (val < 140) {
+        const t = (val - 80) / 60;
+        const hue = Math.round(80 + t * 50); // 80 to 130
+        return `hsl(${hue}, 80%, 42%)`;
+      } else if (val < 195) {
+        const t = (val - 140) / 55;
+        const hue = Math.round(130 + t * 38); // 130 to 168
+        return `hsl(${hue}, 84%, 41%)`;
+      } else {
+        const t = Math.min(1, (val - 195) / 50);
+        const hue = Math.round(168 + t * 30); // 168 to 198 (Cyan/Sky)
+        const light = Math.round(42 + t * 7);
+        return `hsl(${hue}, 95%, ${light}%)`;
+      }
+    }
   }
 
   if (metric === "temp") {
@@ -2950,7 +3037,7 @@ function getHeatmapCellColor(metric, val) {
   return "rgba(30, 41, 59, 0.25)";
 }
 
-function renderHeatmapLegend(metric) {
+function renderHeatmapLegend(metric, mode = "") {
   const legendContainer = el("heatmap-legend");
   if (!legendContainer) return;
 
@@ -2968,14 +3055,27 @@ function renderHeatmapLegend(metric) {
       { label: "> 255 kW (Picco)", color: "hsl(185, 95%, 46%)" }
     ];
   } else if (metric === "dc") {
-    items = [
-      { label: "Assenti / Futuri", color: "rgba(30, 41, 59, 0.45)" },
-      { label: "0 A (Notte)", color: "rgba(15, 23, 42, 0.9)" },
-      { label: "0.5 - 5 A", color: "hsl(195, 85%, 45%)" },
-      { label: "5 - 12 A", color: "hsl(180, 85%, 45%)" },
-      { label: "12 - 20 A", color: "hsl(150, 85%, 45%)" },
-      { label: "> 20 A (Picco)", color: "hsl(120, 85%, 45%)" }
-    ];
+    if (mode === "single_inverter_mppt") {
+      items = [
+        { label: "Assenti / Futuri", color: "rgba(30, 41, 59, 0.45)" },
+        { label: "0 A (Notte)", color: "rgba(15, 23, 42, 0.9)" },
+        { label: "0.5 - 4 A", color: "hsl(25, 88%, 46%)" },
+        { label: "4 - 9 A", color: "hsl(60, 85%, 44%)" },
+        { label: "9 - 14 A", color: "hsl(110, 80%, 40%)" },
+        { label: "14 - 18 A", color: "hsl(150, 85%, 41%)" },
+        { label: "> 18 A (Picco MPPT)", color: "hsl(185, 95%, 46%)" }
+      ];
+    } else {
+      items = [
+        { label: "Assenti / Futuri", color: "rgba(30, 41, 59, 0.45)" },
+        { label: "0 A (Notte)", color: "rgba(15, 23, 42, 0.9)" },
+        { label: "< 35 A", color: "hsl(20, 88%, 46%)" },
+        { label: "35 - 80 A", color: "hsl(55, 88%, 46%)" },
+        { label: "80 - 140 A", color: "hsl(105, 80%, 42%)" },
+        { label: "140 - 195 A", color: "hsl(150, 84%, 41%)" },
+        { label: "> 195 A (Picco Totale DC)", color: "hsl(185, 95%, 46%)" }
+      ];
+    }
   } else if (metric === "temp") {
     items = [
       { label: "Assenti / Futuri", color: "rgba(30, 41, 59, 0.45)" },
@@ -3025,6 +3125,7 @@ async function fetchInitialData() {
 document.addEventListener("DOMContentLoaded", () => {
   const metricSelect = el("heatmap-metric-select");
   const dateInput = el("heatmap-date-select");
+  const inverterSelect = el("heatmap-inverter-select");
 
   if (dateInput && !dateInput.value) {
     dateInput.value = getLocalTodayStr();
@@ -3032,6 +3133,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (metricSelect) metricSelect.addEventListener("change", () => renderInverterHeatmap(true));
   if (dateInput) dateInput.addEventListener("change", () => renderInverterHeatmap(true));
+  if (inverterSelect) inverterSelect.addEventListener("change", () => renderInverterHeatmap(true));
 
   fetchInitialData();
   renderInverterHeatmap();
