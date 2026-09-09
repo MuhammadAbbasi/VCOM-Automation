@@ -2810,11 +2810,16 @@ async function renderInverterHeatmap(forceLoading = false) {
       }
     }
 
+    const isContinuous = (selectedMetric === "ac");
+    container.classList.toggle("hm-continuous", isContinuous);
+
     // Check if DOM rows must be rebuilt (e.g. switching between 36 inverters, 12 inverters, or 12 MPPT channels)
     const existingRows = container.querySelectorAll(".hm-row");
     const existingInvIds = Array.from(existingRows).map(r => r.dataset.invId);
+    const existingTrack = container.querySelector(".hm-cells-track");
     const needRebuild = existingRows.length !== inverters.length || 
-                        inverters.some((id, idx) => existingInvIds[idx] !== id);
+                        inverters.some((id, idx) => existingInvIds[idx] !== id) ||
+                        !existingTrack;
 
     if (needRebuild) {
       container.innerHTML = "";
@@ -2823,7 +2828,9 @@ async function renderInverterHeatmap(forceLoading = false) {
       const headerRow = document.createElement("div");
       headerRow.className = "hm-time-header";
       headerRow.innerHTML = '<div class="hm-inv-label"></div>' +
-        hours.map(h => `<div class="hm-time-label">${h}</div>`).join("");
+        '<div class="hm-time-track">' +
+        hours.map(h => `<div class="hm-time-label">${h}</div>`).join("") +
+        '</div>';
       container.appendChild(headerRow);
 
       // Inverter / MPPT Rows
@@ -2833,28 +2840,32 @@ async function renderInverterHeatmap(forceLoading = false) {
         row.dataset.invId = invId;
         const strCount = (mode === "single_inverter_mppt" && mpptStringsMap[invId]) ? mpptStringsMap[invId] : null;
         const labelHtml = strCount ? `${invId} <span style="font-size:0.58rem; color:#94a3b8; font-weight:500;">(${strCount}s)</span>` : invId;
-        row.innerHTML = `<div class="hm-inv-label">${labelHtml}</div>`;
+        row.innerHTML = `<div class="hm-inv-label">${labelHtml}</div><div class="hm-cells-track"></div>`;
+        const track = row.querySelector(".hm-cells-track");
 
         slots.forEach((_, sIdx) => {
           const cell = document.createElement("div");
           cell.className = "hm-cell";
           cell.dataset.slotIdx = sIdx;
-          row.appendChild(cell);
+          track.appendChild(cell);
         });
 
         container.appendChild(row);
       });
     }
 
-    // Update cell background colors and tooltips in-place seamlessly without DOM destruction
+    // Update cell background colors, continuous gradient and tooltips in-place seamlessly
     inverters.forEach(invId => {
       const row = container.querySelector(`.hm-row[data-inv-id="${invId}"]`);
       if (!row) return;
+      const track = row.querySelector(".hm-cells-track") || row;
 
       const altInvId = invId.includes("-INV") ? invId.replace("-INV", "-") : invId.replace("TX1-", "TX1-INV").replace("TX2-", "TX2-INV").replace("TX3-", "TX3-INV");
       const invValues = matrix[invId] || matrix[altInvId] || [];
       const cells = row.querySelectorAll(".hm-cell");
       const strCount = (mode === "single_inverter_mppt" && mpptStringsMap[invId]) ? mpptStringsMap[invId] : 2;
+
+      const slotColors = [];
 
       slots.forEach((timeStr, sIdx) => {
         const cell = cells[sIdx];
@@ -2872,19 +2883,39 @@ async function renderInverterHeatmap(forceLoading = false) {
 
           if (val === 0 || (selectedMetric === "dc" && mode === "single_inverter_mppt" && val < 0.3) || (selectedMetric === "dc" && mode === "additive_dc" && val < 1.0)) {
             color = "rgba(15, 23, 42, 0.9)"; // Night zero output
-            cell.style.border = "1px solid rgba(255, 255, 255, 0.04)";
           } else {
             color = getHeatmapCellColor(selectedMetric, val, mode, strCount);
           }
         }
 
-        cell.style.background = color;
+        slotColors.push(color);
+
+        if (isContinuous) {
+          cell.style.background = "transparent";
+          cell.style.border = "none";
+        } else {
+          cell.style.background = color;
+          cell.style.border = (val === 0) ? "1px solid rgba(255, 255, 255, 0.04)" : "none";
+        }
+
         const strWord = strCount === 1 ? "1 stringa" : `${strCount} stringhe`;
         const entityLabel = mode === "single_inverter_mppt" 
           ? `Inverter: ${data.selected_inverter || selectedInverter}\nCanale: ${invId} (${strWord})`
           : `Inverter: ${invId}`;
         cell.title = `${entityLabel}\nOra: ${timeStr}\nValore: ${displayVal}`;
       });
+
+      if (isContinuous && slotColors.length > 0) {
+        const stops = [`${slotColors[0]} 0%`];
+        slotColors.forEach((col, idx) => {
+          const pct = ((idx + 0.5) / slots.length * 100).toFixed(2);
+          stops.push(`${col} ${pct}%`);
+        });
+        stops.push(`${slotColors[slotColors.length - 1]} 100%`);
+        track.style.background = `linear-gradient(to right, ${stops.join(", ")})`;
+      } else {
+        track.style.background = "transparent";
+      }
     });
 
     renderHeatmapLegend(selectedMetric, mode);
