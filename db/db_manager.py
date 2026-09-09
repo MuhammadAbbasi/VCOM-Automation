@@ -1780,6 +1780,19 @@ def _get_heatmap_matrix_cached(date_str: str, metric: str = "ac", inverter: str 
                 except Exception:
                     continue
 
+            cfg_strings = None
+            try:
+                from mppt_dc_analyzer import MPPT_CONFIG
+                cfg_strings = MPPT_CONFIG.get(norm_single) or MPPT_CONFIG.get(norm_single.replace("-INV", "-"))
+            except Exception:
+                pass
+
+            mppt_strings_map = {}
+            for m in range(1, 13):
+                m_lbl = f"MPPT {m:02d}"
+                s_count = cfg_strings[m-1] if (cfg_strings and len(cfg_strings) >= m and cfg_strings[m-1] > 0) else 2
+                mppt_strings_map[m_lbl] = s_count
+
             return {
                 "date": date_str,
                 "metric": "dc",
@@ -1788,6 +1801,7 @@ def _get_heatmap_matrix_cached(date_str: str, metric: str = "ac", inverter: str 
                 "slots": slots,
                 "inverters": mppt_rows,
                 "matrix": mppt_matrix,
+                "mppt_strings": mppt_strings_map,
                 "available_dates": dates,
                 "unit": "A"
             }

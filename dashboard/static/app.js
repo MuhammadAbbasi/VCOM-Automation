@@ -2787,6 +2787,7 @@ async function renderInverterHeatmap(forceLoading = false) {
     const matrix = data.matrix || {};
     const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0") + ":00");
     const mode = data.mode || (selectedMetric === "dc" ? (data.selected_inverter ? "single_inverter_mppt" : "additive_dc") : "standard");
+    const mpptStringsMap = data.mppt_strings || {};
 
     let unit = 'kW';
     if (selectedMetric === 'pr') unit = '%';
@@ -2830,7 +2831,9 @@ async function renderInverterHeatmap(forceLoading = false) {
         const row = document.createElement("div");
         row.className = "hm-row";
         row.dataset.invId = invId;
-        row.innerHTML = `<div class="hm-inv-label">${invId}</div>`;
+        const strCount = (mode === "single_inverter_mppt" && mpptStringsMap[invId]) ? mpptStringsMap[invId] : null;
+        const labelHtml = strCount ? `${invId} <span style="font-size:0.58rem; color:#94a3b8; font-weight:500;">(${strCount}s)</span>` : invId;
+        row.innerHTML = `<div class="hm-inv-label">${labelHtml}</div>`;
 
         slots.forEach((_, sIdx) => {
           const cell = document.createElement("div");
@@ -2851,6 +2854,7 @@ async function renderInverterHeatmap(forceLoading = false) {
       const altInvId = invId.includes("-INV") ? invId.replace("-INV", "-") : invId.replace("TX1-", "TX1-INV").replace("TX2-", "TX2-INV").replace("TX3-", "TX3-INV");
       const invValues = matrix[invId] || matrix[altInvId] || [];
       const cells = row.querySelectorAll(".hm-cell");
+      const strCount = (mode === "single_inverter_mppt" && mpptStringsMap[invId]) ? mpptStringsMap[invId] : 2;
 
       slots.forEach((timeStr, sIdx) => {
         const cell = cells[sIdx];
@@ -2861,18 +2865,23 @@ async function renderInverterHeatmap(forceLoading = false) {
         let displayVal = "Dati non disponibili";
 
         if (val !== null && val !== undefined) {
-          displayVal = `${val} ${unit}`;
-          if (val === 0 || (selectedMetric === "dc" && mode === "single_inverter_mppt" && val < 0.5) || (selectedMetric === "dc" && mode === "additive_dc" && val < 1.0)) {
+          const valPerStr = strCount > 0 ? Math.round((val / strCount) * 10) / 10 : val;
+          displayVal = mode === "single_inverter_mppt"
+            ? `${val} A (${valPerStr} A/str)`
+            : `${val} ${unit}`;
+
+          if (val === 0 || (selectedMetric === "dc" && mode === "single_inverter_mppt" && val < 0.3) || (selectedMetric === "dc" && mode === "additive_dc" && val < 1.0)) {
             color = "rgba(15, 23, 42, 0.9)"; // Night zero output
             cell.style.border = "1px solid rgba(255, 255, 255, 0.04)";
           } else {
-            color = getHeatmapCellColor(selectedMetric, val, mode);
+            color = getHeatmapCellColor(selectedMetric, val, mode, strCount);
           }
         }
 
         cell.style.background = color;
+        const strWord = strCount === 1 ? "1 stringa" : `${strCount} stringhe`;
         const entityLabel = mode === "single_inverter_mppt" 
-          ? `Inverter: ${data.selected_inverter || selectedInverter}\nCanale: ${invId}`
+          ? `Inverter: ${data.selected_inverter || selectedInverter}\nCanale: ${invId} (${strWord})`
           : `Inverter: ${invId}`;
         cell.title = `${entityLabel}\nOra: ${timeStr}\nValore: ${displayVal}`;
       });
@@ -2889,7 +2898,7 @@ async function renderInverterHeatmap(forceLoading = false) {
 
 // ─── Heatmap Cell Color Calculation (Dynamic Hue Ramps for Higher Values) ───
 
-function getHeatmapCellColor(metric, val, mode = "") {
+function getHeatmapCellColor(metric, val, mode = "", strings = 1) {
   if (val === null || val === undefined) return "rgba(30, 41, 59, 0.25)";
   if (val === 0) return "rgba(15, 23, 42, 0.9)";
 
@@ -2973,28 +2982,35 @@ function getHeatmapCellColor(metric, val, mode = "") {
 
   if (metric === "dc") {
     if (mode === "single_inverter_mppt") {
-      // Individual MPPT string current: 0 A to 25 A (Peak ~20 A)
-      if (val < 0.5) return "rgba(15, 23, 42, 0.9)";
-      if (val < 4) {
-        const t = (val - 0.5) / 3.5;
-        const hue = Math.round(15 + t * 25); // 15 to 40
+      // String-normalized MPPT current grading:
+      // Nominal single string current peaks at ~10.0 - 12.5 A.
+      // 2-string MPPTs peak at ~20 - 25 A, 1-string MPPTs peak at ~10 - 12.5 A.
+      // We normalize by string count (val / strings) so both 1-string and 2-string MPPTs
+      // produce the exact same peak cyan and progressive hue curve at full output!
+      const strCount = strings > 0 ? strings : 1;
+      const valPerStr = val / strCount;
+
+      if (valPerStr < 0.3) return "rgba(15, 23, 42, 0.9)";
+      if (valPerStr < 2.0) {
+        const t = Math.max(0, (valPerStr - 0.3) / 1.7);
+        const hue = Math.round(15 + t * 23); // 15 to 38 (Warm Red to Orange)
         return `hsl(${hue}, 88%, 46%)`;
-      } else if (val < 9) {
-        const t = (val - 4) / 5;
-        const hue = Math.round(40 + t * 45); // 40 to 85
-        return `hsl(${hue}, 85%, 44%)`;
-      } else if (val < 14) {
-        const t = (val - 9) / 5;
-        const hue = Math.round(85 + t * 50); // 85 to 135
-        return `hsl(${hue}, 80%, 40%)`;
-      } else if (val < 18) {
-        const t = (val - 14) / 4;
-        const hue = Math.round(135 + t * 35); // 135 to 170
+      } else if (valPerStr < 4.5) {
+        const t = (valPerStr - 2.0) / 2.5;
+        const hue = Math.round(38 + t * 37); // 38 to 75 (Orange to Gold/Yellow)
+        return `hsl(${hue}, 88%, 46%)`;
+      } else if (valPerStr < 7.0) {
+        const t = (valPerStr - 4.5) / 2.5;
+        const hue = Math.round(75 + t * 50); // 75 to 125 (Yellow to Lime/Green)
+        return `hsl(${hue}, 80%, 42%)`;
+      } else if (valPerStr < 9.2) {
+        const t = (valPerStr - 7.0) / 2.2;
+        const hue = Math.round(125 + t * 43); // 125 to 168 (Green to Emerald/Teal)
         return `hsl(${hue}, 85%, 41%)`;
       } else {
-        const t = Math.min(1, (val - 18) / 6);
-        const hue = Math.round(170 + t * 28); // 170 to 198
-        const light = Math.round(42 + t * 7);
+        const t = Math.min(1, (valPerStr - 9.2) / 3.0);
+        const hue = Math.round(168 + t * 30); // 168 to 198 (Teal to Radiant Electric Cyan)
+        const light = Math.round(42 + t * 7); // 42% to 49%
         return `hsl(${hue}, 95%, ${light}%)`;
       }
     } else {
@@ -3059,11 +3075,11 @@ function renderHeatmapLegend(metric, mode = "") {
       items = [
         { label: "Assenti / Futuri", color: "rgba(30, 41, 59, 0.45)" },
         { label: "0 A (Notte)", color: "rgba(15, 23, 42, 0.9)" },
-        { label: "0.5 - 4 A", color: "hsl(25, 88%, 46%)" },
-        { label: "4 - 9 A", color: "hsl(60, 85%, 44%)" },
-        { label: "9 - 14 A", color: "hsl(110, 80%, 40%)" },
-        { label: "14 - 18 A", color: "hsl(150, 85%, 41%)" },
-        { label: "> 18 A (Picco MPPT)", color: "hsl(185, 95%, 46%)" }
+        { label: "< 2.0 A/str", color: "hsl(20, 88%, 46%)" },
+        { label: "2.0 - 4.5 A/str", color: "hsl(55, 88%, 46%)" },
+        { label: "4.5 - 7.0 A/str", color: "hsl(100, 80%, 42%)" },
+        { label: "7.0 - 9.2 A/str", color: "hsl(145, 85%, 41%)" },
+        { label: "≥ 9.2 A/str (Picco)", color: "hsl(185, 95%, 46%)" }
       ];
     } else {
       items = [
