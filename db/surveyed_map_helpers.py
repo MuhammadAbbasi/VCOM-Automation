@@ -189,6 +189,7 @@ def get_surveyed_state(target_date: str = None) -> dict:
             "pr": h.get("pr"), "pr_v": h.get("pr_v"),
             "temp": h.get("temp"), "temp_v": h.get("temp_v"),
             "dc": h.get("dc_current"), "dc_v": h.get("dc_v"),
+            "dc_total_a": h.get("dc_total_a"),
             "ac": h.get("ac_power"), "ac_v": h.get("ac_v"),
             "iso": h.get("iso"), "iso_v": h.get("iso_v"),
             "comms_lost": bool(h.get("comms_lost_flag")),
@@ -226,16 +227,19 @@ def get_surveyed_state(target_date: str = None) -> dict:
                           "ratio": round(ratio, 3) if ratio else None,
                           "single_string_loss": ss_loss, "open_circuit": open_c}
 
-    # ---- the inverter carries the worst of its own parts.
-    # overall_status folds in a DC LED taken from an absolute average of all 12
-    # MPPTs, which flags the whole fleet every evening and points at no MPPT.
-    # Where per-MPPT readings exist they own the DC verdict, so the inverter
-    # takes the worst of them plus its own non-DC LEDs. The raw LEDs stay in the
-    # payload, so the detail panel still reports dc_current as the watchdog set it.
+    # ---- the inverter carries the worst of its own parts and computes additive DC current
     for iid, inv in inverters.items():
+        mine = [m for mid, m in mppts.items() if mid.startswith(iid + "-")]
+        if mine:
+            dc_additive = sum(m["v"] for m in mine if isinstance(m.get("v"), (int, float)))
+            inv["dc_total_a"] = round(dc_additive, 1) if dc_additive > 0 else (0.0 if not inv.get("comms_lost") else None)
+        elif inv.get("dc_total_a") is not None:
+            pass
+        elif inv.get("dc_v") is not None:
+            inv["dc_total_a"] = round(inv["dc_v"] * 12, 1)
+
         if inv.get("comms_lost"):
             continue
-        mine = [m for mid, m in mppts.items() if mid.startswith(iid + "-")]
         if not mine:
             continue
         own = "green"
@@ -244,6 +248,34 @@ def get_surveyed_state(target_date: str = None) -> dict:
         for m in mine:
             own = _worse(own, m.get("status", "grey"))
         inv["status"] = own
+
+    # Ensure every inverter has dc_total_a populated from SQLite if snapshot lacked it
+    missing_dc = [iid for iid, inv in inverters.items() if inv.get("dc_total_a") is None]
+    if missing_dc:
+        try:
+            from db.db_manager import get_data_conn
+            conn = get_data_conn()
+            if conn:
+                c = conn.cursor()
+                c.execute("""
+                    SELECT ora FROM corrente_dc
+                    WHERE date = ?
+                    ORDER BY ora DESC LIMIT 1
+                """, (day,))
+                row = c.fetchone()
+                if row:
+                    latest_ora = row[0]
+                    c.execute("""
+                        SELECT inverter_id, SUM(value) FROM corrente_dc
+                        WHERE date = ? AND ora = ? AND value >= 0.5
+                        GROUP BY inverter_id
+                    """, (day, latest_ora))
+                    for r_inv, r_sum in c.fetchall():
+                        clean_id = _inv_id(r_inv)
+                        if clean_id in inverters and inverters[clean_id].get("dc_total_a") is None:
+                            inverters[clean_id]["dc_total_a"] = round(float(r_sum), 1)
+        except Exception as e:
+            logger.warning(f"[SURVEYED-MAP] Fallback for dc_total_a: {e}")
 
     # ---- trackers: their own alarm flag, and the deviation threshold in settings
     dev_limit = th.get("tracker_deviation", 6.0)
@@ -502,10 +534,12 @@ def get_inverter_detail(inverter_id: str, target_date: str = None) -> dict:
                           "single_string_loss": d.get("single_string_loss"),
                           "open_circuit": d.get("open_circuit")})
     total = sum(r["v"] for r in mppt_rows if isinstance(r.get("v"), (int, float)))
+    dc_tot = round(total, 1) if total else inv.get("dc_total_a")
     return {"inverter": inverter_id, "date": state["date"], "hour": state.get("hour"),
             "status": inv.get("status", "grey"),
             "production": {"ac_w": inv.get("ac_v"), "dc_a": inv.get("dc_v"),
-                           "dc_a_sum_mppt": round(total, 2) if total else None,
+                           "dc_total_a": dc_tot,
+                           "dc_a_sum_mppt": dc_tot,
                            "pr_pct": inv.get("pr_v"), "temp_c": inv.get("temp_v"),
                            "iso": inv.get("iso_v"), "comms_lost": inv.get("comms_lost"),
                            "data_time": inv.get("data_time")},

@@ -525,7 +525,7 @@
       blockGroup.appendChild(label);
       gInvBlockGroup.appendChild(blockGroup);
 
-      self.invBlocks[invId] = { shape: blockShape, hit: blockHit, label: label, group: blockGroup };
+      self.invBlocks[invId] = { shape: blockShape, hit: blockHit, label: label, group: blockGroup, lcx: lcx, lcy: lcy };
     });
 
     this.gSel = gSel;
@@ -664,6 +664,18 @@
       Object.keys(this.invBlocks).forEach(function (invId) {
         var block = self.invBlocks[invId];
         if (!block) return;
+
+        // Update block label to display Inverter ID + Additive DC Current
+        var invData = st && st.inverters && (st.inverters[invId] || st.inverters[invId.replace("-INV", "-")] || st.inverters[invId.replace("TX1-", "TX1-INV").replace("TX2-", "TX2-INV").replace("TX3-", "TX3-INV")]);
+        var dcVal = invData && invData.dc_total_a != null ? invData.dc_total_a : null;
+        if (block.label) {
+          if (dcVal != null) {
+            block.label.innerHTML = '<tspan x="' + block.lcx + '" y="' + (block.lcy - 0.7) + '">' + invId + '</tspan>' +
+                                    '<tspan x="' + block.lcx + '" y="' + (block.lcy + 1.8) + '" class="svm-inv-dc-val">' + dcVal + ' A</tspan>';
+          } else {
+            block.label.textContent = invId;
+          }
+        }
 
         // Find all active issue types for this inverter
         var invProblems = (st && st.problems || []).filter(function (p) {
@@ -1310,6 +1322,12 @@
       leftDiv.appendChild(swatch);
       leftDiv.appendChild(label);
 
+      var dcVal = (invState && invState.dc_total_a != null) ? (invState.dc_total_a + " A") : null;
+      if (dcVal) {
+        var dcBadge = el("span", null, dcVal, { style: "font-size: 0.72rem; color: #38bdf8; font-weight: 600; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 4px; padding: 0.1rem 0.35rem; margin-left: 0.35rem;" });
+        leftDiv.appendChild(dcBadge);
+      }
+
       var rightDiv = el("span", "svm-subrow-m", issueLabel, { style: "font-size: 0.72rem; color: " + (invProblems.length ? statusColor : "var(--muted)") + "; font-weight: 500;" });
 
       b.appendChild(leftDiv);
@@ -1341,8 +1359,12 @@
         if (!j || j.error) { body.appendChild(el("div", "svm-none", "Dati non disponibili.")); return; }
         var p = j.production || {};
         var prod = el("div", "svm-prod");
+        var dcTot = p.dc_total_a != null ? p.dc_total_a : (p.dc_a_sum_mppt != null ? p.dc_a_sum_mppt : null);
+        var dcAvg = p.dc_a != null ? Math.round(p.dc_a * 10) / 10 : null;
+        var dcDisplay = dcTot != null ? (dcTot + " A" + (dcAvg != null ? " (med. " + dcAvg + " A)" : "")) : (dcAvg != null ? dcAvg + " A" : "-");
+
         [["Potenza AC", p.ac_w != null ? Math.round(p.ac_w / 1000 * 10) / 10 + " kW" : "-"],
-         ["Corrente DC", p.dc_a != null ? Math.round(p.dc_a * 100) / 100 + " A" : "-"],
+         ["Corrente DC Additiva", dcDisplay],
          ["PR", p.pr_pct != null ? p.pr_pct + " %" : "-"],
          ["Temperatura", p.temp_c != null ? p.temp_c + " °C" : "-"]].forEach(function (r2) {
           var c = el("div", "svm-prod-cell");
@@ -1894,7 +1916,11 @@
       } else if (d.trk) {
         var t = this.byTracker[d.trk];
         txt = d.trk + " · " + (t ? t.modules + " moduli · " + t.strings.length + " stringhe" : "");
-      } else txt = (d.inv || d.tx) + (d.inv ? " · inverter" : " · cabina");
+      } else if (d.inv) {
+        var invData = this.state && this.state.inverters && (this.state.inverters[d.inv] || this.state.inverters[d.inv.replace("-INV", "-")] || this.state.inverters[d.inv.replace("TX1-", "TX1-INV").replace("TX2-", "TX2-INV").replace("TX3-", "TX3-INV")]);
+        var dcStr = (invData && invData.dc_total_a != null) ? (" · " + invData.dc_total_a + " A DC") : "";
+        txt = d.inv + dcStr + " · Inverter";
+      } else txt = d.tx + " · Cabina";
       this.tip.textContent = txt;
       this.tip.classList.add("on");
       this.tip.style.left = Math.min(e.clientX + 14, window.innerWidth - 260) + "px";

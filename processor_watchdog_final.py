@@ -751,7 +751,9 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
 
         if dc_values:
             avg_dc = float(np.mean(dc_values))
+            total_dc = float(np.sum(dc_values))
             health["dc_v"] = avg_dc
+            health["dc_total_a"] = round(total_dc, 1)
             # Contextualize to time of day: early morning/evening < afternoon
             if daylight_start <= ora <= 12:  # Morning ramp-up
                 dc_threshold_green = thresholds["dc"].get("morning_green", 10.0)
@@ -773,6 +775,7 @@ def compute_latest_health(date_str: str, ac_df: pd.DataFrame, temp_df: pd.DataFr
                 health["dc_current"] = "grey"
         else:
             health["dc_v"] = None
+            health["dc_total_a"] = None
             health["dc_current"] = "grey"
 
         # AC Power LED
