@@ -1757,13 +1757,19 @@ def _get_heatmap_matrix_cached(date_str: str, metric: str = "ac") -> dict:
         }
 
     # Match inverter columns for each INVERTER_ID
+    # Match inverter columns for each INVERTER_ID
     inv_col_map = {}
     for inv_id in INVERTER_IDS:
         short_id = inv_id.replace("-INV", "-")
         matches = [c for c in df.columns if f"INV {inv_id}" in c or f"INV {short_id}" in c or f"({inv_id})" in c or f"({short_id})" in c or inv_id in c or short_id in c]
         if matches:
-            inv_col_map[inv_id] = matches[0]
-            inv_col_map[short_id] = matches[0]
+            if metric == "dc":
+                # For DC current, keep all MPPT string channels to compute inverter average
+                inv_col_map[inv_id] = matches
+                inv_col_map[short_id] = matches
+            else:
+                inv_col_map[inv_id] = matches[0]
+                inv_col_map[short_id] = matches[0]
 
     # Handle vertical PR table vs wide time-series tables
     if raw_metric == "PR inverter" and "PR inverter [%]" in df.columns:
@@ -1788,7 +1794,7 @@ def _get_heatmap_matrix_cached(date_str: str, metric: str = "ac") -> dict:
                         s = str(ora_val).strip().replace(".", ":")
                         parts = s.split(":")
                         h, m = int(parts[0]), int(parts[1])
-                    s_idx = min(95, max(0, h * 4 + (m // 15)))
+                    s_idx = min(95, max(0, int(round((h * 60 + m) / 15.0))))
                 except Exception:
                     continue
 
@@ -1828,7 +1834,7 @@ def _get_heatmap_matrix_cached(date_str: str, metric: str = "ac") -> dict:
                                 # Fallback: clamp daytime slots up to current time if today, or sunset if past day
                                 import datetime
                                 now_dt = datetime.datetime.now()
-                                max_slot = (now_dt.hour * 4 + now_dt.minute // 15) if date_str == now_dt.strftime("%Y-%m-%d") else 78
+                                max_slot = int(round((now_dt.hour * 60 + now_dt.minute) / 15.0)) if date_str == now_dt.strftime("%Y-%m-%d") else 78
                                 for s_idx in range(28, min(79, max_slot + 1)):
                                     matrix[inv_id][s_idx] = round(val, 1)
                                     matrix[short_id][s_idx] = round(val, 1)
@@ -1858,22 +1864,32 @@ def _get_heatmap_matrix_cached(date_str: str, metric: str = "ac") -> dict:
                 s = str(ora_val).strip().replace(".", ":")
                 parts = s.split(":")
                 h, m = int(parts[0]), int(parts[1])
-            slot_idx = min(95, max(0, h * 4 + (m // 15)))
+            slot_idx = min(95, max(0, int(round((h * 60 + m) / 15.0))))
         except Exception:
             continue
 
-        for inv_id, col in inv_col_map.items():
-            val = row.get(col)
-            if pd.notna(val):
-                try:
-                    num = float(val)
-                    if metric == "ac":
-                        num = round(num / 1000.0, 1)  # Watts to kW
-                    else:
-                        num = round(num, 1)
-                    matrix[inv_id][slot_idx] = num
-                except Exception:
-                    pass
+        for inv_id, col_spec in inv_col_map.items():
+            if isinstance(col_spec, list):
+                # Multiple MPPTs (DC current): average across all non-null MPPT channels
+                m_vals = [float(row[c]) for c in col_spec if pd.notna(row.get(c))]
+                if m_vals:
+                    avg_v = sum(m_vals) / len(m_vals)
+                    # Filter dark standby noise (< 0.5 A)
+                    matrix[inv_id][slot_idx] = 0.0 if avg_v < 0.5 else round(avg_v, 1)
+            else:
+                val = row.get(col_spec)
+                if pd.notna(val):
+                    try:
+                        num = float(val)
+                        if metric == "ac":
+                            num = round(num / 1000.0, 1)  # Watts to kW
+                        elif metric == "dc":
+                            num = 0.0 if num < 0.5 else round(num, 1)
+                        else:
+                            num = round(num, 1)
+                        matrix[inv_id][slot_idx] = num
+                    except Exception:
+                        pass
 
     return {
         "date": date_str,

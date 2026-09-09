@@ -2822,7 +2822,7 @@ async function renderInverterHeatmap(forceLoading = false) {
 
         if (val !== null && val !== undefined) {
           displayVal = `${val} ${unit}`;
-          if (val === 0) {
+          if (val === 0 || (selectedMetric === "dc" && val < 0.5)) {
             color = "rgba(15, 23, 42, 0.9)"; // Night zero output
             cell.style.border = "1px solid rgba(255, 255, 255, 0.04)";
           } else {
@@ -2930,7 +2930,9 @@ function getHeatmapCellColor(metric, val) {
 
   if (metric === "dc") {
     // String DC Current range: 0 A to 25 A (Peak ~23 A)
-    if (val < 5) return "hsl(195, 85%, 45%)";
+    // Sensor noise threshold: values < 0.5 A during dark/standby are rendered as night zero
+    if (val < 0.5) return "rgba(15, 23, 42, 0.9)";
+    else if (val < 5) return "hsl(195, 85%, 45%)";
     else if (val < 12) return "hsl(180, 85%, 45%)";
     else if (val < 20) return "hsl(150, 85%, 45%)";
     else return "hsl(120, 85%, 45%)";
@@ -2969,7 +2971,7 @@ function renderHeatmapLegend(metric) {
     items = [
       { label: "Assenti / Futuri", color: "rgba(30, 41, 59, 0.45)" },
       { label: "0 A (Notte)", color: "rgba(15, 23, 42, 0.9)" },
-      { label: "< 5 A", color: "hsl(195, 85%, 45%)" },
+      { label: "0.5 - 5 A", color: "hsl(195, 85%, 45%)" },
       { label: "5 - 12 A", color: "hsl(180, 85%, 45%)" },
       { label: "12 - 20 A", color: "hsl(150, 85%, 45%)" },
       { label: "> 20 A (Picco)", color: "hsl(120, 85%, 45%)" }
