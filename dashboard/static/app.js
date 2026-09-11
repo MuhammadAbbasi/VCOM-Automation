@@ -43,6 +43,9 @@ const sortState = {
   ac:   { column: "value", direction: "desc" },
 };
 
+// Global link heartbeat cache
+let lastHeartbeatTimestamp = null;
+
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 function el(id) { return document.getElementById(id); }
@@ -1005,9 +1008,11 @@ function initTabs() {
         renderActiveDetailTab();
       }
 
-      // Initialize tracker chart when entering the Campo Tracker tab
+      // Initialize tracker chart and refresh heartbeat when entering the Campo Tracker tab
       if (targetId === "tab-trackers") {
         initTrackerChart();
+        fetchLinkStatus();
+        if (lastTrackerData) updateTrackerSyncAndHeartbeat(lastTrackerData);
       }
     });
   });
@@ -1281,6 +1286,9 @@ function connectWebSocket() {
           
           // Update Link Status UI from nested data
           if (payload.data.link_status) {
+            if (payload.data.link_status.last_heartbeat) {
+              lastHeartbeatTimestamp = payload.data.link_status.last_heartbeat;
+            }
             updateLinkStatusUI(payload.data.link_status);
           }
         }
@@ -2073,6 +2081,108 @@ function sendSuggestion(text) {
 
 // ─── Tracker Field Rendering ─────────────────────────────────────────────
 
+function parseDateTimeParts(isoOrStr) {
+  if (!isoOrStr) return null;
+  const raw = String(isoOrStr).trim();
+  if (!raw || raw === "—" || raw === "null" || raw === "undefined") return null;
+
+  let datePart = "";
+  let timePart = "";
+
+  if (raw.includes("T")) {
+    const parts = raw.split("T");
+    datePart = parts[0];
+    timePart = parts[1].substring(0, 5);
+  } else if (raw.includes(" ")) {
+    const parts = raw.split(" ");
+    datePart = parts[0];
+    timePart = parts[1].substring(0, 5);
+  } else if (raw.includes(":")) {
+    timePart = raw.substring(0, 5);
+  }
+
+  let formattedDate = "";
+  let isYesterdayOrEarlier = false;
+
+  if (datePart && datePart.includes("-")) {
+    const dParts = datePart.split("-");
+    if (dParts.length === 3) {
+      formattedDate = `${dParts[2]}/${dParts[1]}/${dParts[0]}`;
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      if (datePart < todayStr) {
+        isYesterdayOrEarlier = true;
+      }
+    }
+  }
+
+  return {
+    raw,
+    time: timePart || "—",
+    date: formattedDate,
+    dateIso: datePart,
+    isYesterdayOrEarlier
+  };
+}
+
+function updateTrackerSyncAndHeartbeat(trackers = lastTrackerData) {
+  // 1. Determine latest tracker telemetry sync time
+  let latestTrackerTime = null;
+  if (trackers && trackers.length > 0) {
+    const latest = [...trackers].sort((a, b) => (b.last_update || "").localeCompare(a.last_update || ""))[0];
+    if (latest && latest.last_update) {
+      latestTrackerTime = latest.last_update;
+    }
+  }
+
+  const syncParsed = parseDateTimeParts(latestTrackerTime);
+  const syncIsYesterdayOrEarlier = syncParsed ? syncParsed.isYesterdayOrEarlier : false;
+
+  // 2. Render Sync Dati Tracker card
+  const syncEl = el("stat-last-sync");
+  if (syncEl) {
+    if (syncParsed && syncParsed.time !== "—") {
+      const showSyncDate = syncIsYesterdayOrEarlier && syncParsed.date;
+      syncEl.innerHTML = showSyncDate
+        ? `${syncParsed.time}<div style="font-size: 0.8rem; font-weight: 500; opacity: 0.8; margin-top: 0.25rem; font-family: 'Outfit', sans-serif;">${syncParsed.date}</div>`
+        : syncParsed.time;
+    } else {
+      syncEl.textContent = "—";
+    }
+  }
+
+  // 3. Render Ultimo Heartbeat card
+  const hbEl = el("stat-last-heartbeat");
+  if (hbEl) {
+    const hbRaw = lastHeartbeatTimestamp || (lastData && lastData.link_status && lastData.link_status.last_heartbeat);
+    const hbParsed = parseDateTimeParts(hbRaw);
+    if (hbParsed && hbParsed.time !== "—") {
+      // If sync time is yesterday or earlier OR heartbeat itself is yesterday or earlier, show date + time
+      const showHbDate = (syncIsYesterdayOrEarlier || hbParsed.isYesterdayOrEarlier) && hbParsed.date;
+      hbEl.innerHTML = showHbDate
+        ? `${hbParsed.time}<div style="font-size: 0.8rem; font-weight: 500; opacity: 0.8; margin-top: 0.25rem; font-family: 'Outfit', sans-serif;">${hbParsed.date}</div>`
+        : hbParsed.time;
+    } else {
+      hbEl.textContent = "—";
+    }
+  }
+}
+
+async function fetchLinkStatus() {
+  try {
+    const res = await fetch("/api/link_status", { credentials: "same-origin" });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.last_heartbeat) {
+        lastHeartbeatTimestamp = data.last_heartbeat;
+        updateTrackerSyncAndHeartbeat(lastTrackerData);
+      }
+    }
+  } catch (e) {
+    // silent fallback
+  }
+}
+
 function updateTrackers(trackers) {
   const gridContainer = el("tracker-led-grid");
   if (!gridContainer) return;
@@ -2156,32 +2266,8 @@ function updateTrackers(trackers) {
   if (el("stat-total-nostate"))   el("stat-total-nostate").textContent = stats.ns;
   if (el("stat-total-critical"))  el("stat-total-critical").textContent = stats.alarm;
 
-  if (el("stat-last-sync") && trackers.length > 0) {
-      const latest = [...trackers].sort((a,b) => (b.last_update || "").localeCompare(a.last_update || ""))[0];
-      if (latest && latest.last_update) {
-          const rawUpdate = latest.last_update;
-          let formattedDate = "";
-          let formattedTime = "";
-          if (rawUpdate.includes("T")) {
-              const parts = rawUpdate.split("T");
-              const dateParts = parts[0].split("-");
-              formattedDate = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
-              formattedTime = parts[1].substring(0, 5);
-          } else if (rawUpdate.includes(" ")) {
-              const parts = rawUpdate.split(" ");
-              const dateParts = parts[0].split("-");
-              formattedDate = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
-              formattedTime = parts[1].substring(0, 5);
-          } else {
-              formattedTime = rawUpdate;
-          }
-          if (formattedDate) {
-              el("stat-last-sync").innerHTML = `${formattedTime}<div style="font-size: 0.8rem; font-weight: 500; opacity: 0.8; margin-top: 0.25rem; font-family: 'Outfit', sans-serif;">${formattedDate}</div>`;
-          } else {
-              el("stat-last-sync").textContent = formattedTime;
-          }
-      }
-  }
+  // Update Sync Dati Tracker & Ultimo Heartbeat
+  updateTrackerSyncAndHeartbeat(trackers);
 
   ["NCU 01", "NCU 02", "NCU 03"].forEach((ncu, idx) => {
     const id = idx + 1;
@@ -3191,6 +3277,8 @@ document.addEventListener("DOMContentLoaded", () => {
   if (inverterSelect) inverterSelect.addEventListener("change", () => renderInverterHeatmap(true));
 
   fetchInitialData();
+  fetchLinkStatus();
+  setInterval(fetchLinkStatus, 10000);
   renderInverterHeatmap();
 
   // Auto-refresh today's heatmap every 30 seconds
