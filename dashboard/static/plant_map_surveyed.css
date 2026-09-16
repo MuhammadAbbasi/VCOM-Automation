@@ -314,9 +314,6 @@
 .svm-div, .svm-panel, .svm-flag { stroke: var(--map-bg, #0a0c11); }
 .svm-chip, .svm-btn, .svm-segbtn, .svm-legend-item { min-height: 44px; }
 .svm-search { min-width: 0; width: 100%; max-width: 17rem; }
-html[data-theme="light"] .svm-road { stroke: rgba(15,23,42,0.15); }
-html[data-theme="light"] .svm-tx { fill: rgba(15,23,42,0.12); }
-html[data-theme="light"] .svm-issue-banner.s-yellow { color: #854D0E; }
 @media (max-width: 1100px) {
   .svm-grid { grid-template-columns: 1fr; }
   .svm-side { order: 2; }
