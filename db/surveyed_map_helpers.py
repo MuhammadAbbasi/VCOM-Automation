@@ -348,16 +348,25 @@ def get_surveyed_state(target_date: str = None) -> dict:
                          "inverters": tgt["inverters"], "mppts": tgt["mppts"],
                          "trackers": []})
 
+    # fleet-wide dip check: if low DC affects more than half the fleet,
+    # it's a global irradiance condition, not 808 isolated string faults.
+    dc_named = {i for p in problems for i in p.get("inverters") or []}
+    rest = {i: v for i, v in dc_low.items() if i not in dc_named}
+    is_fleet_wide_dc = bool(rest and len(rest) > len(inverters) / 2)
+
     # ---- an MPPT with no reading of its own follows its inverter
     for m in layout.get("mppts", []):
         mppts.setdefault(m["id"], {"status": inverters.get(m["inverter"], {})
-                                   .get("status", "grey")})
+                                   .get("status", "grey"), "own": "grey"})
 
     # ---- strings inherit their MPPT; that is the finest the meters go
     strings = {}
     for s in layout.get("strings", []):
         m = mppts.get(s["mppt"], {})
-        dc = m.get("status", "grey")
+        # If fleet-wide DC dip, use the MPPT's own performance ratio rather than blanket yellow
+        dc = m.get("own") if is_fleet_wide_dc else m.get("status", "grey")
+        if not dc or dc == "grey":
+            dc = m.get("status", "grey")
         note = m.get("note")
         if m.get("single_string_loss"):
             note = "una delle due stringhe di questo MPPT risulta persa"

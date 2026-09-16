@@ -151,72 +151,31 @@
     this.root.innerHTML = "";
     this.root.classList.add("svm");
 
-    var bar = el("div", "svm-bar");
+    // Header Tier 1: .svm-header (KPIs, Primary View segmented tab, Inverter Filter)
+    var header = el("div", "svm-header");
     this.counts = el("div", "svm-counts");
 
-    var modes = el("div", "svm-modes");
-    function group(label, opts, get, set) {
-      var g = el("div", "svm-seg");
-      g.appendChild(el("span", "svm-seg-label", label));
-      opts.forEach(function (o) {
-        var b = el("button", "svm-segbtn", o[1]);
-        b.dataset.val = o[0];
-        b.onclick = function () { set(o[0]); };
-        g.appendChild(b);
-      });
-      g.sync = function () {
-        Array.prototype.forEach.call(g.querySelectorAll(".svm-segbtn"), function (b) {
-          b.classList.toggle("on", b.dataset.val === get());
-        });
-      };
-      return g;
-    }
-    this.segView = group("Vista", [["string", "Stringhe"], ["tracker", "Tracker"], ["inverter", "Inverter"]],
-      function () { return self.view; },
-      function (v) { self.view = v; self.sel = null; self.draw(); self.paint(); });
-    this.segCol = group("Colore", LAYOUT_MODES,
-      function () { return self.colour; },
-      function (v) {
-        self.colour = v;
-        if (v === "serial") self.ensureCoverage();
+    // Primary View Segment: Stringhe | Tracker | Inverter
+    var viewSeg = el("div", "svm-seg svm-view-seg");
+    [
+      ["string", "Stringhe"],
+      ["tracker", "Tracker"],
+      ["inverter", "Inverter"]
+    ].forEach(function (pair) {
+      var b = el("button", "svm-segbtn", pair[1]);
+      b.dataset.val = pair[0];
+      b.onclick = function () {
+        self.view = pair[0];
+        self.sel = null;
+        self.draw();
         self.paint();
-      });
-    this.segScope = group("Monitoraggio", [["plant", "Impianto"], ["tracker", "Tracker"]],
-      function () { return self.scope; },
-      function (v) { self.scope = v; self.sel = null; self.applyScope(); self.paint(); });
-    modes.appendChild(this.segScope);
-    modes.appendChild(this.segView); modes.appendChild(this.segCol);
-
-    // one click to the physical picture of the site
-    this.layoutBtn = el("button", "svm-btn", "Layout generale");
-    this.layoutBtn.title = "Vista d'insieme: elevazione (s.l.m.), tipologia, stringhe, seriali";
-    this.layoutBtn.onclick = function () {
-      self.colour = "alt"; self.view = "tracker"; self.sel = null;
-      self.draw(); self.paint();
-    };
-    modes.appendChild(this.layoutBtn);
-
-    this.serialBtn = el("button", "svm-btn svm-serialbtn", "Vedi seriali");
-    this.serialBtn.onclick = function () {
-      self.serialMode = !self.serialMode;
-      self.serialBtn.classList.toggle("on", self.serialMode);
-      if (self.serialMode && self.view !== "string") {
-        self.view = "string"; self.draw(); self.paint();
-      }
-      if (self.serialMode) self.loadSerialProblems();
-      self.drawSerialProblems();
-      self.renderDetail();
-    };
-    modes.appendChild(this.serialBtn);
-
-    this.exportBtn = el("a", "svm-btn svm-export", "Scarica CSV seriali");
-    this.exportBtn.href = API + "/serials/export";
-    this.exportBtn.title = "Seriale attuale, quello sostituito e la nota, per ogni pannello";
-    modes.appendChild(this.exportBtn);
-
-    var tools = el("div", "svm-tools");
+      };
+      viewSeg.appendChild(b);
+    });
+    this.segView = viewSeg;
 
     // Inverter Filter Dropdown
+    var invWrap = el("div", "svm-filter-wrap");
     this.invSelect = el("select", "svm-select svm-inv-select");
     this.invSelect.title = "Filtra per Inverter (TX1-01 .. TX3-12)";
     var optAll = el("option", null, "Tutti gli Inverter (36)");
@@ -237,26 +196,111 @@
 
     this.invSelect.addEventListener("change", function () {
       self.selectedInverterFilter = this.value || null;
+      self.filter = null;
+      self.panelSel = null;
       if (this.value) {
-        self.select({ kind: "inverter", id: this.value });
+        self.select({ kind: "inverter", id: this.value }, false);
       } else {
-        self.select(null);
+        self.select(null, false);
         self.fitAll();
       }
       self.paint();
     });
-    tools.appendChild(this.invSelect);
+    invWrap.appendChild(this.invSelect);
+
+    header.appendChild(this.counts);
+    header.appendChild(this.segView);
+    header.appendChild(invWrap);
+
+    // Subbar Tier 2: .svm-subbar (Scope, Color layer select, View preset, Search, Actions)
+    var subbar = el("div", "svm-subbar");
+    var leftControls = el("div", "svm-ctrl-group");
+
+    // Diagnostic Scope: Salute Elettrica vs Meccanica TCU
+    var scopeSeg = el("div", "svm-seg svm-scope-seg");
+    scopeSeg.appendChild(el("span", "svm-seg-label", "Salute"));
+    [
+      ["plant", "Elettrica (Impianto)"],
+      ["tracker", "Meccanica (TCU)"]
+    ].forEach(function (pair) {
+      var b = el("button", "svm-segbtn", pair[1]);
+      b.dataset.val = pair[0];
+      b.onclick = function () {
+        self.scope = pair[0];
+        self.sel = null;
+        self.applyScope();
+        self.paint();
+      };
+      scopeSeg.appendChild(b);
+    });
+    this.segScope = scopeSeg;
+    leftControls.appendChild(this.segScope);
+
+    // Color Layer Select Dropdown
+    var layerWrap = el("div", "svm-layer-wrap");
+    layerWrap.appendChild(el("span", "svm-seg-label", "Colore"));
+    this.layerSelect = el("select", "svm-select svm-layer-select");
+    LAYOUT_MODES.forEach(function (m) {
+      var opt = el("option", null, m[1]);
+      opt.value = m[0];
+      self.layerSelect.appendChild(opt);
+    });
+    this.layerSelect.addEventListener("change", function () {
+      self.colour = this.value;
+      if (self.colour === "serial") self.ensureCoverage();
+      self.paint();
+    });
+    layerWrap.appendChild(this.layerSelect);
+    leftControls.appendChild(layerWrap);
+
+    // Quick Terrain/Elevation preset
+    this.layoutBtn = el("button", "svm-btn svm-btn-preset", "Vista Terreno");
+    this.layoutBtn.title = "Vista d'insieme: elevazione altimetrica (m s.l.m.)";
+    this.layoutBtn.onclick = function () {
+      self.colour = "alt";
+      if (self.layerSelect) self.layerSelect.value = "alt";
+      self.view = "tracker";
+      self.sel = null;
+      self.draw();
+      self.paint();
+    };
+    leftControls.appendChild(this.layoutBtn);
+
+    var rightControls = el("div", "svm-ctrl-group right");
+
+    // Search bar with SVG magnifying glass
+    var searchWrap = el("div", "svm-search-wrap");
+    var searchIcon = sv("svg", { class: "svm-search-icon", viewBox: "0 0 24 24", width: "13", height: "13" });
+    searchIcon.innerHTML = '<circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" stroke-width="2"></circle><line x1="21" y1="21" x2="16.65" y2="16.65" stroke="currentColor" stroke-width="2"></line>';
+    searchWrap.appendChild(searchIcon);
 
     this.search = el("input", "svm-search");
     this.search.type = "search";
-    this.search.placeholder = "Cerca TRACKER 198, STR21, MPPT05, seriale…";
+    this.search.placeholder = "Cerca tracker, stringa, inverter, seriale...";
     this.search.addEventListener("input", function () { self.runSearch(); });
-    var mk = function (t, fn, cls) { var b = el("button", "svm-btn" + (cls || ""), t); b.onclick = fn; return b; };
-    tools.appendChild(this.search);
-    tools.appendChild(mk("+", function () { self.zoomTo(self.k * 1.6); }));
-    tools.appendChild(mk("−", function () { self.zoomTo(self.k / 1.6); }));
-    tools.appendChild(mk("Adatta", function () { self.fitAll(); self.select(null); }));
-    bar.appendChild(this.counts); bar.appendChild(modes); bar.appendChild(tools);
+    searchWrap.appendChild(this.search);
+    rightControls.appendChild(searchWrap);
+
+    this.serialBtn = el("button", "svm-btn svm-serialbtn", "Vedi seriali");
+    this.serialBtn.onclick = function () {
+      self.serialMode = !self.serialMode;
+      self.serialBtn.classList.toggle("on", self.serialMode);
+      if (self.serialMode && self.view !== "string") {
+        self.view = "string"; self.draw(); self.paint();
+      }
+      if (self.serialMode) self.loadSerialProblems();
+      self.drawSerialProblems();
+      self.renderDetail();
+    };
+    rightControls.appendChild(this.serialBtn);
+
+    this.exportBtn = el("a", "svm-btn svm-export", "CSV seriali");
+    this.exportBtn.href = API + "/serials/export";
+    this.exportBtn.title = "Scarica CSV completo seriali pannelli";
+    rightControls.appendChild(this.exportBtn);
+
+    subbar.appendChild(leftControls);
+    subbar.appendChild(rightControls);
 
     var grid = el("div", "svm-grid");
     var side = el("aside", "svm-side");
@@ -267,8 +311,51 @@
     var mapwrap = el("div", "svm-mapwrap");
     this.svg = sv("svg", { class: "svm-svg", role: "img", "aria-label": "Mappa impianto, nord in alto" });
     mapwrap.appendChild(this.svg);
+
+    // Floating Map Controls (top-right of canvas)
+    var mapControls = el("div", "svm-map-controls");
+    var btnZoomIn = el("button", "svm-map-btn");
+    btnZoomIn.title = "Ingrandisci (+)";
+    btnZoomIn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
+    btnZoomIn.onclick = function () { self.zoomTo(self.k * 1.6); };
+
+    var btnZoomOut = el("button", "svm-map-btn");
+    btnZoomOut.title = "Rimpicciolisci (−)";
+    btnZoomOut.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>';
+    btnZoomOut.onclick = function () { self.zoomTo(self.k / 1.6); };
+
+    var btnFit = el("button", "svm-map-btn");
+    btnFit.title = "Adatta vista all'impianto intero";
+    btnFit.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>';
+    btnFit.onclick = function () {
+      self.filter = null;
+      self.selectedInverterFilter = null;
+      self.panelSel = null;
+      if (self.invSelect) self.invSelect.value = "";
+      if (self.search) { self.search.value = ""; self.results.classList.remove("on"); }
+      self.fitAll();
+      self.select(null, false);
+    };
+
+    var btnCenter = el("button", "svm-map-btn disabled");
+    btnCenter.title = "Centra sull'elemento selezionato";
+    btnCenter.disabled = true;
+    btnCenter.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2" fill="currentColor"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg>';
+    btnCenter.onclick = function () {
+      if (self.sel) self.zoomToSel(self.sel);
+    };
+    this.btnCenter = btnCenter;
+
+    mapControls.appendChild(btnZoomIn);
+    mapControls.appendChild(btnZoomOut);
+    mapControls.appendChild(btnFit);
+    mapControls.appendChild(btnCenter);
+    mapwrap.appendChild(mapControls);
+
     this.results = el("div", "svm-results");
     this.legend = el("div", "svm-legend");
+    this.legendCollapsed = false;
+
     var foot = el("div", "svm-foot");
     var north = el("div", "svm-north");
     north.innerHTML = '<svg width="15" height="15" viewBox="0 0 17 17" aria-hidden="true">'
@@ -279,12 +366,17 @@
     this.scaleRule = el("div", "svm-scale-rule");
     this.scale.appendChild(this.scaleText); this.scale.appendChild(this.scaleRule);
     foot.appendChild(north); foot.appendChild(this.scale);
-    mapwrap.appendChild(this.results); mapwrap.appendChild(this.legend);
+
+    mapwrap.appendChild(this.results);
+    mapwrap.appendChild(this.legend);
     mapwrap.appendChild(foot);
 
-    grid.appendChild(side); grid.appendChild(mapwrap);   // panel on the left
+    grid.appendChild(side); grid.appendChild(mapwrap);
     this.tip = el("div", "svm-tip");
-    this.root.appendChild(bar); this.root.appendChild(grid); this.root.appendChild(this.tip);
+    this.root.appendChild(header);
+    this.root.appendChild(subbar);
+    this.root.appendChild(grid);
+    this.root.appendChild(this.tip);
 
     this.svg.addEventListener("pointerdown", function (e) { self.onDown(e); });
     this.svg.addEventListener("pointermove", function (e) { self.onMove(e); });
@@ -308,7 +400,24 @@
   };
 
   P.syncSegs = function () {
-    this.segScope.sync(); this.segView.sync(); this.segCol.sync();
+    var self = this;
+    if (this.segView) {
+      Array.prototype.forEach.call(this.segView.querySelectorAll(".svm-segbtn"), function (b) {
+        b.classList.toggle("on", b.dataset.val === self.view);
+      });
+    }
+    if (this.segScope) {
+      Array.prototype.forEach.call(this.segScope.querySelectorAll(".svm-segbtn"), function (b) {
+        b.classList.toggle("on", b.dataset.val === self.scope);
+      });
+    }
+    if (this.layerSelect) {
+      this.layerSelect.value = this.colour;
+    }
+    if (this.btnCenter) {
+      this.btnCenter.disabled = !this.sel;
+      this.btnCenter.classList.toggle("disabled", !this.sel);
+    }
   };
 
   /* The server sends both healths in one payload. This projects it onto the one
@@ -328,7 +437,7 @@
       st.trackers = neutral;
       st.problems = (raw.problems || []).filter(function (p) { return p.scope !== "tracker"; });
       st.counts = {};
-      ["strings", "mppts", "inverters"].forEach(function (c) {
+      ["strings", "mppts", "inverters", "trackers"].forEach(function (c) {
         if (raw.counts && raw.counts[c]) st.counts[c] = raw.counts[c];
       });
     } else {
@@ -440,7 +549,7 @@
       var cx = px(t.x), top = py(t.y0), h = t.y0 - t.y1;
       if (self.view === "tracker") {
         var r = sv("rect", { class: "svm-str", x: cx - t.w / 2, y: top, width: t.w, height: h });
-        var hit = sv("rect", { class: "svm-hit", x: cx - 2.6, y: top, width: 5.2, height: h });
+        var hit = sv("rect", { class: "svm-hit", x: cx - 4, y: top, width: 8, height: h });
         hit.dataset.trk = t.id;
         gTrk.appendChild(r); gTrk.appendChild(hit);
         self.trkRects[t.id] = r;
@@ -449,7 +558,7 @@
         t.strings.forEach(function (sid, i) {
           var y = top + i * span;
           var rr = sv("rect", { class: "svm-str", x: cx - t.w / 2, y: y, width: t.w, height: span });
-          var hh = sv("rect", { class: "svm-hit", x: cx - 2.6, y: y, width: 5.2, height: span });
+          var hh = sv("rect", { class: "svm-hit", x: cx - 4, y: y, width: 8, height: span });
           hh.dataset.str = sid; hh.dataset.trk = t.id; hh.dataset.mppt = t.mppts[i] || "";
           gTrk.appendChild(rr); gTrk.appendChild(hh);
           self.rects[sid] = rr;
@@ -491,6 +600,7 @@
 
     // ─── Fixed Inverter Polygon Masks (db/inverter_polygons.json) ───────────
     this.invBlocks = {};
+    this.invBadges = [];
     var fixedPolygons = L.inverter_polygons || {};
 
     var gInvBlockGroup = sv("g", { class: "svm-inv-blocks-group" });
@@ -512,24 +622,56 @@
       pts.forEach(function (p) { lcx += px(p[0]); lcy += py(p[1]); });
       lcx /= pts.length; lcy /= pts.length;
 
+      // 2-tier alternating Y stagger (+/- 26m) with substation avoidance:
+      var numMatch = invId.match(/\d+$/);
+      var invNum = numMatch ? parseInt(numMatch[0], 10) : 1;
+      var yOff = (invNum % 2 === 0) ? 26 : -26;
+      if (invId === "TX3-INV11") yOff = 22; // Clear of TX3 substation
+      if (invId === "TX2-INV06") yOff = 6;  // Clear of TX2 substation and TX2-INV07
+      var bcx = lcx;
+      var bcy = lcy + yOff;
+
       var blockShape = sv("polygon", { class: "svm-inv-block", points: pointsStr });
       var blockHit = sv("polygon", { class: "svm-hit", points: pointsStr });
       blockHit.dataset.inv = invId;
 
-      var label = sv("text", { class: "svm-inv-block-label", x: lcx, y: lcy, "text-anchor": "middle" });
-      label.textContent = invId;
+      // Inverter Badge group (scaled by s in apply() to keep crisp constant screen size)
+      var badgeGroup = sv("g", { class: "svm-inv-badge-group" });
+      badgeGroup.dataset.x = bcx;
+      badgeGroup.dataset.y = bcy;
+
+      var badgeBg = sv("rect", { class: "svm-inv-badge-bg", rx: 4, ry: 4 });
+      var labelTitle = sv("text", { class: "svm-inv-badge-title", "text-anchor": "middle" });
+      var labelSub = sv("text", { class: "svm-inv-badge-sub", "text-anchor": "middle" });
+
+      badgeGroup.appendChild(badgeBg);
+      badgeGroup.appendChild(labelTitle);
+      badgeGroup.appendChild(labelSub);
 
       var blockGroup = sv("g", { class: "svm-inv-block-unit" });
       blockGroup.appendChild(blockShape);
       blockGroup.appendChild(blockHit);
-      blockGroup.appendChild(label);
+      blockGroup.appendChild(badgeGroup);
       gInvBlockGroup.appendChild(blockGroup);
 
-      self.invBlocks[invId] = { shape: blockShape, hit: blockHit, label: label, group: blockGroup, lcx: lcx, lcy: lcy };
+      self.invBadges.push(badgeGroup);
+      self.invBlocks[invId] = {
+        shape: blockShape,
+        hit: blockHit,
+        badge: badgeGroup,
+        bg: badgeBg,
+        title: labelTitle,
+        sub: labelSub,
+        group: blockGroup,
+        bcx: bcx,
+        bcy: bcy,
+        invNum: invNum
+      };
     });
 
     this.gSel = gSel;
     this.measure(); this.fitAll();
+    if (this.sel) this.outline(this.sel);
     this.syncSegs();
   };
 
@@ -665,16 +807,38 @@
         var block = self.invBlocks[invId];
         if (!block) return;
 
-        // Update block label to display Inverter ID + Additive DC Current
+        // Update block badge to display Inverter ID + Additive DC Current
         var invData = st && st.inverters && (st.inverters[invId] || st.inverters[invId.replace("-INV", "-")] || st.inverters[invId.replace("TX1-", "TX1-INV").replace("TX2-", "TX2-INV").replace("TX3-", "TX3-INV")]);
         var dcVal = invData && invData.dc_total_a != null ? invData.dc_total_a : null;
-        if (block.label) {
-          if (dcVal != null) {
-            block.label.innerHTML = '<tspan x="' + block.lcx + '" y="' + (block.lcy - 0.7) + '">' + invId + '</tspan>' +
-                                    '<tspan x="' + block.lcx + '" y="' + (block.lcy + 1.8) + '" class="svm-inv-dc-val">' + dcVal + ' A</tspan>';
+        var hasDc = dcVal != null;
+
+        if (block.title) {
+          block.title.textContent = invId;
+        }
+        if (block.sub) {
+          if (hasDc) {
+            block.sub.textContent = dcVal + " A";
+            block.sub.style.display = "";
           } else {
-            block.label.textContent = invId;
+            block.sub.textContent = "";
+            block.sub.style.display = "none";
           }
+        }
+
+        var bw = 52;
+        var bh = hasDc ? 24 : 16;
+        if (block.bg) {
+          block.bg.setAttribute("x", -bw / 2);
+          block.bg.setAttribute("y", -bh / 2);
+          block.bg.setAttribute("width", bw);
+          block.bg.setAttribute("height", bh);
+        }
+
+        if (block.title) {
+          block.title.setAttribute("y", hasDc ? -2.5 : 1);
+        }
+        if (block.sub) {
+          block.sub.setAttribute("y", 6.5);
         }
 
         // Find all active issue types for this inverter
@@ -696,24 +860,27 @@
         });
 
         if (colors.length === 0) {
-          // Healthy inverter bounded box: Green background with 60% transparency (0.4 fill opacity)
+          // Healthy inverter bounded box: Green background with 35% fill opacity
           block.shape.style.fill = "#10b981";
-          block.shape.style.fillOpacity = "0.4";
+          block.shape.style.fillOpacity = "0.35";
           block.shape.style.stroke = "#10b981";
           block.shape.style.strokeWidth = "1.2px";
+          if (block.bg) block.bg.style.stroke = "rgba(16, 185, 129, 0.4)";
         } else if (colors.length === 1) {
-          // Single issue: Inverter color fill with 60% transparency (0.4 fill opacity)
+          // Single issue: Inverter color fill with 35% fill opacity
           block.shape.style.fill = colors[0];
-          block.shape.style.fillOpacity = "0.4";
+          block.shape.style.fillOpacity = "0.35";
           block.shape.style.stroke = colors[0];
           block.shape.style.strokeWidth = "1.8px";
+          if (block.bg) block.bg.style.stroke = colors[0];
         } else {
-          // Multi-issue inverter: Multi-stripe fill at 60% transparency (0.4 fill opacity)
+          // Multi-issue inverter: Multi-stripe fill at 35% fill opacity
           var patId = self.getMultiStripePatternId(colors);
           block.shape.style.fill = "url(#" + patId + ")";
-          block.shape.style.fillOpacity = "0.4";
+          block.shape.style.fillOpacity = "0.35";
           block.shape.style.stroke = colors[0];
           block.shape.style.strokeWidth = "2.2px";
+          if (block.bg) block.bg.style.stroke = colors[0];
         }
       });
     }
@@ -724,33 +891,52 @@
   };
 
   P.drawCounts = function () {
-    var self = this, st = this.state;
+    var self = this, st = this.state, L = this.layout;
     this.counts.innerHTML = "";
     if (!st) return;
-    [["strings", "Stringhe"], ["mppts", "MPPT"], ["trackers", "Tracker"], ["inverters", "Inverter"]]
+
+    var totalMeta = (L && L.metadata) || {};
+    var totals = {
+      strings: totalMeta.strings || 808,
+      mppts: totalMeta.mppts || 432,
+      trackers: totalMeta.trackers || 370,
+      inverters: totalMeta.inverters || 36
+    };
+
+    [["strings", "Stringhe"], ["trackers", "Tracker"], ["mppts", "MPPT"], ["inverters", "Inverter"]]
       .forEach(function (pair) {
-        var g = (st.counts || {})[pair[0]];
-        if (!g) return;
-        var box = el("div", "svm-count");
-        box.appendChild(el("span", "svm-count-label", pair[1]));
-        var row = el("div", "svm-count-row");
+        var key = pair[0], label = pair[1];
+        var g = (st.counts || {})[key];
+        var card = el("div", "svm-kpi-card");
+        var top = el("div", "svm-kpi-top");
+        top.appendChild(el("span", "svm-kpi-label", label));
+        top.appendChild(el("span", "svm-kpi-total", String(totals[key] || (g ? (g.green + g.yellow + g.red + g.grey) : "-"))));
+        card.appendChild(top);
+
+        var chips = el("div", "svm-kpi-chips");
         SEV.forEach(function (s) {
-          if (!g[s]) return;
-          var chip = el("span", "svm-chip s-" + s, g[s]);
-          chip.title = SEV_LABEL[s];
-          chip.onclick = function () { self.setFilter(self.filter === s ? null : s); };
-          row.appendChild(chip);
+          var val = g ? g[s] : 0;
+          if (val === undefined || val === null) return;
+          var chip = el("span", "svm-kpi-chip" + (self.filter === s ? " active" : ""));
+          chip.title = SEV_LABEL[s] + ": " + val;
+          var dot = el("span", "svm-dot s-" + s);
+          chip.appendChild(dot);
+          chip.appendChild(el("span", null, String(val)));
+          chip.onclick = function () {
+            self.setFilter(self.filter === s ? null : s);
+          };
+          chips.appendChild(chip);
         });
-        box.appendChild(row); self.counts.appendChild(box);
+        card.appendChild(chips);
+        self.counts.appendChild(card);
       });
-    if (!st.has_snapshot) this.counts.appendChild(el("div", "svm-count svm-nodata",
-      "Nessuno snapshot per " + st.date));
-    // the tracker feed is incomplete, so say so rather than let 319 grey
-    // trackers read as a plant fault
+
+    if (!st.has_snapshot) {
+      this.counts.appendChild(el("div", "svm-nodata", "Nessuno snapshot per " + st.date));
+    }
     var tf = st.tracker_feed;
     if (this.scope === "tracker" && tf && tf.reporting < tf.total) {
-      this.counts.appendChild(el("div", "svm-count svm-nodata",
-        "Dati tracker da " + tf.reporting + " di " + tf.total + " unità"));
+      this.counts.appendChild(el("div", "svm-nodata", "Tracker: " + tf.reporting + "/" + tf.total + " unità"));
     }
   };
 
@@ -797,11 +983,58 @@
     });
     return keep;
   };
-  P.setFilter = function (f) { this.filter = f; this.paint(); };
+  P.setFilter = function (f) { this.filter = f; this.selectedInverterFilter = null; if (this.invSelect) this.invSelect.value = ""; this.paint(); };
 
   P.drawLegend = function () {
     var self = this, st = this.state || {};
     this.legend.innerHTML = "";
+    this.legend.classList.toggle("collapsed", !!this.legendCollapsed);
+
+    var TITLES = {
+      status: "Legenda Stato",
+      tx: "Sotto-campo (TX)",
+      area: "Area di Campo",
+      alt: "Elevazione (m s.l.m.)",
+      type: "Tipologia Moduli",
+      nstr: "Stringhe / Tracker",
+      serial: "Copertura Seriali"
+    };
+
+    var head = el("div", "svm-legend-head");
+    head.appendChild(el("span", null, TITLES[this.colour] || "Legenda"));
+
+    var headActions = el("div", null, null);
+    headActions.style.cssText = "display: flex; align-items: center; gap: 0.35rem;";
+    if (this.filter) {
+      var clearBtn = el("button", "svm-legend-clear", "Azzera filtro");
+      clearBtn.title = "Rimuovi filtro attivo (" + (SEV_LABEL[this.filter] || this.filter) + ")";
+      clearBtn.onclick = function (e) {
+        e.stopPropagation();
+        self.setFilter(null);
+      };
+      headActions.appendChild(clearBtn);
+    }
+
+    var toggleBtn = el("button", "svm-legend-toggle", this.legendCollapsed ? "▲" : "▼");
+    toggleBtn.title = this.legendCollapsed ? "Espandi legenda" : "Minimizza legenda";
+    toggleBtn.onclick = function (e) {
+      e.stopPropagation();
+      self.legendCollapsed = !self.legendCollapsed;
+      self.drawLegend();
+    };
+    headActions.appendChild(toggleBtn);
+    head.appendChild(headActions);
+
+    head.onclick = function () {
+      if (self.legendCollapsed) {
+        self.legendCollapsed = false;
+        self.drawLegend();
+      }
+    };
+    this.legend.appendChild(head);
+
+    if (this.legendCollapsed) return;
+
     var mk = function (colour, cls, label, n, on, fn) {
       var b = el("button", "svm-legend-item" + (on ? " on" : ""));
       var sw = el("span", "svm-sw" + (colour ? "" : (cls ? " s-" + cls : "")));
@@ -813,11 +1046,7 @@
       if (fn) b.onclick = fn; else b.disabled = true;
       return b;
     };
-    var TITLES = { status: "Legenda — clicca per filtrare", tx: "Sotto-campo (TX)",
-      area: "Area", alt: "Elevazione telaio (m s.l.m.)", type: "Tipologia struttura",
-      nstr: "Stringhe per tracker", serial: "Copertura seriali" };
-    var head = el("div", "svm-legend-head", TITLES[this.colour] || "Legenda");
-    this.legend.appendChild(head);
+
     var ul = el("div", "svm-legend-list");
 
     if (this.colour === "tx") {
@@ -839,7 +1068,7 @@
       ends.appendChild(el("span", null, r[0].toFixed(1) + " m"));
       ends.appendChild(el("span", null, r[1].toFixed(1) + " m"));
       this.legend.appendChild(ends);
-      ul.appendChild(el("div", "svm-legend-none",
+      ul.appendChild(el("div", "svm-none",
         "Dislivello " + (r[1] - r[0]).toFixed(1) + " m sull'impianto"));
     } else if (this.colour === "type") {
       [25, 50, 75].forEach(function (m2) {
@@ -876,7 +1105,7 @@
           self.setFilter(self.filter === e.key ? null : e.key);
         }));
       });
-      if (!(st.legend || []).length) ul.appendChild(el("div", "svm-legend-none", "Nessuna anomalia attiva"));
+      if (!(st.legend || []).length) ul.appendChild(el("div", "svm-none", "Nessuna anomalia attiva"));
     }
     this.legend.appendChild(ul);
   };
@@ -1024,37 +1253,47 @@
   P.renderDetail = function () {
     var st = this.state || {}, L = this.layout, self = this;
     this.detail.innerHTML = "";
+    if (this.btnCenter) {
+      this.btnCenter.disabled = !this.sel;
+      this.btnCenter.classList.toggle("disabled", !this.sel);
+    }
     if (!this.sel) {
       var m = (L && L.metadata) || {};
-      // the topology never changes, so it is reference material, not something
-      // to lead a monitoring view with. Folded away until asked for.
-      var d0 = document.createElement("details");
-      d0.className = "svm-fold";
-      var s0 = document.createElement("summary");
-      s0.className = "svm-side-head";
-      s0.appendChild(el("span", null, "Impianto"));
-      s0.appendChild(el("span", "svm-side-n", (m.strings || "-") + " stringhe"));
-      d0.appendChild(s0);
-      var g0 = el("div", "svm-kv");
-      [["Tracker", m.trackers], ["Stringhe", m.strings], ["MPPT", m.mppts],
-       ["Inverter", m.inverters], ["Moduli", m.modules], ["Cabine", m.transformers]]
-        .forEach(function (p) {
-          g0.appendChild(el("span", "svm-k", p[0]));
-          g0.appendChild(el("span", "svm-v", p[1] != null ? p[1] : "-"));
-        });
-      d0.appendChild(g0);
-      this.detail.appendChild(d0);
-      this.detail.appendChild(el("div", "svm-hint", this.serialMode
-        ? "Modalità seriali attiva. Clicca una stringa per vederne i 25 seriali, "
-          + "e la matita per registrare una sostituzione."
-        : "Clicca un elemento sulla mappa o un problema qui sotto."));
+      var overCard = el("div", "svm-overview-card");
+      var ovHead = el("div", "svm-overview-head");
+      ovHead.appendChild(el("span", "svm-overview-title", "Panoramica Impianto"));
+      ovHead.appendChild(el("span", "svm-overview-sub", "Mazara del Vallo"));
+      overCard.appendChild(ovHead);
+
+      var grid = el("div", "svm-overview-stats");
+      [
+        ["Stringhe", m.strings || 808],
+        ["Tracker", m.trackers || 370],
+        ["MPPT", m.mppts || 432],
+        ["Inverter", m.inverters || 36],
+        ["Moduli FV", m.modules ? m.modules.toLocaleString() : "20.200"],
+        ["Cabine MT", m.transformers || "3 (TX1-3)"]
+      ].forEach(function (item) {
+        var c = el("div", "svm-overview-cell");
+        c.appendChild(el("span", "svm-overview-label", item[0]));
+        c.appendChild(el("span", "svm-overview-val", item[1]));
+        grid.appendChild(c);
+      });
+      overCard.appendChild(grid);
+
+      var hint = el("div", "svm-hint", this.serialMode
+        ? "Modalità seriali attiva: clicca una stringa per visualizzare i 25 seriali o registrare una sostituzione."
+        : "Seleziona un tracker, una stringa o un inverter sulla mappa per visualizzare i parametri e la telemetria in tempo reale.");
+      overCard.appendChild(hint);
+      this.detail.appendChild(overCard);
       if (this.serialMode) this.renderSerialIssues();
       return;
     }
     var sel = this.sel;
     var head = el("div", "svm-side-head");
-    head.appendChild(el("span", null, sel.id));
-    var up = el("button", "svm-btn svm-up", "Impianto");
+    head.appendChild(el("span", "svm-side-title", sel.id));
+    var up = el("button", "svm-btn svm-up", "Panoramica");
+    up.title = "Torna alla panoramica generale";
     up.onclick = function () { self.select(null); self.fitAll(); };
     head.appendChild(up);
     this.detail.appendChild(head);
@@ -1179,7 +1418,7 @@
       var issueMsg = note || (activeProblem ? activeProblem.msg : "Prestazione ridotta rispetto all'atteso.");
 
       var headBox = el("div", "svm-issue-head");
-      headBox.textContent = "⚠️ " + issueTitle;
+      headBox.textContent = issueTitle;
       banner.appendChild(headBox);
 
       var msgBox = el("div", null, issueMsg);
@@ -1222,7 +1461,7 @@
     // SECTION 2: Structural & Topological Parameters Card
     var structCard = el("div", "svm-struct-card");
     var structTitle = el("div", "svm-struct-title");
-    structTitle.textContent = "📐 Parametri Strutturali";
+    structTitle.textContent = "Parametri Strutturali";
     structCard.appendChild(structTitle);
 
     var kv = el("div", "svm-kv");
@@ -1821,6 +2060,9 @@
     var s = 1 / (this.fit * this.k);
     (this.txLabels || []).forEach(function (l) {
       l.setAttribute("transform", "translate(" + l.dataset.x + " " + l.dataset.y + ") scale(" + s + ")");
+    });
+    (this.invBadges || []).forEach(function (b) {
+      b.setAttribute("transform", "translate(" + b.dataset.x + " " + b.dataset.y + ") scale(" + s + ")");
     });
     var pxPerM = this.fit * this.k;
     (this.txShapes || []).forEach(function (o) {

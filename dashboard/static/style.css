@@ -3643,7 +3643,7 @@ section>h2 {
 header { height: var(--header-h); z-index: var(--z-header); }
 .tab-nav { top: var(--header-h); z-index: var(--z-tabnav); overscroll-behavior: contain; touch-action: manipulation; }
 #settings-modal { z-index: var(--z-modal); }
-.tab-btn, .btn-rescan, .svm-btn, .svm-segbtn, .svm-legend-item, .svm-res, .filter-btn { min-height: 44px; min-width: 44px; cursor: pointer; }
+.tab-btn, .btn-rescan, .svm-btn, .svm-segbtn, .svm-res, .filter-btn { min-height: 44px; min-width: 44px; cursor: pointer; }
 .tab-nav { gap: 8px; }
 .alert-item, .footer-card, .metric-card { cursor: default; }
 .alert-item.clickable, .metric-card.clickable { cursor: pointer; }
