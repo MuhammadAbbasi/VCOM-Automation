@@ -1014,6 +1014,11 @@ function initTabs() {
         fetchLinkStatus();
         if (lastTrackerData) updateTrackerSyncAndHeartbeat(lastTrackerData);
       }
+
+      // Map tab: re-fit SVG now it has size (eager init runs while hidden)
+      if (targetId === "tab-plant-map" && window.__plantMapSurveyed) {
+        try { window.__plantMapSurveyed.measure(); window.__plantMapSurveyed.fitAll(); } catch (e) {}
+      }
     });
   });
 }
@@ -1963,7 +1968,21 @@ document.addEventListener("DOMContentLoaded", () => {
         body: JSON.stringify({ question })
       });
       
-      const result = await resp.json();
+      let result;
+      const contentType = (resp.headers.get("content-type") || "").toLowerCase();
+      if (contentType.includes("application/json")) {
+        result = await resp.json();
+      } else {
+        const rawText = await resp.text();
+        if (resp.status === 524 || resp.status === 504) {
+          result = { status: "error", message: "Timeout di rete/Cloudflare: l'elaborazione dell'AI ha impiegato troppo tempo (>100s). Riprova con una domanda più specifica." };
+        } else if (resp.status === 401) {
+          result = { status: "error", message: "Sessione non autenticata o scaduta. Effettua nuovamente il login." };
+        } else {
+          result = { status: "error", message: `Risposta imprevista dal server (HTTP ${resp.status}): ${rawText.slice(0, 120)}` };
+        }
+      }
+
       if (thinkingDiv) thinkingDiv.remove();
 
       if (result.status === "success") {
@@ -1973,7 +1992,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     } catch (err) {
       if (thinkingDiv) thinkingDiv.remove();
-      appendChatMessage("Error communicating with AI: " + err, "bot");
+      appendChatMessage("Error communicating with AI: " + (err.message || err), "bot");
     } finally {
       if (chatSendBtn) {
         chatSendBtn.disabled = false;

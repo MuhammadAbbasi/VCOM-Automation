@@ -1229,6 +1229,13 @@ Available Tools:
 - search_logs(query="ERROR") -> Search system logs for troubleshooting.
 - list_data_files() -> List raw CSV/JSON files in the extraction folder.
 
+Dashboard & Plant Features:
+- "Mappa Impianto" (Plant Map): Visual surveyed GIS layout of the Mazara solar plant with 370 trackers, 36 inverters, 3 substations (TX1, TX2, TX3), internal roads, and water pond.
+  * Views: Stringhe view (808 strings) and Tracker view (370 tables).
+  * Color modes: Stato (severity health: Critico/Attenzione/Regolare/Dati assenti), TX, Area, Elevazione, Tipologia, Stringhe, Seriali.
+  * Serial lookup: Clicking any string displays its 25 panel serial numbers.
+  * Live status: Colors update dynamically from Watchdog anomalies, inverter health, and tracker alarms.
+
 Use this format:
 Thought: I need to check the entire database for any inverter that had low insulation today.
 Action: query_db(sql="SELECT * FROM resistenza_isolamento WHERE value < 1000 AND _date = '2026-04-28'")
@@ -1239,7 +1246,8 @@ Final Answer: The units with low insulation are TX1-04 and TX2-09.
 RULES:
 1. You have total visibility. Don't say "I don't have access". Use the available tools or query_db.
 2. Only call one tool at a time.
-3. If you have the answer, output "Final Answer: [your response]".
+3. If the question asks for explanations, general info, or dashboard architecture (e.g. how Mappa Impianto works), provide a direct explanation with "Final Answer: [your response]" without calling database tools.
+4. If you have the answer, output "Final Answer: [your response]".
 """
 
 def call_ollama(prompt: str) -> str:
@@ -1248,12 +1256,13 @@ def call_ollama(prompt: str) -> str:
         "prompt": prompt,
         "stream": False,
         "options": {
-            "temperature": 0,
+            "num_ctx": 8192,
+            "temperature": 0.1,
             "stop": ["Observation:", "User:"]
         }
     }
     try:
-        resp = requests.post(OLLAMA_API_URL, json=payload, timeout=60)
+        resp = requests.post(OLLAMA_API_URL, json=payload, timeout=90)
         return resp.json().get("response", "").strip()
     except Exception as e:
         return f"Error calling Ollama: {e}"
@@ -1287,14 +1296,16 @@ def ask_agent(question: str, plant_data: dict = None, attempt: int = 1, last_cod
         logger.info(f"Step {i+1}...")
         response = call_ollama(conversation)
 
+        # Handle communication error or timeout from Ollama immediately
+        if not response or response.startswith("Error calling Ollama:"):
+            logger.error(f"Ollama error: {response}")
+            return f"⚠️ {response or 'AI failed to generate a response.'}"
+
         # Prevent AI from hallucinating the observation
         if "Observation:" in response:
             response = response.split("Observation:")[0].strip()
 
         logger.info(f"AI Response: {response}")
-
-        if not response:
-            return "⚠️ AI failed to generate a response."
 
         conversation += response + "\n"
 
@@ -1340,13 +1351,21 @@ def ask_agent(question: str, plant_data: dict = None, attempt: int = 1, last_cod
             conversation += f"Observation: {obs}\n"
             continue # Move to next step with the observation
 
-        # Check for Final Answer only if no action was triggered
+        # If no Action was triggered:
+        # 1. Check for explicit Final Answer tag
         if "Final Answer:" in response:
             ans = response.split("Final Answer:")[1].strip()
             _save_history(user_id, question, ans)
             return ans
 
-        # If no action and no final answer, something is wrong
+        # 2. If no Action was called and no Final Answer tag, the model answered directly.
+        # Clean any leading 'Thought:' and return immediately without wasting extra turns.
+        ans = re.sub(r"^Thought:\s*", "", response).strip()
+        if ans:
+            _save_history(user_id, question, ans)
+            return ans
+
+        # Fallback if somehow completely blank
         if i == max_steps - 1:
             return response
         conversation += "Thought: I must either call a tool using the 'Action: tool_name(key=\"val\")' format, or output a 'Final Answer: ...'.\n"

@@ -1953,68 +1953,6 @@ def _evaluate_alarms(date_str, settings, macro_health, inverter_health, plant_dr
     return current_active, historical_trail, timestamp
 
 
-def _sync_odoo_tickets(current_active, settings, date_str):
-    """Create Odoo helpdesk tickets for active alarms open longer than min_duration_minutes.
-    Mutates alarms in current_active in place (stamps odoo_ticket_id).
-    """
-    # --- Odoo Integration ---
-    odoo_cfg = settings.get("odoo", {})
-    if not odoo_cfg.get("enabled"):
-        return
-
-    try:
-        from db.odoo_client import OdooClient
-        client = OdooClient(odoo_cfg["url"], odoo_cfg["db"], odoo_cfg["user"], odoo_cfg["password"])
-        min_dur = odoo_cfg.get("min_duration_minutes", 60)
-
-        for alarm in current_active:
-            if alarm.get("odoo_ticket_id"):
-                continue
-
-            trip_time_str = alarm.get("trip_time", "")
-            if not trip_time_str: continue
-
-            try:
-                if "T" in trip_time_str:
-                    trip_dt = datetime.fromisoformat(trip_time_str)
-                else:
-                    trip_dt = datetime.strptime(f"{date_str} {trip_time_str}", "%Y-%m-%d %H:%M")
-
-                duration = (datetime.now() - trip_dt).total_seconds() / 60
-                if duration >= min_dur:
-                    inv = alarm.get("inverter", "DEFAULT")
-                    assignee_id = odoo_cfg.get("assignments", {}).get("DEFAULT", 1)
-                    for key, uid in odoo_cfg.get("assignments", {}).items():
-                        if key in inv:
-                            assignee_id = uid
-                            break
-
-                    ticket_vals = {
-                        "name": f"[{alarm['type']}] {alarm['inverter']} - {alarm['message'][:50]}",
-                        "description": (f"SCADA ALERT\n-----------\n"
-                                       f"Inverter: {alarm['inverter']}\n"
-                                       f"Type: {alarm['type']}\n"
-                                       f"Severity: {alarm['severity']}\n"
-                                       f"Message: {alarm['message']}\n"
-                                       f"Duration: {int(duration)} minutes"),
-                        "user_id": assignee_id,
-                        "team_id": 1 # Optional: Helpdesk team
-                    }
-
-                    # Add priority mapping
-                    if "priority" in [c[0] for c in client.models.execute_kw(odoo_cfg["db"], 1, odoo_cfg["password"], odoo_cfg["ticket_model"], 'fields_get', [], {'attributes': ['name']})]:
-                        ticket_vals["priority"] = "3" if alarm['severity'] == "red" else "1"
-
-                    ticket_id = client.create_ticket(odoo_cfg["ticket_model"], ticket_vals)
-                    if ticket_id:
-                        alarm["odoo_ticket_id"] = ticket_id
-                        logger.info(f"Created Odoo ticket #{ticket_id} for {alarm['id']}")
-            except Exception as ex:
-                logger.debug(f"Duration check failed for {alarm['id']}: {ex}")
-    except Exception as e:
-        logger.error(f"Odoo integration error: {e}")
-
-
 def _persist_snapshot(date_str, timestamp, macro_health, inverter_health, current_active, historical_trail, downtime_tracker, sensor_data):
     """Assemble the analysis snapshot, cache it, and persist it (DB queue, JSON fallback)."""
     # Load extraction status for dashboard ingestion cards
@@ -2098,8 +2036,6 @@ def analyze_site(date_str: str) -> None:
             date_str, settings, macro_health, inverter_health, plant_drop_history,
             dc_faults, current_grid_limit, daylight_start, actual_sunset, poa_val, ac_df
         )
-
-        _sync_odoo_tickets(current_active, settings, date_str)
 
         _persist_snapshot(date_str, timestamp, macro_health, inverter_health, current_active, historical_trail, downtime_tracker, sensor_data)
 

@@ -3629,4 +3629,35 @@ section>h2 {
   animation: spin 0.8s linear infinite;
 }
 
+/* ─── Dark-only polish: elegant mobile + map (VCOM SCADA) ─── */
+:root {
+  --header-h: 85px;
+  --z-header: 1000;
+  --z-tabnav: 999;
+  --z-modal: 1000;
+  --z-tip: 1100;
+  --map-bg: #0a0c11;
+  --overlay: rgba(10, 12, 17, 0.92);
+  color-scheme: dark;
+}
+header { height: var(--header-h); z-index: var(--z-header); }
+.tab-nav { top: var(--header-h); z-index: var(--z-tabnav); overscroll-behavior: contain; touch-action: manipulation; }
+#settings-modal { z-index: var(--z-modal); }
+.tab-btn, .btn-rescan, .svm-btn, .svm-segbtn, .svm-legend-item, .svm-res, .filter-btn { min-height: 44px; min-width: 44px; cursor: pointer; }
+.tab-nav { gap: 8px; }
+.alert-item, .footer-card, .metric-card { cursor: default; }
+.alert-item.clickable, .metric-card.clickable { cursor: pointer; }
+.footer-grid { grid-template-columns: repeat(auto-fit, minmax(min(400px, 100%), 1fr)); }
+@media (max-width: 640px) {
+  header { height: auto; min-height: 64px; padding: 0.6rem 1rem; flex-wrap: wrap; gap: 0.6rem; }
+  .tab-nav { top: 0; padding: 0 1rem; }
+  main { padding: 0 1rem; }
+  .footer-grid { grid-template-columns: 1fr; padding: 0 1rem; }
+  .analytics-layout { grid-template-columns: 1fr; }
+  .svm-svg { height: 26rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
 

@@ -306,3 +306,23 @@
 .svm-struct-title { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--muted); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem; }
 
+/* ─── Map polish: dark-only + mobile bottom-sheet ─── */
+.svm-mapwrap { background: var(--map-bg, #0a0c11); }
+.svm-legend, .svm-results, .svm-tip, .svm-north, .svm-scale { background: var(--overlay, rgba(10,12,17,0.92)); }
+.svm-tip { z-index: var(--z-tip, 1100); }
+.svm-str { stroke: var(--map-bg, #0a0c11); }
+.svm-div, .svm-panel, .svm-flag { stroke: var(--map-bg, #0a0c11); }
+.svm-chip, .svm-btn, .svm-segbtn, .svm-legend-item { min-height: 44px; }
+.svm-search { min-width: 0; width: 100%; max-width: 17rem; }
+html[data-theme="light"] .svm-road { stroke: rgba(15,23,42,0.15); }
+html[data-theme="light"] .svm-tx { fill: rgba(15,23,42,0.12); }
+html[data-theme="light"] .svm-issue-banner.s-yellow { color: #854D0E; }
+@media (max-width: 1100px) {
+  .svm-grid { grid-template-columns: 1fr; }
+  .svm-side { order: 2; }
+  .svm-mapwrap { order: 1; min-height: 22rem; }
+  .svm-svg { height: 26rem; }
+  .svm-legend { max-width: 11rem; font-size: 0.72rem; }
+  .svm-results { width: min(17rem, calc(100vw - 3rem)); }
+}
+

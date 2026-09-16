@@ -33,6 +33,10 @@ db/vcom_status.json
 db/backups/
 backup_plantmap_*/
 graphify-out/
+temp_llm_codes/
+scratch/
+tracker_testing/sync_VPN_GATEWAY_*.json
+!tracker_testing/sync_VPN_GATEWAY_sample.json
 *.xlsx
 *.xls
 *.csv

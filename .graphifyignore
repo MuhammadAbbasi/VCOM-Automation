@@ -21,3 +21,9 @@ tracker_testing/sync_*.json
 VCOM_Screenshots/
 playwright_profile/
 playwright_profile_backfill/
+*.min.js
+dashboard/static/*.min.js
+dashboard/static/vendor/
+scratch/
+audit/
+
