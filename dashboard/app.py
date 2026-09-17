@@ -200,8 +200,8 @@ def fetch_broadcaster_data(today, link_status_path):
     latest_data = None
     trackers = None
     try:
-        from db.db_manager import load_latest_snapshot, get_daily_sensor_history, get_all_tracker_status
-        latest_data = load_latest_snapshot(today)
+        from db.db_manager import load_latest_valid_snapshot, get_daily_sensor_history, get_all_tracker_status
+        latest_data = load_latest_valid_snapshot(today)
         if latest_data:
             latest_data["sensor_history"] = get_daily_sensor_history(today)
             latest_data["link_status"] = link_info
@@ -228,10 +228,10 @@ async def data_broadcaster():
 
             is_extracting = busy_path.exists()
 
-            # Detect extraction cycle completion and trigger a page reload
+            # Detect extraction cycle completion and trigger in-place data refresh (no page reload)
             if prev_is_extracting and not is_extracting:
-                print("[DASHBOARD] Extraction cycle completed — broadcasting page reload.")
-                await manager.broadcast({"type": "page_reload"})
+                print("[DASHBOARD] Extraction cycle completed — broadcasting in-place data refresh.")
+                await manager.broadcast({"type": "data_refresh"})
 
             prev_is_extracting = is_extracting
 
@@ -407,8 +407,8 @@ def fetch_ws_initial_data(today, link_status_path):
     trackers = None
     link_info = {"status": "offline"}
     try:
-        from db.db_manager import load_latest_snapshot, get_daily_sensor_history, get_all_tracker_status
-        latest_data = load_latest_snapshot(today)
+        from db.db_manager import load_latest_valid_snapshot, get_daily_sensor_history, get_all_tracker_status
+        latest_data = load_latest_valid_snapshot(today)
         if link_status_path.exists():
             with open(link_status_path, "r") as f:
                 link_info = json.load(f)

@@ -509,23 +509,22 @@ def save_metric(df: pd.DataFrame, metric_name: str, date_str: str = None) -> Non
 
 
 def _save_wide_metric(df: pd.DataFrame, table_name: str, date_str: str) -> None:
-    """Save a wide-format metric DataFrame to its table."""
+    """Save a wide-format metric DataFrame to its table using atomic transactions."""
     conn = get_data_conn()
 
     # Add a _date column for partitioning by day
     df_out = df.copy()
     df_out.insert(0, "_date", date_str)
 
-    # Delete existing data for this date (overwrite semantics like the CSV system)
     table_exists = False
     try:
-        _retry_data_operation(conn.execute, f'DELETE FROM "{table_name}" WHERE _date = ?', (date_str,))
+        conn.execute(f'SELECT 1 FROM "{table_name}" LIMIT 1')
         table_exists = True
     except sqlite3.OperationalError:
-        pass  # Table doesn't exist yet — to_sql will create it
+        table_exists = False
 
     # Auto-migrate schema: if the source added new columns (e.g. VCOM renamed a field),
-    # add them so to_sql(if_exists="append") doesn't fail with "no such column".
+    # add them before beginning the atomic replacement transaction.
     if table_exists:
         try:
             existing_cols = {r[1] for r in conn.execute(f'PRAGMA table_info("{table_name}")').fetchall()}
@@ -538,12 +537,17 @@ def _save_wide_metric(df: pd.DataFrame, table_name: str, date_str: str) -> None:
         except Exception as e:
             logger.warning(f"[DB] Schema migration check failed for {table_name}: {e}")
 
-    # Write to DB in chunks to avoid long-held write locks
-    CHUNK = 200
-    for start in range(0, len(df_out), CHUNK):
-        chunk_df = df_out.iloc[start:start + CHUNK]
-        _retry_data_operation(chunk_df.to_sql, table_name, conn, if_exists="append", index=False)
-    _retry_data_operation(conn.commit)
+    # Atomic Replacement:
+    # In SQLite WAL mode, executing DELETE and chunk inserts within an atomic transaction (with conn:)
+    # guarantees that concurrent readers never see an empty or partially populated table.
+    with conn:
+        if table_exists:
+            conn.execute(f'DELETE FROM "{table_name}" WHERE _date = ?', (date_str,))
+
+        CHUNK = 500
+        for start in range(0, len(df_out), CHUNK):
+            chunk_df = df_out.iloc[start:start + CHUNK]
+            chunk_df.to_sql(table_name, conn, if_exists="append", index=False)
 
     # Keep WAL size bounded after high-volume writes
     try:
@@ -553,7 +557,7 @@ def _save_wide_metric(df: pd.DataFrame, table_name: str, date_str: str) -> None:
 
 
 def _save_corrente_dc(df: pd.DataFrame, date_str: str) -> None:
-    """Normalize the wide Corrente DC DataFrame and save to the normalized table."""
+    """Normalize the wide Corrente DC DataFrame and save to the normalized table atomically."""
     conn = get_data_conn()
 
     # Identify the Ora and Timestamp Fetch columns
@@ -591,15 +595,14 @@ def _save_corrente_dc(df: pd.DataFrame, date_str: str) -> None:
         "value": melted["value"],
     })
 
-    # Delete existing data for this date
-    _retry_data_operation(conn.execute, "DELETE FROM corrente_dc WHERE date = ?", (date_str,))
-
-    # Bulk insert in chunks to avoid long-held write locks
-    CHUNK = 2000
-    for start in range(0, len(result), CHUNK):
-        chunk_df = result.iloc[start:start + CHUNK]
-        _retry_data_operation(chunk_df.to_sql, "corrente_dc", conn, if_exists="append", index=False)
-    _retry_data_operation(conn.commit)
+    # Atomic replacement: in WAL mode, with conn keeps previous data visible to readers
+    # until all chunks are written and committed.
+    with conn:
+        conn.execute("DELETE FROM corrente_dc WHERE date = ?", (date_str,))
+        CHUNK = 2000
+        for start in range(0, len(result), CHUNK):
+            chunk_df = result.iloc[start:start + CHUNK]
+            chunk_df.to_sql("corrente_dc", conn, if_exists="append", index=False)
 
     try:
         conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
@@ -868,6 +871,41 @@ def load_latest_snapshot(date_str: str) -> dict | None:
         logger.warning(f"[DB] unexpected error in load_latest_snapshot: {exc}")
 
     return _load_snapshot_from_json(date_str)
+
+
+def load_latest_valid_snapshot(date_str: str = None) -> dict | None:
+    """Load the most recent VALID analysis snapshot.
+
+    Checks date_str first (or today if None). If the snapshot is missing or contains
+    an empty/degraded inverter_health dictionary, automatically falls back to the most
+    recent valid snapshot in the database across all dates.
+    """
+    target = date_str or datetime.now().strftime("%Y-%m-%d")
+    snap = load_latest_snapshot(target)
+
+    def _is_valid(s: dict | None) -> bool:
+        if not s or not isinstance(s, dict):
+            return False
+        invs = s.get("inverter_health")
+        if not invs or not isinstance(invs, dict) or len(invs) == 0:
+            return False
+        return any(
+            isinstance(v, dict) and v.get("overall_status") in ("green", "yellow", "red")
+            for v in invs.values()
+        )
+
+    if _is_valid(snap):
+        return snap
+
+    # Fallback to the latest available snapshot date in DB
+    latest_date = get_latest_snapshot_date()
+    if latest_date and latest_date != target:
+        fallback_snap = load_latest_snapshot(latest_date)
+        if _is_valid(fallback_snap):
+            logger.info(f"[DB] Fallback: loaded valid snapshot from {latest_date} instead of {target}")
+            return fallback_snap
+
+    return snap
 
 
 def get_latest_snapshot_date() -> str | None:

@@ -1,38 +1,6 @@
 {
     "Irraggiamento": [
         {
-            "timestamp": "2026-09-16T19:26:18",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GHMSR&type=meteo"
-        },
-        {
-            "timestamp": "2026-09-16T19:45:27",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GHMSR&type=meteo"
-        },
-        {
-            "timestamp": "2026-09-16T20:04:48",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GHMSR&type=meteo"
-        },
-        {
-            "timestamp": "2026-09-16T20:23:51",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GHMSR&type=meteo"
-        },
-        {
-            "timestamp": "2026-09-16T20:43:07",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GHMSR&type=meteo"
-        },
-        {
-            "timestamp": "2026-09-16T21:02:21",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GHMSR&type=meteo"
-        },
-        {
-            "timestamp": "2026-09-16T21:21:43",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GHMSR&type=meteo"
-        },
-        {
-            "timestamp": "2026-09-16T21:41:24",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GHMSR&type=meteo"
-        },
-        {
             "timestamp": "2026-09-16T22:00:55",
             "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GHMSR&type=meteo"
         },
@@ -199,41 +167,41 @@
         {
             "timestamp": "2026-09-17T10:10:01",
             "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GHMSR&type=meteo"
+        },
+        {
+            "timestamp": "2026-09-17T10:28:33",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GHMSR&type=meteo"
+        },
+        {
+            "timestamp": "2026-09-17T10:46:24",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GHMSR&type=meteo"
+        },
+        {
+            "timestamp": "2026-09-17T11:04:30",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GHMSR&type=meteo"
+        },
+        {
+            "timestamp": "2026-09-17T11:22:30",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GHMSR&type=meteo"
+        },
+        {
+            "timestamp": "2026-09-17T11:40:37",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GHMSR&type=meteo"
+        },
+        {
+            "timestamp": "2026-09-17T11:58:55",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GHMSR&type=meteo"
+        },
+        {
+            "timestamp": "2026-09-17T12:18:27",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GHMSR&type=meteo"
+        },
+        {
+            "timestamp": "2026-09-17T12:36:44",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GHMSR&type=meteo"
         }
     ],
     "Potenza attiva": [
-        {
-            "timestamp": "2026-09-16T19:26:26",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=PPCAI&type=ppc"
-        },
-        {
-            "timestamp": "2026-09-16T19:45:35",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=PPCAI&type=ppc"
-        },
-        {
-            "timestamp": "2026-09-16T20:04:56",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=PPCAI&type=ppc"
-        },
-        {
-            "timestamp": "2026-09-16T20:23:59",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=PPCAI&type=ppc"
-        },
-        {
-            "timestamp": "2026-09-16T20:43:15",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=PPCAI&type=ppc"
-        },
-        {
-            "timestamp": "2026-09-16T21:02:30",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=PPCAI&type=ppc"
-        },
-        {
-            "timestamp": "2026-09-16T21:21:51",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=PPCAI&type=ppc"
-        },
-        {
-            "timestamp": "2026-09-16T21:41:32",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=PPCAI&type=ppc"
-        },
         {
             "timestamp": "2026-09-16T22:01:04",
             "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=PPCAI&type=ppc"
@@ -401,41 +369,41 @@
         {
             "timestamp": "2026-09-17T10:10:09",
             "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=PPCAI&type=ppc"
+        },
+        {
+            "timestamp": "2026-09-17T10:28:41",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=PPCAI&type=ppc"
+        },
+        {
+            "timestamp": "2026-09-17T10:46:32",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=PPCAI&type=ppc"
+        },
+        {
+            "timestamp": "2026-09-17T11:04:38",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=PPCAI&type=ppc"
+        },
+        {
+            "timestamp": "2026-09-17T11:22:37",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=PPCAI&type=ppc"
+        },
+        {
+            "timestamp": "2026-09-17T11:40:45",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=PPCAI&type=ppc"
+        },
+        {
+            "timestamp": "2026-09-17T11:59:03",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=PPCAI&type=ppc"
+        },
+        {
+            "timestamp": "2026-09-17T12:18:35",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=PPCAI&type=ppc"
+        },
+        {
+            "timestamp": "2026-09-17T12:36:52",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=PPCAI&type=ppc"
         }
     ],
     "Corrente DC": [
-        {
-            "timestamp": "2026-09-16T19:25:44",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=WSISS&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T19:44:55",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=WSISS&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T20:04:15",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=WSISS&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T20:23:19",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=WSISS&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T20:42:31",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=WSISS&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T21:01:50",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=WSISS&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T21:21:12",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=WSISS&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T21:40:47",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=WSISS&type=wr"
-        },
         {
             "timestamp": "2026-09-16T22:00:20",
             "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=WSISS&type=wr"
@@ -603,41 +571,41 @@
         {
             "timestamp": "2026-09-17T10:09:30",
             "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=WSISS&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T10:27:55",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=WSISS&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T10:45:52",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=WSISS&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T11:03:55",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=WSISS&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T11:21:55",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=WSISS&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T11:39:58",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=WSISS&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T11:58:22",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=WSISS&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T12:17:52",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=WSISS&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T12:36:09",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=WSISS&type=wr"
         }
     ],
     "Resistenza di isolamento": [
-        {
-            "timestamp": "2026-09-16T19:25:59",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=TWPGS&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T19:45:11",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=TWPGS&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T20:04:30",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=TWPGS&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T20:23:33",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=TWPGS&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T20:42:48",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=TWPGS&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T21:02:05",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=TWPGS&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T21:21:26",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=TWPGS&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T21:41:04",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=TWPGS&type=wr"
-        },
         {
             "timestamp": "2026-09-16T22:00:37",
             "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=TWPGS&type=wr"
@@ -805,41 +773,41 @@
         {
             "timestamp": "2026-09-17T10:09:42",
             "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=TWPGS&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T10:28:12",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=TWPGS&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T10:46:06",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=TWPGS&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T11:04:10",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=TWPGS&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T11:22:11",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=TWPGS&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T11:40:15",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=TWPGS&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T11:58:36",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=TWPGS&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T12:18:08",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=TWPGS&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T12:36:25",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=TWPGS&type=wr"
         }
     ],
     "Temperatura": [
-        {
-            "timestamp": "2026-09-16T19:26:11",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GRRT2&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T19:45:20",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GRRT2&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T20:04:40",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GRRT2&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T20:23:44",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GRRT2&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T20:43:00",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GRRT2&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T21:02:14",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GRRT2&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T21:21:36",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GRRT2&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T21:41:16",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GRRT2&type=wr"
-        },
         {
             "timestamp": "2026-09-16T22:00:48",
             "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GRRT2&type=wr"
@@ -1007,37 +975,41 @@
         {
             "timestamp": "2026-09-17T10:09:53",
             "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GRRT2&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T10:28:24",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GRRT2&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T10:46:15",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GRRT2&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T11:04:22",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GRRT2&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T11:22:21",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GRRT2&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T11:40:27",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GRRT2&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T11:58:47",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GRRT2&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T12:18:19",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GRRT2&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T12:36:36",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=GRRT2&type=wr"
         }
     ],
     "PR inverter": [
-        {
-            "timestamp": "2026-09-16T19:41:49",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=C6DI3&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T20:00:58",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=C6DI3&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T20:20:18",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=C6DI3&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T20:39:35",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=C6DI3&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T20:58:37",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=C6DI3&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T21:17:53",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=C6DI3&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T21:37:14",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=C6DI3&type=wr"
-        },
         {
             "timestamp": "2026-09-16T21:57:08",
             "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=C6DI3&type=wr"
@@ -1209,37 +1181,37 @@
         {
             "timestamp": "2026-09-17T10:25:33",
             "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=C6DI3&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T10:44:04",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=C6DI3&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T11:02:08",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=C6DI3&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T11:20:00",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=C6DI3&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T11:38:00",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=C6DI3&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T11:56:11",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=C6DI3&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T12:14:40",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=C6DI3&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T12:33:58",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=C6DI3&type=wr"
         }
     ],
     "Potenza AC": [
-        {
-            "timestamp": "2026-09-16T19:42:00",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=5EJH8&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T20:01:10",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=5EJH8&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T20:20:29",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=5EJH8&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T20:39:46",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=5EJH8&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T20:58:50",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=5EJH8&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T21:18:05",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=5EJH8&type=wr"
-        },
-        {
-            "timestamp": "2026-09-16T21:37:26",
-            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=5EJH8&type=wr"
-        },
         {
             "timestamp": "2026-09-16T21:57:20",
             "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=5EJH8&type=wr"
@@ -1410,6 +1382,34 @@
         },
         {
             "timestamp": "2026-09-17T10:25:46",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=5EJH8&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T10:44:17",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=5EJH8&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T11:02:20",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=5EJH8&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T11:20:12",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=5EJH8&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T11:38:13",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=5EJH8&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T11:56:23",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=5EJH8&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T12:14:52",
+            "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=5EJH8&type=wr"
+        },
+        {
+            "timestamp": "2026-09-17T12:34:11",
             "url": "https://vcom.meteocontrol.com/vcom/evaluation/index/index/systemId/2144635?key=5EJH8&type=wr"
         }
     ]

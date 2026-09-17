@@ -50,6 +50,7 @@ DARK_EXPECTED_A = 1.0
 # 2-string median by 18.0 A), so currents are normalised to that basis
 THRESHOLD_BASIS_STRINGS = 2
 _LAYOUT_CACHE = None
+_LAST_VALID_SURVEYED_STATE = None
 
 
 def load_surveyed_layout() -> dict:
@@ -154,20 +155,39 @@ def _anomaly_targets(anom: dict, layout: dict) -> dict:
 
 def get_surveyed_state(target_date: str = None) -> dict:
     """Per-element severity for the map, plus the problem list behind it."""
+    global _LAST_VALID_SURVEYED_STATE
     layout = load_surveyed_layout()
     if not layout:
         return {"error": "layout unavailable"}
     day = target_date or _date.today().isoformat()
     th = _thresholds()
 
+    busy_path = ROOT / ".extraction_busy"
+    is_extracting = busy_path.exists()
+
     snapshot = {}
     try:
-        from db.db_manager import load_latest_snapshot
+        from db.db_manager import load_latest_snapshot, load_latest_valid_snapshot
         snapshot = load_latest_snapshot(day) or {}
+        # If today's snapshot is missing or lacks inverter data, fall back to last valid snapshot
+        if not snapshot or not snapshot.get("inverter_health"):
+            snapshot = load_latest_valid_snapshot(day) or {}
     except Exception as e:
-        logger.warning(f"[SURVEYED-MAP] no snapshot for {day}: {e}")
+        logger.warning(f"[SURVEYED-MAP] snapshot load error for {day}: {e}")
 
     inv_health = snapshot.get("inverter_health", {}) or {}
+    has_valid_inverters = any(
+        isinstance(h, dict) and h.get("overall_status") in ("green", "yellow", "red")
+        for h in inv_health.values()
+    )
+
+    # If extraction is active or snapshot is degraded/empty, fall back to last known good state
+    if (not has_valid_inverters or is_extracting) and _LAST_VALID_SURVEYED_STATE is not None:
+        cached = json.loads(json.dumps(_LAST_VALID_SURVEYED_STATE))
+        cached["is_extracting"] = is_extracting
+        cached["using_cached_data"] = True
+        return cached
+
     anomalies = snapshot.get("active_anomalies", []) or []
     hour = _hour(snapshot)
 
@@ -431,18 +451,28 @@ def get_surveyed_state(target_date: str = None) -> dict:
             c[v.get("status", "grey")] = c.get(v.get("status", "grey"), 0) + 1
         counts[name] = c
 
-    return {"date": day,
-            "generated": snapshot.get("timestamp") or snapshot.get("data_time"),
-            "has_snapshot": bool(snapshot),
-            "thresholds": th,
-            "inverters": inverters, "mppts": mppts,
-            "trackers": trackers, "strings": strings,
-            "hour": hour,
-            "tracker_feed": {"reporting": reporting,
-                             "total": len(layout.get("trackers", []))},
-            "problems": sorted(problems, key=lambda p: -RANK.get(p["severity"], 0)),
-            "legend": sorted(legend.values(), key=lambda e: -RANK.get(e["severity"], 0)),
-            "counts": counts}
+    res = {
+        "date": day,
+        "generated": snapshot.get("timestamp") or snapshot.get("data_time"),
+        "has_snapshot": bool(snapshot),
+        "is_extracting": is_extracting,
+        "using_cached_data": False,
+        "thresholds": th,
+        "inverters": inverters, "mppts": mppts,
+        "trackers": trackers, "strings": strings,
+        "hour": hour,
+        "tracker_feed": {"reporting": reporting,
+                         "total": len(layout.get("trackers", []))},
+        "problems": sorted(problems, key=lambda p: -RANK.get(p["severity"], 0)),
+        "legend": sorted(legend.values(), key=lambda e: -RANK.get(e["severity"], 0)),
+        "counts": counts
+    }
+
+    # Cache this state as the last known good state if it has valid inverter data
+    if counts["inverters"]["green"] + counts["inverters"]["yellow"] + counts["inverters"]["red"] > 0:
+        _LAST_VALID_SURVEYED_STATE = res
+
+    return res
 
 
 _SERIALS_CACHE = None

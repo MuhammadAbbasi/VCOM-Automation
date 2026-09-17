@@ -1323,8 +1323,18 @@ function connectWebSocket() {
         if (msg.vcom_status) {
           updateVcomStatusUI(msg.vcom_status);
         }
-      } else if (msg.type === "page_reload") {
-        window.location.reload();
+      } else if (msg.type === "data_refresh" || msg.type === "page_reload") {
+        console.log("[DASHBOARD] Extraction completed — performing in-place data refresh.");
+        if (window.__plantMapSurveyed && typeof window.__plantMapSurveyed.refresh === "function") {
+          try { window.__plantMapSurveyed.refresh(); } catch (e) { console.warn("Map refresh error:", e); }
+        }
+        if (typeof loadTrackerHistory === "function") {
+          try { loadTrackerHistory(); } catch (e) {}
+        }
+        if (typeof loadAnalyticsConfig === "function") {
+          try { loadAnalyticsConfig(); } catch (e) {}
+        }
+        renderActiveDetailTab();
       }
     } catch (err) {
       console.warn("WS message parse error:", err);

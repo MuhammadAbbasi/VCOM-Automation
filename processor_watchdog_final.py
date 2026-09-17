@@ -1973,6 +1973,36 @@ def _persist_snapshot(date_str, timestamp, macro_health, inverter_health, curren
         "sensor_data": sensor_data
     }
 
+    # Quality Guard: Validate that inverter_health has meaningful data before overwriting.
+    # If the newly generated inverter_health is completely empty or all inverters are degraded/missing,
+    # and a valid previous snapshot already exists, preserve the previous valid snapshot.
+    valid_new_inverters = sum(
+        1 for h in (inverter_health or {}).values()
+        if isinstance(h, dict) and h.get("overall_status") in ("green", "yellow", "red")
+    )
+    prev_snapshot = LATEST_SNAPSHOT_CACHE.get(date_str)
+    if prev_snapshot is None:
+        try:
+            from db.db_manager import load_latest_snapshot
+            prev_snapshot = load_latest_snapshot(date_str)
+        except Exception:
+            prev_snapshot = None
+
+    prev_valid_inverters = 0
+    if prev_snapshot and isinstance(prev_snapshot.get("inverter_health"), dict):
+        prev_valid_inverters = sum(
+            1 for h in prev_snapshot["inverter_health"].values()
+            if isinstance(h, dict) and h.get("overall_status") in ("green", "yellow", "red")
+        )
+
+    busy_path = ROOT / ".extraction_busy"
+    if valid_new_inverters == 0 and prev_valid_inverters > 0 and busy_path.exists():
+        logger.warning(
+            f"[SNAPSHOT-GUARD] Refusing to overwrite valid snapshot ({prev_valid_inverters} active inverters) "
+            f"with empty/degraded snapshot during active extraction. Preserving last known valid state."
+        )
+        return
+
     # Update in-memory cache immediately to prevent race conditions during rapid re-runs
     LATEST_SNAPSHOT_CACHE[date_str] = snapshot
 
@@ -2076,7 +2106,21 @@ class MetricFileHandler(FileSystemEventHandler):
     def _check_and_analyze(self):
         if self.is_running:
             return
-        
+
+        # Guard: Defer analysis if extraction cycle is actively running
+        busy_path = ROOT / ".extraction_busy"
+        if busy_path.exists():
+            try:
+                age_s = time.time() - busy_path.stat().st_mtime
+                if age_s < 1800:
+                    logger.debug(f"[WATCHDOG] Extraction actively running ({int(age_s)}s) — deferring analysis until completion.")
+                    return
+                else:
+                    logger.warning(f"[WATCHDOG] Removing stale .extraction_busy flag ({int(age_s)}s old).")
+                    busy_path.unlink()
+            except Exception:
+                return
+
         now = time.time()
         if now - self.last_run < self.debounce_seconds:
             return

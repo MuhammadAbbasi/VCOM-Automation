@@ -216,12 +216,12 @@
     var subbar = el("div", "svm-subbar");
     var leftControls = el("div", "svm-ctrl-group");
 
-    // Diagnostic Scope: Salute Elettrica vs Meccanica TCU
+    // Diagnostic Scope: Salute Elettrica vs Trackers TCU
     var scopeSeg = el("div", "svm-seg svm-scope-seg");
     scopeSeg.appendChild(el("span", "svm-seg-label", "Salute"));
     [
       ["plant", "Elettrica (Impianto)"],
-      ["tracker", "Meccanica (TCU)"]
+      ["tracker", "Trackers (TCU)"]
     ].forEach(function (pair) {
       var b = el("button", "svm-segbtn", pair[1]);
       b.dataset.val = pair[0];
@@ -497,7 +497,20 @@
     return fetch(API + "/state", { credentials: "same-origin" })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (j) {
-        if (j && !j.error) { self.raw = j; self.applyScope(); self.paint(); }
+        if (j && !j.error) {
+          var hasValidInverters = j.inverters && Object.keys(j.inverters).length > 0;
+          // Guard: if incoming data is empty/degraded and we already hold valid data, do not wipe the map
+          if (!hasValidInverters && self.raw && self.raw.inverters && Object.keys(self.raw.inverters).length > 0) {
+            if (j.is_extracting != null && self.raw.is_extracting !== j.is_extracting) {
+              self.raw.is_extracting = j.is_extracting;
+              self.drawCounts();
+            }
+            return;
+          }
+          self.raw = j;
+          self.applyScope();
+          self.paint();
+        }
       });
   };
 
@@ -933,6 +946,11 @@
 
     if (!st.has_snapshot) {
       this.counts.appendChild(el("div", "svm-nodata", "Nessuno snapshot per " + st.date));
+    }
+    if (st.is_extracting) {
+      var syncBadge = el("div", "svm-sync-badge", "Aggiornamento in corso...");
+      syncBadge.title = "Estrazione dati in corso: la mappa mostra l'ultimo stato valido fino al termine del ciclo.";
+      this.counts.appendChild(syncBadge);
     }
     var tf = st.tracker_feed;
     if (this.scope === "tracker" && tf && tf.reporting < tf.total) {
