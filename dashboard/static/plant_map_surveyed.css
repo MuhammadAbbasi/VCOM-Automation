@@ -344,6 +344,28 @@
   flex-direction: column;
   gap: 0.85rem;
   min-width: 0;
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+  padding-right: 0.2rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+}
+
+.svm-side::-webkit-scrollbar {
+  width: 5px;
+}
+
+.svm-side::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.svm-side::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
+}
+
+.svm-side::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.65);
 }
 
 .svm-detail, .svm-problems {
@@ -472,25 +494,45 @@
 .svm-plist {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0.45rem;
   max-height: 28rem;
   overflow-y: auto;
-  padding-right: 0.2rem;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-right: 0.25rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.5) rgba(15, 23, 42, 0.4);
 }
 
-.svm-plist::-webkit-scrollbar {
-  width: 5px;
+.svm-plist::-webkit-scrollbar,
+.svm-pgroup-items::-webkit-scrollbar {
+  width: 6px;
 }
 
-.svm-plist::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 4px;
+.svm-plist::-webkit-scrollbar-track,
+.svm-pgroup-items::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.4);
+  border-radius: 999px;
+  margin: 3px 0;
+}
+
+.svm-plist::-webkit-scrollbar-thumb,
+.svm-pgroup-items::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.5);
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: background 0.15s;
+}
+
+.svm-plist::-webkit-scrollbar-thumb:hover,
+.svm-pgroup-items::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.8);
 }
 
 .svm-pgroup {
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-left: 3px solid var(--border, #334155);
-  border-radius: 7px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.025);
   overflow: hidden;
 }
@@ -498,13 +540,20 @@
 .svm-pgroup summary {
   list-style: none;
   cursor: pointer;
-  padding: 0.45rem 0.65rem;
+  padding: 0.5rem 0.75rem;
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   font-weight: 600;
   transition: background 0.15s;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgba(20, 27, 40, 0.96);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .svm-pgroup summary::-webkit-details-marker {
@@ -512,7 +561,18 @@
 }
 
 .svm-pgroup summary:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Individual group's items scrollable list */
+.svm-pgroup-items {
+  max-height: 22rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.5) rgba(15, 23, 42, 0.4);
+  padding-right: 0.15rem;
 }
 
 .svm-prob-type {
@@ -520,11 +580,12 @@
   color: var(--text, #f8fafc);
 }
 
-.svm-prob-count {
+.svm-prob-count,
+.svm-prob-el {
   margin-left: auto;
   font-size: 0.72rem;
   font-variant-numeric: tabular-nums;
-  padding: 0.05rem 0.4rem;
+  padding: 0.08rem 0.45rem;
   background: rgba(255, 255, 255, 0.07);
   border-radius: 999px;
   color: var(--muted, #94a3b8);

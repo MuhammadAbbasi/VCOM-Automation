@@ -1167,6 +1167,7 @@
       sum.appendChild(el("span", "svm-prob-type", g.key));
       sum.appendChild(el("span", "svm-prob-el", String(g.items.length)));
       box.appendChild(sum);
+      var itemsWrap = el("div", "svm-pgroup-items");
       g.items.forEach(function (p) {
         var b = el("button", "svm-prob");
         var top = el("div", "svm-prob-top");
@@ -1180,8 +1181,9 @@
         b.appendChild(top);
         if (p.message) b.appendChild(el("div", "svm-prob-msg", p.message));
         b.onclick = function () { self.gotoProblem(p); };
-        box.appendChild(b);
+        itemsWrap.appendChild(b);
       });
+      box.appendChild(itemsWrap);
       list.appendChild(box);
     });
     this.problems.appendChild(list);
